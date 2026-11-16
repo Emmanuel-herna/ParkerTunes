@@ -23,7 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.Coil
+import coil.imageLoader
 import com.parker.tunes.data.BackupManager
 import com.parker.tunes.data.LibraryDao
 import com.parker.tunes.data.SettingsRepository
@@ -119,11 +119,11 @@ fun SettingsScreen(
         item { SettingRow(Icons.Default.GraphicEq, "Bass Boost", null, if (bass) "On" else "Off", { scope.launch { repository.setBassBoost(!bass) } }, toggle = bass) }
         item { SettingRow(Icons.Default.SurroundSound, "Virtualizer", null, if (virtualizer) "On" else "Off", { scope.launch { repository.setVirtualizer(!virtualizer) } }, toggle = virtualizer) }
         item { SettingRow(Icons.Default.VolumeUp, "Sound Check", "Loudness normalization · requires audio session integration", if (soundCheck) "On" else "Off", { scope.launch { repository.setSoundCheck(!soundCheck) } }, toggle = soundCheck) }
-        item { SettingRow(Icons.Default.SpatialAudio, "Spatial Audio", "Uses the device virtualizer when available", if (virtualizer) "On" else "Off", { scope.launch { repository.setVirtualizer(!virtualizer) } }, toggle = virtualizer) }
+        item { SettingRow(Icons.Default.SurroundSound, "Spatial Audio", "Uses the device virtualizer when available", if (virtualizer) "On" else "Off", { scope.launch { repository.setVirtualizer(!virtualizer) } }, toggle = virtualizer) }
         item { SettingRow(Icons.Default.Headphones, "Silence in audio", "Headphones recommended · effects vary by device", "Info", { sheet = "silence" }) }
 
         item { SettingsSection("NOW PLAYING") }
-        item { SettingRow(Icons.Default.Lyrics, "Synced lyrics", "Show timed lyrics when available", if (lyrics) "On" else "Off", { scope.launch { repository.setSyncedLyrics(!lyrics) } }, toggle = lyrics) }
+        item { SettingRow(Icons.Default.MusicNote, "Synced lyrics", "Show timed lyrics when available", if (lyrics) "On" else "Off", { scope.launch { repository.setSyncedLyrics(!lyrics) } }, toggle = lyrics) }
         item { SettingRow(Icons.Default.LibraryMusic, "Lyrics sources", "${sources.split(',').count { it.isNotBlank() }} sources enabled", "${sources.split(',').count { it.isNotBlank() }} sources on", { sheet = "sources" }) }
         item { SettingRow(Icons.Default.Animation, "Motion artwork", "Animated artwork background · experimental", if (motion) "On" else "Off", { scope.launch { repository.setMotionArtwork(!motion) } }, toggle = motion) }
         item { SettingRow(Icons.Default.QueueMusic, "Show queue button", null, if (queueButton) "On" else "Off", { scope.launch { repository.setShowQueueButton(!queueButton) } }, toggle = queueButton) }
@@ -134,7 +134,7 @@ fun SettingsScreen(
         item { SettingRow(Icons.Default.DarkMode, "AMOLED black", "Use pure black surfaces", if (amoled) "On" else "Off", { scope.launch { repository.setAmoledBlack(!amoled) } }, toggle = amoled) }
         item { SettingRow(Icons.Default.Wallpaper, "Player background", null, playerBackground, { sheet = "background" }) }
         item { SettingRow(Icons.Default.FormatSize, "Interface size", "Adjust text and controls", "$size%", { sheet = "size" }) }
-        item { SettingRow(Icons.Default.MotionPhotosOff, "Reduce motion", null, if (reduceMotion) "On" else "Off", { scope.launch { repository.setReduceMotion(!reduceMotion) } }, toggle = reduceMotion) }
+        item { SettingRow(Icons.Default.Animation, "Reduce motion", null, if (reduceMotion) "On" else "Off", { scope.launch { repository.setReduceMotion(!reduceMotion) } }, toggle = reduceMotion) }
         item { SettingRow(Icons.Default.BlurOn, "Reduce transparency", "Reduce blur and translucent layers", if (reduceTransparency) "On" else "Off", { scope.launch { repository.setReduceTransparency(!reduceTransparency) } }, toggle = reduceTransparency) }
 
         item { SettingsSection("NOTIFICATIONS") }
@@ -143,11 +143,11 @@ fun SettingsScreen(
         item { SettingRow(Icons.Default.Expand, "Expandable playback controls", null, if (expandControls) "On" else "Off", { scope.launch { repository.setExpandableControls(!expandControls) } }, toggle = expandControls) }
 
         item { SettingsSection("CONNECTIONS") }
-        item { SettingRow(Icons.Default.CloudSync, "Scrobbling", "Last.fm and ListenBrainz", if (lastFm || listenBrainz) "Configured" else "Set up", { sheet = "scrobble" }) }
+        item { SettingRow(Icons.Default.Sync, "Scrobbling", "Last.fm and ListenBrainz", if (lastFm || listenBrainz) "Configured" else "Set up", { sheet = "scrobble" }) }
 
         item { SettingsSection("LIBRARY & STORAGE") }
         item { SettingRow(Icons.Default.Download, "Downloads", "Manage offline library", "Open", onOpenDownloads) }
-        item { SettingRow(Icons.Default.CleaningServices, "Clear cache", "Image and temporary cache", "Clear", { confirmClear = true }) }
+        item { SettingRow(Icons.Default.Delete, "Clear cache", "Image and temporary cache", "Clear", { confirmClear = true }) }
         item { SettingRow(Icons.Default.Backup, "Backup library", "Export playlists, favorites and history as JSON", "Export", { export.launch("ParkerTunes-backup.json") }) }
         item { SettingRow(Icons.Default.Restore, "Restore library", "Merge a JSON backup", "Import", { import.launch(arrayOf("application/json", "text/*")) }) }
         item { SettingsSection("ABOUT") }
@@ -166,7 +166,7 @@ fun SettingsScreen(
         text = { Text("This clears cached artwork and temporary image files. Downloaded songs and your library will remain.") },
         confirmButton = { TextButton(onClick = {
             confirmClear = false
-            runCatching { Coil.imageLoader(context).memoryCache?.clear(); Coil.imageLoader(context).diskCache?.clear() }
+            runCatching { context.imageLoader.memoryCache?.clear() }
             status = "Image cache cleared."
         }) { Text("Clear") } },
         dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } }
