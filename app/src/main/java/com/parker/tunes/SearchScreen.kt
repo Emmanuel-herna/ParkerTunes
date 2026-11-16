@@ -53,6 +53,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.parker.tunes.data.LibraryDao
 import com.parker.tunes.data.MusicApi
+import com.parker.tunes.data.AddonMusicApi
+import com.parker.tunes.data.sources.AddonEntity
+import kotlinx.coroutines.flow.flowOf
 import com.parker.tunes.data.RecentSearchEntity
 import com.parker.tunes.data.DownloadEntity
 import com.parker.tunes.data.SongDownloadManager
@@ -137,6 +140,13 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var activeSource by remember { mutableStateOf("YouTube") }
+    val addonApi = api as? AddonMusicApi
+    val addonSources by remember(addonApi) {
+        addonApi?.addonSources() ?: flowOf(emptyList<AddonEntity>())
+    }.collectAsState(initial = emptyList())
+    val sourceOptions = remember(addonSources) {
+        listOf("YouTube" to "YouTube") + addonSources.map { it.name to it.id }
+    }
     var results by remember { mutableStateOf(SearchResult()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -152,9 +162,9 @@ fun SearchScreen(
         }
     }
 
-    LaunchedEffect(query, api, activeSource) {
+    LaunchedEffect(query, api, activeSource, addonSources) {
         val clean = query.trim()
-        if (activeSource != "YouTube" || clean.isBlank()) {
+        if (clean.isBlank()) {
             results = SearchResult()
             loading = false
             error = null
@@ -164,7 +174,10 @@ fun SearchScreen(
         error = null
         kotlinx.coroutines.delay(300)
         try {
-            val found = withContext(Dispatchers.IO) { api.search(clean) }
+            val found = withContext(Dispatchers.IO) {
+                if (activeSource == "YouTube") api.search(clean)
+                else SearchResult(songs = addonApi?.searchAddon(activeSource, clean).orEmpty())
+            }
             results = found
             if (found.songs.isNotEmpty() || found.artists.isNotEmpty()) recentVm.recordQuery(clean, if (found.songs.isNotEmpty()) "Song" else "Artist")
         } catch (cancelled: CancellationException) {
@@ -212,13 +225,15 @@ fun SearchScreen(
             Modifier.fillMaxWidth().height(40.dp).clip(RoundedCornerShape(22.dp)).background(SearchSurface).padding(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            listOf("YouTube", "Library", "Addons").forEach { source ->
-                val selected = source == activeSource
-                Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(18.dp))
+            sourceOptions.forEach { (label, sourceId) ->
+                val selected = sourceId == activeSource
+                Box(Modifier.clip(RoundedCornerShape(18.dp))
                     .background(if (selected) Color(0xFF343039) else Color.Transparent)
-                    .clickable { activeSource = source }, contentAlignment = Alignment.Center) {
-                    Text(source, color = if (selected) Color.White else SearchMuted,
-                        fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
+                    .clickable { activeSource = sourceId }.padding(horizontal = 15.dp)
+                    .fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    Text(label, color = if (selected) Color.White else SearchMuted,
+                        fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -257,11 +272,7 @@ fun SearchScreen(
             }
         }
 
-        if (activeSource != "YouTube") {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("$activeSource is not connected yet", color = SearchMuted, fontSize = 15.sp)
-            }
-        } else if (query.isBlank()) {
+        if (query.isBlank()) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().nestedScroll(headerScrollConnection),
                 contentPadding = PaddingValues(top = 8.dp, bottom = 120.dp),
@@ -431,7 +442,10 @@ private fun SearchResultRow(
         Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(song.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(song.artist, color = SearchMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                if (song.id.startsWith("src:")) listOfNotNull(song.artist, song.sourceQuality).joinToString(" · ") else song.artist,
+                color = SearchMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
         }
         Box {
             IconButton(onClick = { menuExpanded = true }) {
