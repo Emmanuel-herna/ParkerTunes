@@ -62,6 +62,8 @@ import com.parker.tunes.data.PlayHistoryEntity
 import com.parker.tunes.data.FavoriteEntity
 import com.parker.tunes.data.MusicApi
 import com.parker.tunes.data.AddonMusicApi
+import com.parker.tunes.model.Artist
+import com.parker.tunes.model.Album
 import com.parker.tunes.model.Song
 import com.parker.tunes.player.PlaybackService
 import com.parker.tunes.player.PlayerUiState
@@ -105,6 +107,8 @@ fun ParkerTunesRoot() {
     val backStackEntry by nav.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     var query by remember { mutableStateOf("") }
+    var selectedArtist by remember { mutableStateOf<Artist?>(null) }
+    var selectedAlbum by remember { mutableStateOf<Album?>(null) }
     var selectedTab by remember { mutableStateOf("Home") }
     var lightMode by remember {
         mutableStateOf(context.getSharedPreferences("parker_tunes_settings", android.content.Context.MODE_PRIVATE)
@@ -316,7 +320,18 @@ fun ParkerTunesRoot() {
                     SpotifyHomeScreen(dao = dao, api = api, player = controller, onPlay = playSong, onSettings = { nav.navigate("settings") }, onSearch = { selectedTab = "Explore"; nav.navigate("search") })
                 }
                 composable("search") {
-                    SearchScreen(api = api, dao = dao, onPlay = playSong, onSettings = { nav.navigate("settings") })
+                    SearchScreen(api = api, dao = dao, onPlay = playSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist") })
+                }
+                composable("artist") {
+                    selectedArtist?.let { artist ->
+                        ArtistProfileScreen(artist = artist, api = api, onBack = { nav.popBackStack() }, onPlay = playSong,
+                            onAlbum = { album -> selectedAlbum = album; nav.navigate("album") })
+                    }
+                }
+                composable("album") {
+                    selectedAlbum?.let { album ->
+                        AlbumScreen(album = album, api = api, onBack = { nav.popBackStack() }, onPlay = playSong)
+                    }
                 }
                 composable("library") { LibraryScreen(dao) }
                 composable("settings") {
