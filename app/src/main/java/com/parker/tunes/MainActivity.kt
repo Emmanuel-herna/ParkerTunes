@@ -322,6 +322,8 @@ fun ParkerTunesRoot() {
                 val metadata = MediaMetadata.Builder()
                     .setTitle(song.title)
                     .setArtist(song.artist)
+                    .setAlbumTitle(song.album)
+                    .setTrackNumber(song.trackNumber ?: 0)
                     .setArtworkUri(song.coverUrl?.let(Uri::parse))
                     .build()
                 val placeholder = MediaItem.Builder()
@@ -380,6 +382,7 @@ fun ParkerTunesRoot() {
                         else Uri.parse(api.getStreamUrl(song.id))
                     }
                     val metadata = MediaMetadata.Builder().setTitle(song.title).setArtist(song.artist)
+                        .setAlbumTitle(song.album).setTrackNumber(song.trackNumber ?: 0)
                         .setArtworkUri(song.coverUrl?.let(Uri::parse)).build()
                     MediaItem.Builder().setMediaId(song.id).setUri(uri).setMediaMetadata(metadata).build()
                 }.onSuccess { item ->
@@ -1554,7 +1557,7 @@ fun SettingsScreen(
                     scope.launch { playbackSettingsStore.setSmartAutoplay(it) }
                 })
             }
-            Text("Track transition fade · ${crossfadeSeconds}s", color = MaterialTheme.colorScheme.onSurface,
+            Text("Crossfade · ${crossfadeSeconds}s", color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Medium)
             Slider(
                 value = crossfadeSeconds.toFloat(),
@@ -1566,7 +1569,7 @@ fun SettingsScreen(
                 valueRange = 0f..12f,
                 steps = 11
             )
-            Text("0 seconds disables the fade. ExoPlayer keeps playlist transitions gapless; the fade gently lowers and restores volume at track boundaries.",
+            Text("Equal-power overlap between tracks. Consecutive tracks on the same album stay gapless; repeat-one and short or unknown-length tracks are never crossfaded.",
                 color = Muted, fontSize = 11.sp)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
