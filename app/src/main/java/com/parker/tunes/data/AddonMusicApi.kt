@@ -42,17 +42,22 @@ class AddonMusicApi(
     override suspend fun getArtistProfile(artist: Artist): ArtistProfile = youtube.getArtistProfile(artist)
     override suspend fun getAlbumTracks(albumId: String): List<Song> = youtube.getAlbumTracks(albumId)
 
-    override suspend fun getStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
-        if (!songId.startsWith("src:")) return@withContext youtube.getStreamUrl(songId)
+    suspend fun getAddonStream(songId: String): com.parker.tunes.data.sources.AddonStream? = withContext(Dispatchers.IO) {
+        if (!songId.startsWith("src:")) return@withContext null
         val packed = songId.removePrefix("src:")
         val separator = packed.indexOf("::")
-        if (separator <= 0 || separator == packed.lastIndex) return@withContext ""
+        if (separator <= 0 || separator == packed.lastIndex) return@withContext null
         val sourceId = packed.substring(0, separator)
         val trackId = packed.substring(separator + 2)
-        val source = runCatching { registry.get(sourceId) }.getOrNull() ?: return@withContext ""
-        if (!source.enabled) return@withContext ""
+        val source = runCatching { registry.get(sourceId) }.getOrNull() ?: return@withContext null
+        if (!source.enabled) return@withContext null
         val settings = runCatching { registry.settings(sourceId).associate { it.key to it.value } }.getOrDefault(emptyMap())
-        client.stream(sourceId, source.baseUrl, trackId, StreamRequest.Best, false, settings)?.url.orEmpty()
+        client.stream(sourceId, source.baseUrl, trackId, StreamRequest.Best, false, settings)
+    }
+
+    override suspend fun getStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
+        if (!songId.startsWith("src:")) return@withContext youtube.getStreamUrl(songId)
+        getAddonStream(songId)?.url.orEmpty()
     }
 
     override suspend fun getLyrics(title: String, artist: String): Lyrics? =
