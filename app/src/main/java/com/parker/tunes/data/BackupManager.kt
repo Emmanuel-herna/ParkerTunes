@@ -19,7 +19,7 @@ class BackupManager(
     suspend fun exportTo(uri: Uri) = withContext(Dispatchers.IO) {
         val playlists = dao.playlists().first()
         val favorites = dao.favorites().first()
-        val history = dao.history().first()
+        val history = dao.historySnapshot()
         val equalizer = dao.equalizerSettings().first()
         val playlistJson = JSONArray()
         val trackJson = JSONArray()
