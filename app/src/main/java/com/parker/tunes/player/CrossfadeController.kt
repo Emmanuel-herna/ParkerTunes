@@ -102,7 +102,7 @@ class CrossfadeController(
         val nextDuration = incoming.duration.takeUnless { it == C.TIME_UNSET || it <= 0L }
         val nextSong = incoming.currentMediaItem?.mediaMetadata?.toRuleSong(nextDuration)
         if (!CrossfadeRules.applies(
-                fadeMs / 1_000,
+                (fadeMs / 1_000L).toInt(),
                 currentSong,
                 nextSong,
                 active.repeatMode == Player.REPEAT_MODE_ONE
