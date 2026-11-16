@@ -1,6 +1,7 @@
 package com.parker.tunes
 
 import android.Manifest
+import android.app.Activity
 import android.content.ComponentName
 import android.net.Uri
 import android.os.Bundle
@@ -88,6 +89,18 @@ private val Panel = Color(0xFF1A1A1A)
 private val Accent = Color(0xFFB69CFF)
 private val Muted = Color(0xFFA7A7A7)
 
+
+private fun applyPreferredRefreshRate(activity: Activity, requestedRate: Int) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+    val supportedModes = activity.window.decorView.display?.supportedModes.orEmpty()
+    val supportedRates = supportedModes.map { it.refreshRate }.distinct()
+    val selectedRate = supportedRates.minByOrNull { kotlin.math.abs(it - requestedRate) }
+        ?: requestedRate.toFloat()
+    activity.window.attributes = activity.window.attributes.apply {
+        preferredRefreshRate = selectedRate
+    }
+}
+
 @Composable
 fun ParkerTunesRoot() {
     val context = LocalContext.current
@@ -110,10 +123,9 @@ fun ParkerTunesRoot() {
     var selectedArtist by remember { mutableStateOf<Artist?>(null) }
     var selectedAlbum by remember { mutableStateOf<Album?>(null) }
     var selectedTab by remember { mutableStateOf("Home") }
-    var lightMode by remember {
-        mutableStateOf(context.getSharedPreferences("parker_tunes_settings", android.content.Context.MODE_PRIVATE)
-            .getBoolean("light_mode", false))
-    }
+    val settingsPrefs = remember { context.getSharedPreferences("parker_tunes_settings", android.content.Context.MODE_PRIVATE) }
+    var lightMode by remember { mutableStateOf(settingsPrefs.getBoolean("light_mode", false)) }
+    var preferredRefreshRate by remember { mutableIntStateOf(settingsPrefs.getInt("preferred_refresh_rate", 120)) }
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var resolvingSongId by remember { mutableStateOf<String?>(null) }
     var playbackLoadError by remember { mutableStateOf<String?>(null) }
@@ -335,11 +347,20 @@ fun ParkerTunesRoot() {
                 }
                 composable("library") { LibraryScreen(dao) }
                 composable("settings") {
-                    SettingsScreen(lightMode, api as? AddonMusicApi) {
-                        lightMode = it
-                        context.getSharedPreferences("parker_tunes_settings", android.content.Context.MODE_PRIVATE)
-                            .edit().putBoolean("light_mode", it).apply()
-                    }
+                    SettingsScreen(
+                        lightMode = lightMode,
+                        addonApi = api as? AddonMusicApi,
+                        preferredRefreshRate = preferredRefreshRate,
+                        onRefreshRate = { requestedRate ->
+                            preferredRefreshRate = requestedRate
+                            settingsPrefs.edit().putInt("preferred_refresh_rate", requestedRate).apply()
+                            applyPreferredRefreshRate(context as Activity, requestedRate)
+                        },
+                        onLightMode = {
+                            lightMode = it
+                            settingsPrefs.edit().putBoolean("light_mode", it).apply()
+                        }
+                    )
                 }
                 composable(
                     route = "nowplaying",
@@ -1036,6 +1057,8 @@ private fun LibrarySongRow(title: String, artist: String, icon: androidx.compose
 fun SettingsScreen(
     lightMode: Boolean,
     addonApi: AddonMusicApi?,
+    preferredRefreshRate: Int,
+    onRefreshRate: (Int) -> Unit,
     onLightMode: (Boolean) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -1060,6 +1083,36 @@ fun SettingsScreen(
                 Text("Switch between dark and light mode", color = Muted, fontSize = 12.sp)
             }
             Switch(checked = lightMode, onCheckedChange = onLightMode)
+        }
+
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.surface).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Display smoothness", color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            Text("Choose the refresh-rate preference ParkerTunes requests from Android.",
+                color = Muted, fontSize = 12.sp)
+            listOf(60, 96, 120).forEach { rate ->
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .clickable { onRefreshRate(rate) }.padding(vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(selected = preferredRefreshRate == rate, onClick = { onRefreshRate(rate) })
+                    Column(Modifier.weight(1f).padding(start = 8.dp)) {
+                        Text("$rate Hz", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
+                        Text(when (rate) {
+                            60 -> "Standard refresh rate"
+                            96 -> "Balanced smoothness"
+                            else -> "Maximum smoothness"
+                        }, color = Muted, fontSize = 12.sp)
+                    }
+                }
+            }
+            Text("Your phone must support a refresh rate for it to run at that exact speed. Android and the display may choose the closest supported mode, and battery use can increase at higher rates.",
+                color = Muted, fontSize = 11.sp)
         }
 
         Column(
