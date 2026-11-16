@@ -1,6 +1,9 @@
 package com.parker.tunes.player
 
 import android.app.PendingIntent
+import android.graphics.BitmapFactory
+import java.net.URL
+import java.util.concurrent.Executors
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
@@ -39,6 +42,7 @@ class WidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
+        private val artworkExecutor = Executors.newSingleThreadExecutor()
         const val ACTION_TOGGLE = "com.parker.tunes.widget.TOGGLE"
         const val ACTION_NEXT = "com.parker.tunes.widget.NEXT"
         const val ACTION_PREVIOUS = "com.parker.tunes.widget.PREVIOUS"
@@ -53,6 +57,18 @@ class WidgetProvider : AppWidgetProvider() {
                 item?.mediaMetadata?.title?.toString() ?: "ParkerTunes")
             views.setTextViewText(com.parker.tunes.R.id.widget_artist,
                 item?.mediaMetadata?.artist?.toString() ?: "Nothing playing")
+            views.setImageViewResource(com.parker.tunes.R.id.widget_art, android.R.drawable.ic_media_play)
+            val artworkUrl = item?.mediaMetadata?.artworkUri?.toString()
+            if (!artworkUrl.isNullOrBlank() && artworkUrl.startsWith("https://")) {
+                artworkExecutor.execute {
+                    runCatching {
+                        URL(artworkUrl).openStream().use(BitmapFactory::decodeStream)
+                    }.getOrNull()?.let { bitmap ->
+                        views.setImageViewBitmap(com.parker.tunes.R.id.widget_art, bitmap)
+                        manager.updateAppWidget(ids, views)
+                    }
+                }
+            }
             views.setImageViewResource(com.parker.tunes.R.id.widget_play_pause,
                 if (player?.isPlaying == true) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
 
