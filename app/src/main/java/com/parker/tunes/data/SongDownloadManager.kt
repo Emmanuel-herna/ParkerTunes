@@ -20,6 +20,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.ensureActive
 
 /**
  * Sequential, app-private audio downloader. A single mutex guarantees that
