@@ -17,6 +17,7 @@ class ParkerTunesApp : Application() {
         super.onCreate()
         Coil.setImageLoader(
             ImageLoader.Builder(this)
+                .crossfade(true)
                 .diskCache {
                     DiskCache.Builder()
                         .directory(cacheDir.resolve("parker_tunes_image_cache"))
