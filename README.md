@@ -28,5 +28,10 @@ The demo `MusicApi` intentionally returns no search results and does not provide
 
 Only play audio you have permission to access. Do not scrape services or bypass access controls.
 
+## Cloud build (no PC required)
+A GitHub Actions workflow is included at `.github/workflows/android-build.yml`. It builds a debug APK whenever code is pushed to `main`, and can also be started manually from the repository's Actions tab using **Android build** → **Run workflow**.
+
+When the run finishes successfully, open the workflow run, scroll to **Artifacts**, and download **ParkerTunes-debug**. Extract the ZIP on your Android phone and open `app-debug.apk` to install it. Android may ask you to allow your browser or file manager to install apps from that source. Only install APKs built from this repository that you trust.
+
 ## Build status
-The source has been committed to GitHub, but it has not yet been compiled or run in Android Studio. Run Gradle sync and build the app before treating it as release-ready. Report any compiler output so it can be corrected.
+The cloud workflow has just been added; its first run still needs to complete successfully before the APK can be considered verified. The source has not been tested on a physical device yet.
