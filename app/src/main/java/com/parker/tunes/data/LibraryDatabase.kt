@@ -141,8 +141,8 @@ interface LibraryDao {
 }
 
 @Database(
-    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class],
-    version = 4,
+    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class, EqualizerSettingsEntity::class],
+    version = 5,
     exportSchema = false
 )
 abstract class LibraryDatabase : RoomDatabase() {
