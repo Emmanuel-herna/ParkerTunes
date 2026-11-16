@@ -53,7 +53,7 @@ fun SettingsScreen(
     var sheet by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf<String?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
-    var quality by repository.audioQuality.collectAsState(initial = "Auto")
+    val quality by repository.audioQuality.collectAsState(initial = "Auto")
     val crossfade by repository.crossfadeSeconds.collectAsState(initial = 0)
     val automix by repository.automix.collectAsState(initial = false)
     val gapless by repository.gaplessPlayback.collectAsState(initial = true)
