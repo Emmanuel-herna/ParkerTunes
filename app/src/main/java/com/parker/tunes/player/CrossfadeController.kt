@@ -179,7 +179,7 @@ class CrossfadeController(
 
     private fun MediaMetadata.toRuleSong(durationMs: Long?): Song = Song(
         album = albumTitle?.toString(),
-        trackNumber = trackNumber,
+        trackNumber = trackNumber.takeIf { it > 0 },
         durationMs = durationMs
     )
 
