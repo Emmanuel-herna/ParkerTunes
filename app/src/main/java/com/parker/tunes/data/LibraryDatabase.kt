@@ -66,7 +66,7 @@ data class DownloadEntity(
     val fileSizeBytes: Long,
     val downloadedAt: Long,
     val durationSec: Long,
-    val status: String = STATUS_COMPLETE,
+    @ColumnInfo(defaultValue = "'COMPLETE'") val status: String = STATUS_COMPLETE,
     val errorMessage: String? = null
 ) {
     companion object {
