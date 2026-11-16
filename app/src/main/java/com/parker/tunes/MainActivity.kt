@@ -148,6 +148,19 @@ fun ParkerTunesRoot() {
     var selectedAlbum by remember { mutableStateOf<Album?>(null) }
     var selectedTab by remember { mutableStateOf("Home") }
     val settingsPrefs = remember { context.getSharedPreferences("parker_tunes_settings", android.content.Context.MODE_PRIVATE) }
+    val settingsRepository = remember(context) { com.parker.tunes.data.SettingsRepository(context) }
+    val selectedAccent by settingsRepository.accentColor.collectAsState(initial = "purple")
+    val useAmoledBlack by settingsRepository.amoledBlack.collectAsState(initial = true)
+    val liveAccent = when (selectedAccent) {
+        "blue" -> Color(0xFF64B5F6)
+        "cyan" -> Color(0xFF4DD0E1)
+        "green" -> Color(0xFF81C784)
+        "yellow" -> Color(0xFFFFD54F)
+        "orange" -> Color(0xFFFFAB91)
+        "pink" -> Color(0xFFF48FB1)
+        "red" -> Color(0xFFEF5350)
+        else -> Color(0xFFB69CFF)
+    }
     var lightMode by remember { mutableStateOf(settingsPrefs.getBoolean("light_mode", false)) }
     var preferredRefreshRate by remember { mutableIntStateOf(settingsPrefs.getInt("preferred_refresh_rate", 120)) }
     var controller by remember { mutableStateOf<MediaController?>(null) }
@@ -177,9 +190,9 @@ fun ParkerTunesRoot() {
         onBackground = Color(0xFF171421),
         onSurface = Color(0xFF171421)
     ) else darkColorScheme(
-        primary = Accent,
-        background = Ink,
-        surface = Panel,
+        primary = liveAccent,
+        background = if (useAmoledBlack) Color.Black else Color(0xFF101010),
+        surface = if (useAmoledBlack) Color.Black else Panel,
         onBackground = Color.White,
         onSurface = Color.White
     )
@@ -494,7 +507,7 @@ fun ParkerTunesRoot() {
                 composable("settings") {
                     SettingsScreen(
                         dao = dao,
-                        repository = remember(context) { com.parker.tunes.data.SettingsRepository(context) },
+                        repository = settingsRepository,
                         settingsPrefs = settingsPrefs,
                         onOpenEqualizer = { nav.navigate("equalizer") },
                         onOpenStats = { nav.navigate("stats") },
