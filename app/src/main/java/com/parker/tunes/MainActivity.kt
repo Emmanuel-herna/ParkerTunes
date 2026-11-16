@@ -499,7 +499,8 @@ fun ParkerTunesRoot() {
                         AlbumScreen(album = album, api = api, onBack = { nav.popBackStack() }, onPlay = playSong)
                     }
                 }
-                composable("library") { LibraryScreen(dao, app.downloads, playSong) }
+                composable("library") { LibraryScreen(dao, app.downloads, playSong, onOpenAddons = { nav.navigate("addons") }) }
+                composable("addons") { AddonsScreen(app.database.sourceRegistryDao()) { nav.popBackStack() } }
                 composable("stats") { StatsScreen(dao = dao, onBack = { nav.popBackStack() }) }
                 composable("equalizer") {
                     EqualizerScreen(manager = equalizerManager, onBack = { nav.popBackStack() }, onChanged = persistEqualizer)
@@ -1189,7 +1190,8 @@ private fun formatTime(ms: Long): String {
 fun LibraryScreen(
     dao: com.parker.tunes.data.LibraryDao,
     downloadManager: com.parker.tunes.data.SongDownloadManager,
-    onPlay: (Song) -> Unit
+    onPlay: (Song) -> Unit,
+    onOpenAddons: () -> Unit = {}
 ) {
     var tab by remember { mutableStateOf("Playlists") }
     var showCreate by remember { mutableStateOf(false) }
@@ -1235,8 +1237,8 @@ fun LibraryScreen(
             }
         } else {
             ScreenTitle("Keep it close", "Your library", "Everything you want to come back to.")
-            TabRow(selectedTabIndex = listOf("Playlists", "Favorites", "History", "Downloads").indexOf(tab)) {
-                listOf("Playlists", "Favorites", "History", "Downloads").forEach { label ->
+            TabRow(selectedTabIndex = listOf("Playlists", "Favorites", "History", "Downloads", "Addons").indexOf(tab)) {
+                listOf("Playlists", "Favorites", "History", "Downloads", "Addons").forEach { label ->
                     Tab(selected = tab == label, onClick = { tab = label }, text = { Text(label, fontSize = 12.sp) })
                 }
             }
@@ -1279,6 +1281,16 @@ fun LibraryScreen(
                 } else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(history, key = { it.id }) {
                         LibrarySongRow(it.title.ifBlank { it.songId }, it.artist, Icons.Default.History)
+                    }
+                }
+                "Addons" -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Connect compatible music servers to search their catalogues alongside YouTube Music.", color = Muted, fontSize = 13.sp)
+                        Button(onClick = onOpenAddons, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.Extension, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Manage addons")
+                        }
                     }
                 }
                 else -> {
