@@ -298,7 +298,7 @@ class NewPipeMusicApi : MusicApi {
         try {
             NewPipeRuntime.ensureInitialized()
             val videoUrl = "https://www.youtube.com/watch?v=$videoId"
-            val extractor = ServiceList.YouTube.getStreamExtractor(videoUrl)
+            val extractor = ServiceList.YouTube.getStreamExtractor(videoUrl) as YoutubeStreamExtractor
             extractor.fetchPage()
 
             val selectedStream = extractor.audioStreams
@@ -307,13 +307,14 @@ class NewPipeMusicApi : MusicApi {
                     suffix == "m4a" || suffix == "webm"
                 }
                 .sortedWith(
-                    compareBy<AudioStream> {
-                        when (it.format?.suffix?.lowercase()) {
-                            "m4a" -> 0
-                            "webm" -> 1
-                            else -> 2
+                    compareByDescending<AudioStream> { it.averageBitrate }
+                        .thenBy {
+                            when (it.format?.suffix?.lowercase()) {
+                                "m4a" -> 0
+                                "webm" -> 1
+                                else -> 2
+                            }
                         }
-                    }.thenByDescending { it.averageBitrate }
                 )
                 .firstOrNull()
             selectedStream?.content.orEmpty().also { url ->
