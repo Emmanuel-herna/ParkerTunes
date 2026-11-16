@@ -118,6 +118,7 @@ fun ParkerTunesRoot() {
     val api = app.musicApi
     val dao = app.database.libraryDao()
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* Media notifications are enabled when permission is granted. */ }
@@ -371,7 +372,17 @@ fun ParkerTunesRoot() {
                 }.onSuccess { item ->
                     val insertAt = if (playNext) (activeController.currentMediaItemIndex + 1).coerceAtLeast(0) else activeController.mediaItemCount
                     activeController.addMediaItem(insertAt, item)
-                    Toast.makeText(context, if (playNext) "Playing next: ${song.title}" else "Added to queue: ${song.title}", Toast.LENGTH_SHORT).show()
+                    scope.launch {
+                        val result = snackbarHostState.showSnackbar(
+                            message = if (playNext) "Queued to play next: ${song.title}" else "Added to queue: ${song.title}",
+                            actionLabel = "Undo",
+                            withDismissAction = true
+                        )
+                        if (result == SnackbarResult.ActionPerformed &&
+                            insertAt < activeController.mediaItemCount &&
+                            activeController.getMediaItemAt(insertAt).mediaId == song.id
+                        ) activeController.removeMediaItem(insertAt)
+                    }
                 }.onFailure { failure ->
                     Toast.makeText(context, failure.message ?: "Couldn't add this song to the queue.", Toast.LENGTH_SHORT).show()
                 }
@@ -379,6 +390,7 @@ fun ParkerTunesRoot() {
         }
 
         Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
                 AnimatedVisibility(
