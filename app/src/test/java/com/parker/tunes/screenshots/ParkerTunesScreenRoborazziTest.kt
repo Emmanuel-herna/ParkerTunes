@@ -1,6 +1,7 @@
 package com.parker.tunes.screenshots
 
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.parker.tunes.ui.preview.ParkerTunesPreviewScreen
@@ -9,97 +10,121 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ParkerTunesScreenRoborazziTest {
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private fun capture(screen: String, state: PreviewState) {
-        composeRule.setContent { ParkerTunesPreviewScreen(screen, state) }
+        composeRule.activity.setContent {
+            ParkerTunesPreviewScreen(screen, state)
+        }
         composeRule.waitForIdle()
-        composeRule.onRoot().captureRoboImage(
-            filePath = "build/outputs/roborazzi/screens/${screen.replace(" ", "")}_${state.name}.png"
-        )
+        composeRule.onRoot().captureRoboImage()
     }
 
     @Test
-    fun homeScreenStates() {
-        capture("Home", PreviewState.Loading)
-        capture("Home", PreviewState.Empty)
-        capture("Home", PreviewState.Loaded)
-    }
+    fun homeLoading() = capture("Home", PreviewState.Loading)
 
     @Test
-    fun exploreScreenStates() {
-        capture("Explore", PreviewState.Loading)
-        capture("Explore", PreviewState.Empty)
-        capture("Explore", PreviewState.Loaded)
-    }
+    fun homeEmpty() = capture("Home", PreviewState.Empty)
 
     @Test
-    fun searchScreenStates() {
-        capture("Search", PreviewState.Loading)
-        capture("Search", PreviewState.Empty)
-        capture("Search", PreviewState.Loaded)
-    }
+    fun homeLoaded() = capture("Home", PreviewState.Loaded)
 
     @Test
-    fun libraryScreenStates() {
-        capture("Library", PreviewState.Loading)
-        capture("Library", PreviewState.Empty)
-        capture("Library", PreviewState.Loaded)
-    }
+    fun exploreLoading() = capture("Explore", PreviewState.Loading)
 
     @Test
-    fun nowplayingScreenStates() {
-        capture("NowPlaying", PreviewState.Loading)
-        capture("NowPlaying", PreviewState.Empty)
-        capture("NowPlaying", PreviewState.Loaded)
-    }
+    fun exploreEmpty() = capture("Explore", PreviewState.Empty)
 
     @Test
-    fun equalizerScreenStates() {
-        capture("Equalizer", PreviewState.Loading)
-        capture("Equalizer", PreviewState.Empty)
-        capture("Equalizer", PreviewState.Loaded)
-    }
+    fun exploreLoaded() = capture("Explore", PreviewState.Loaded)
 
     @Test
-    fun settingsScreenStates() {
-        capture("Settings", PreviewState.Loading)
-        capture("Settings", PreviewState.Empty)
-        capture("Settings", PreviewState.Loaded)
-    }
+    fun searchLoading() = capture("Search", PreviewState.Loading)
 
     @Test
-    fun addonsScreenStates() {
-        capture("Addons", PreviewState.Loading)
-        capture("Addons", PreviewState.Empty)
-        capture("Addons", PreviewState.Loaded)
-    }
+    fun searchEmpty() = capture("Search", PreviewState.Empty)
 
     @Test
-    fun artistScreenStates() {
-        capture("Artist", PreviewState.Loading)
-        capture("Artist", PreviewState.Empty)
-        capture("Artist", PreviewState.Loaded)
-    }
+    fun searchLoaded() = capture("Search", PreviewState.Loaded)
 
     @Test
-    fun albumScreenStates() {
-        capture("Album", PreviewState.Loading)
-        capture("Album", PreviewState.Empty)
-        capture("Album", PreviewState.Loaded)
-    }
+    fun libraryLoading() = capture("Library", PreviewState.Loading)
 
     @Test
-    fun listeningstatsScreenStates() {
-        capture("ListeningStats", PreviewState.Loading)
-        capture("ListeningStats", PreviewState.Empty)
-        capture("ListeningStats", PreviewState.Loaded)
-    }
+    fun libraryEmpty() = capture("Library", PreviewState.Empty)
+
+    @Test
+    fun libraryLoaded() = capture("Library", PreviewState.Loaded)
+
+    @Test
+    fun nowPlayingLoading() = capture("Now Playing", PreviewState.Loading)
+
+    @Test
+    fun nowPlayingEmpty() = capture("Now Playing", PreviewState.Empty)
+
+    @Test
+    fun nowPlayingLoaded() = capture("Now Playing", PreviewState.Loaded)
+
+    @Test
+    fun equalizerLoading() = capture("Equalizer", PreviewState.Loading)
+
+    @Test
+    fun equalizerEmpty() = capture("Equalizer", PreviewState.Empty)
+
+    @Test
+    fun equalizerLoaded() = capture("Equalizer", PreviewState.Loaded)
+
+    @Test
+    fun settingsLoading() = capture("Settings", PreviewState.Loading)
+
+    @Test
+    fun settingsEmpty() = capture("Settings", PreviewState.Empty)
+
+    @Test
+    fun settingsLoaded() = capture("Settings", PreviewState.Loaded)
+
+    @Test
+    fun addonsLoading() = capture("Addons", PreviewState.Loading)
+
+    @Test
+    fun addonsEmpty() = capture("Addons", PreviewState.Empty)
+
+    @Test
+    fun addonsLoaded() = capture("Addons", PreviewState.Loaded)
+
+    @Test
+    fun artistLoading() = capture("Artist", PreviewState.Loading)
+
+    @Test
+    fun artistEmpty() = capture("Artist", PreviewState.Empty)
+
+    @Test
+    fun artistLoaded() = capture("Artist", PreviewState.Loaded)
+
+    @Test
+    fun albumLoading() = capture("Album", PreviewState.Loading)
+
+    @Test
+    fun albumEmpty() = capture("Album", PreviewState.Empty)
+
+    @Test
+    fun albumLoaded() = capture("Album", PreviewState.Loaded)
+
+    @Test
+    fun listeningStatsLoading() = capture("Listening Stats", PreviewState.Loading)
+
+    @Test
+    fun listeningStatsEmpty() = capture("Listening Stats", PreviewState.Empty)
+
+    @Test
+    fun listeningStatsLoaded() = capture("Listening Stats", PreviewState.Loaded)
 
 }
