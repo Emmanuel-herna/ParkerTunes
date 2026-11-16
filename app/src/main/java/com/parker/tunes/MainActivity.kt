@@ -936,6 +936,9 @@ private fun NowPlayingScreen(
             }) {
                 Icon(Icons.Default.Repeat, "Repeat", tint = if (repeat > 0) MaterialTheme.colorScheme.primary else Muted)
             }
+            IconButton(onClick = onOpenEqualizer) {
+                Icon(Icons.Default.GraphicEq, "Open equalizer", tint = MaterialTheme.colorScheme.primary)
+            }
         }
     }
 }
