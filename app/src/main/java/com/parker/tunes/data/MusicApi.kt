@@ -19,6 +19,7 @@ import org.schabi.newpipe.extractor.playlist.PlaylistInfoItem
 import org.schabi.newpipe.extractor.linkhandler.SearchQueryHandler
 import org.schabi.newpipe.extractor.search.SearchExtractor
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
+import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeMusicSearchExtractor
 import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
@@ -38,8 +39,9 @@ interface MusicApi {
 }
 
 /**
- * YouTube Music search through NewPipe's native MUSIC_SONGS and MUSIC_ARTISTS filters.
- * NewPipe uses service ID 0 for both YouTube and YouTube Music.
+ * YouTube Music search through NewPipe's dedicated YoutubeMusicSearchExtractor.
+ * NewPipe v0.27.1 exposes the YouTube service (ID 0); it does not register a
+ * separate ServiceList.YouTubeMusic/YoutubeMusicService.
  */
 class NewPipeMusicApi : MusicApi {
     private data class SearchSession(
@@ -77,7 +79,7 @@ class NewPipeMusicApi : MusicApi {
                 listOf(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS),
                 ""
             )
-            val songsExtractor = ServiceList.YouTube.getSearchExtractor(songsHandler)
+            val songsExtractor = YoutubeMusicSearchExtractor(ServiceList.YouTube, songsHandler)
             songsExtractor.fetchPage()
             val songsPage = songsExtractor.initialPage
             val songs = songsPage.items.filterIsInstance<StreamInfoItem>().mapNotNull(::toSong)
@@ -88,7 +90,7 @@ class NewPipeMusicApi : MusicApi {
                 listOf(YoutubeSearchQueryHandlerFactory.MUSIC_ARTISTS),
                 ""
             )
-            val artistsExtractor = ServiceList.YouTube.getSearchExtractor(artistsHandler)
+            val artistsExtractor = YoutubeMusicSearchExtractor(ServiceList.YouTube, artistsHandler)
             artistsExtractor.fetchPage()
             val artists = artistsExtractor.initialPage.items
                 .filterIsInstance<ChannelInfoItem>()
