@@ -1289,6 +1289,8 @@ fun SettingsScreen(
     val backupManager = remember(dao, context, settingsPrefs) { BackupManager(context, dao, settingsPrefs) }
     val playbackSettingsStore = remember(context) { PlaybackSettingsStore(context) }
     var gaplessPlayback by remember { mutableStateOf(true) }
+    var smartAutoplay by remember { mutableStateOf(settingsPrefs.getBoolean("smart_autoplay", true)) }
+    var crossfadeSeconds by remember { mutableIntStateOf(settingsPrefs.getInt("crossfade_seconds", 0).coerceIn(0, 12)) }
     LaunchedEffect(playbackSettingsStore) {
         playbackSettingsStore.initialize(
             PlaybackSettings(
@@ -1326,8 +1328,6 @@ fun SettingsScreen(
                 .onFailure { backupStatus = it.message ?: "Could not import backup." }
         }
     }
-    var smartAutoplay by remember { mutableStateOf(settingsPrefs.getBoolean("smart_autoplay", true)) }
-    var crossfadeSeconds by remember { mutableIntStateOf(settingsPrefs.getInt("crossfade_seconds", 0).coerceIn(0, 12)) }
     var addonUrl by remember(addonApi) {
         mutableStateOf(addonApi?.configuredAddonUrl.orEmpty())
     }
