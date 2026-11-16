@@ -56,6 +56,8 @@ import com.parker.tunes.data.MusicApi
 import com.parker.tunes.data.RecentSearchEntity
 import com.parker.tunes.data.DownloadEntity
 import com.parker.tunes.data.SongDownloadManager
+import com.parker.tunes.data.PlaylistEntity
+import com.parker.tunes.data.PlaylistTrackEntity
 import com.parker.tunes.model.Artist
 import com.parker.tunes.model.SearchResult
 import com.parker.tunes.model.Song
@@ -118,6 +120,7 @@ fun SearchScreen(
     api: MusicApi,
     dao: LibraryDao,
     onPlay: (Song) -> Unit,
+    onQueue: (Song, Boolean) -> Unit,
     onSettings: () -> Unit,
     onArtist: (Artist) -> Unit,
     downloads: SongDownloadManager
@@ -129,6 +132,8 @@ fun SearchScreen(
     val recent by recentVm.recent.collectAsState()
     val savedDownloads by remember(dao) { dao.downloads().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
     val downloadProgress by downloads.progress.collectAsState()
+    val playlists by remember(dao) { dao.playlists().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var activeSource by remember { mutableStateOf("YouTube") }
     var results by remember { mutableStateOf(SearchResult()) }
@@ -352,6 +357,16 @@ fun SearchScreen(
                                 song = song,
                                 download = savedDownloads.firstOrNull { it.songId == song.id },
                                 progress = downloadProgress[song.id],
+                                playlists = playlists,
+                                onQueue = onQueue,
+                                onAddToPlaylist = { playlist ->
+                                    scope.launch(Dispatchers.IO) {
+                                        val existing = dao.playlistTracksSnapshot(playlist.id)
+                                        if (existing.none { it.songId == song.id }) {
+                                            dao.addTrack(PlaylistTrackEntity(playlist.id, song.id, existing.size, song.title, song.artist))
+                                        }
+                                    }
+                                },
                                 onDownload = { downloads.enqueue(song) },
                                 onCancelDownload = { downloads.cancel(song.id) },
                                 onRemoveDownload = { scope -> scope.launch(Dispatchers.IO) { downloads.remove(song.id) } },
@@ -373,6 +388,9 @@ private fun SearchResultRow(
     song: Song,
     download: DownloadEntity?,
     progress: Int?,
+    playlists: List<PlaylistEntity>,
+    onQueue: (Song, Boolean) -> Unit,
+    onAddToPlaylist: (PlaylistEntity) -> Unit,
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
     onRemoveDownload: (kotlinx.coroutines.CoroutineScope) -> Unit,
@@ -380,6 +398,7 @@ private fun SearchResultRow(
 ) {
     val scope = rememberCoroutineScope()
     var menuExpanded by remember(song.id) { mutableStateOf(false) }
+    var showPlaylistDialog by remember(song.id) { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().height(66.dp).clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
@@ -410,6 +429,19 @@ private fun SearchResultRow(
                 Icon(Icons.Default.MoreVert, "Song options", tint = SearchMuted)
             }
             DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                DropdownMenuItem(text = { Text("Play next") }, onClick = {
+                    menuExpanded = false
+                    onQueue(song, true)
+                })
+                DropdownMenuItem(text = { Text("Add to queue") }, onClick = {
+                    menuExpanded = false
+                    onQueue(song, false)
+                })
+                DropdownMenuItem(text = { Text("Add to playlist") }, onClick = {
+                    menuExpanded = false
+                    showPlaylistDialog = true
+                })
+                Divider()
                 when (download?.status) {
                     DownloadEntity.STATUS_COMPLETE -> DropdownMenuItem(
                         text = { Text("Remove download") },
@@ -438,6 +470,25 @@ private fun SearchResultRow(
             .clickable(onClick = onClick), contentAlignment = Alignment.Center) {
             Icon(Icons.Default.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(19.dp))
         }
+    }
+    if (showPlaylistDialog) {
+        AlertDialog(
+            onDismissRequest = { showPlaylistDialog = false },
+            title = { Text("Add to playlist") },
+            text = {
+                if (playlists.isEmpty()) Text("Create a playlist in your Library first.")
+                else Column {
+                    playlists.forEach { playlist ->
+                        TextButton(onClick = {
+                            onAddToPlaylist(playlist)
+                            showPlaylistDialog = false
+                        }, modifier = Modifier.fillMaxWidth()) { Text(playlist.name) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showPlaylistDialog = false }) { Text("Close") }
+            }
+        )
     }
 }
 
