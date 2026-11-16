@@ -92,6 +92,8 @@ fun ParkerTunesRoot() {
         }
     }
     val nav = rememberNavController()
+    val backStackEntry by nav.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
     var query by remember { mutableStateOf("") }
     var selectedTab by remember { mutableStateOf("Search") }
     var lightMode by remember {
@@ -144,42 +146,48 @@ fun ParkerTunesRoot() {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
-                Column {
-                    AnimatedVisibility(
-                        visible = playerState.hasItem,
-                        enter = fadeIn(), exit = fadeOut()
-                    ) {
-                        MiniPlayer(
-                            title = currentTitle,
-                            artist = currentArtist,
-                            coverUrl = playerState.artworkUri,
-                            playing = isPlaying,
-                            onClick = { nav.navigate("nowplaying") },
-                            onPlayPause = {
-                                controller?.let { if (it.isPlaying) it.pause() else it.play() }
-                            },
-                            onNext = { controller?.seekToNextMediaItem() }
-                        )
-                    }
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                        listOf("Search", "Library", "Settings").forEach { item ->
-                            NavigationBarItem(
-                                selected = selectedTab == item,
-                                onClick = {
-                                    selectedTab = item
-                                    nav.navigate(item.lowercase()) { launchSingleTop = true }
+                AnimatedVisibility(
+                    visible = currentRoute != "nowplaying",
+                    enter = fadeIn() + slideInVertically { it / 3 },
+                    exit = fadeOut() + slideOutVertically { it / 3 }
+                ) {
+                    Column {
+                        AnimatedVisibility(
+                            visible = playerState.hasItem,
+                            enter = fadeIn(), exit = fadeOut()
+                        ) {
+                            MiniPlayer(
+                                title = currentTitle,
+                                artist = currentArtist,
+                                coverUrl = playerState.artworkUri,
+                                playing = isPlaying,
+                                onClick = { nav.navigate("nowplaying") },
+                                onPlayPause = {
+                                    controller?.let { if (it.isPlaying) it.pause() else it.play() }
                                 },
-                                icon = {
-                                    Icon(
-                                        when (item) {
-                                            "Search" -> Icons.Default.Search
-                                            "Library" -> Icons.Default.LibraryMusic
-                                            else -> Icons.Default.Settings
-                                        }, contentDescription = item
-                                    )
-                                },
-                                label = { Text(item) }
+                                onNext = { controller?.seekToNextMediaItem() }
                             )
+                        }
+                        NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                            listOf("Search", "Library", "Settings").forEach { item ->
+                                NavigationBarItem(
+                                    selected = selectedTab == item,
+                                    onClick = {
+                                        selectedTab = item
+                                        nav.navigate(item.lowercase()) { launchSingleTop = true }
+                                    },
+                                    icon = {
+                                        Icon(
+                                            when (item) {
+                                                "Search" -> Icons.Default.Search
+                                                "Library" -> Icons.Default.LibraryMusic
+                                                else -> Icons.Default.Settings
+                                            }, contentDescription = item
+                                        )
+                                    },
+                                    label = { Text(item) }
+                                )
+                            }
                         }
                     }
                 }
@@ -474,7 +482,8 @@ private fun NowPlayingScreen(
                     onVerticalDrag = { change, dragAmount ->
                         if (dragAmount > 0f || totalDrag > 0f) {
                             totalDrag = (totalDrag + dragAmount).coerceAtLeast(0f)
-                            dragScope.launch { dragAnimation.snapTo(totalDrag) }
+                            val fingerPosition = totalDrag
+                            dragScope.launch { dragAnimation.snapTo(fingerPosition) }
                             change.consume()
                         }
                     },
