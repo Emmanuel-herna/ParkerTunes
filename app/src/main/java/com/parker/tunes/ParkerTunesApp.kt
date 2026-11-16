@@ -7,6 +7,7 @@ import com.parker.tunes.data.MusicApi
 import coil.Coil
 import coil.ImageLoader
 import coil.disk.DiskCache
+import coil.memory.MemoryCache
 
 class ParkerTunesApp : Application() {
     lateinit var musicApi: MusicApi
@@ -18,6 +19,11 @@ class ParkerTunesApp : Application() {
         Coil.setImageLoader(
             ImageLoader.Builder(this)
                 .crossfade(true)
+                .memoryCache {
+                    MemoryCache.Builder(this@ParkerTunesApp)
+                        .maxSizePercent(0.25)
+                        .build()
+                }
                 .diskCache {
                     DiskCache.Builder()
                         .directory(cacheDir.resolve("parker_tunes_image_cache"))
