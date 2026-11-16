@@ -3,6 +3,7 @@ package com.parker.tunes.data
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
+import com.parker.tunes.model.SearchResult
 import com.parker.tunes.model.Song
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -32,8 +33,8 @@ class AddonMusicApi(
             size > 100
     }
 
-    private val searchCache = object : LinkedHashMap<String, List<Song>>(24, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
+    private val searchCache = object : LinkedHashMap<String, SearchResult>(24, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, SearchResult>?): Boolean =
             size > 20
     }
 
@@ -64,9 +65,9 @@ class AddonMusicApi(
         manifest.optString("name").ifBlank { id }
     }
 
-    override suspend fun search(query: String): List<Song> = withContext(Dispatchers.IO) {
+    override suspend fun search(query: String): SearchResult = withContext(Dispatchers.IO) {
         val key = query.trim()
-        if (key.isBlank()) return@withContext emptyList()
+        if (key.isBlank()) return@withContext SearchResult()
         synchronized(searchCache) { searchCache[key] }?.let { return@withContext it }
         val addonBase = configuredAddonUrl
         val youtubeResults = youtube.search(key)
@@ -102,7 +103,10 @@ class AddonMusicApi(
             }
         }.getOrDefault(emptyList())
 
-        (youtubeResults + addonResults).also { combined ->
+        SearchResult(
+            songs = (youtubeResults.songs + addonResults).distinctBy { it.id },
+            artists = youtubeResults.artists
+        ).also { combined ->
             synchronized(searchCache) { searchCache[key] = combined }
         }
     }
@@ -113,7 +117,8 @@ class AddonMusicApi(
         val more = youtube.searchMore(key)
         if (more.isNotEmpty()) {
             synchronized(searchCache) {
-                searchCache[key] = (searchCache[key].orEmpty() + more).distinctBy { it.id }
+                val previous = searchCache[key] ?: SearchResult()
+                searchCache[key] = previous.copy(songs = (previous.songs + more).distinctBy { it.id })
             }
         }
         more
