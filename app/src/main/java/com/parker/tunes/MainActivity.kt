@@ -208,15 +208,39 @@ fun ParkerTunesRoot() {
         val isPlaying = playerState.isPlaying
         val currentTitle = playerState.title
 
-        // Count only active playback time for listening statistics.
-        LaunchedEffect(controller) {
+        // Persist listening time only after a track has accumulated at least 10 seconds.
+        // Any partial time is committed when playback is paused or the track changes.
+        LaunchedEffect(controller, dao) {
+            var trackedId: String? = null
+            var pendingMs = 0L
+            var lastSample = System.currentTimeMillis()
             while (true) {
-                delay(5_000L)
+                delay(1_000L)
+                val now = System.currentTimeMillis()
                 val active = controller
                 val mediaId = active?.currentMediaItem?.mediaId
-                if (active?.isPlaying == true && !mediaId.isNullOrBlank()) {
-                    withContext(Dispatchers.IO) { dao.addPlayDuration(mediaId, 5_000L) }
+                if (mediaId != trackedId) {
+                    val previousId = trackedId
+                    if (previousId != null && pendingMs >= 10_000L) {
+                        val commit = pendingMs
+                        withContext(Dispatchers.IO) { dao.addPlayDuration(previousId, commit) }
+                    }
+                    trackedId = mediaId
+                    pendingMs = 0L
                 }
+                if (active?.isPlaying == true && !mediaId.isNullOrBlank()) {
+                    pendingMs += (now - lastSample).coerceIn(0L, 1_500L)
+                    if (pendingMs >= 10_000L) {
+                        val commit = pendingMs
+                        pendingMs = 0L
+                        withContext(Dispatchers.IO) { dao.addPlayDuration(mediaId, commit) }
+                    }
+                } else if (pendingMs >= 10_000L && !trackedId.isNullOrBlank()) {
+                    val commit = pendingMs
+                    pendingMs = 0L
+                    withContext(Dispatchers.IO) { dao.addPlayDuration(trackedId!!, commit) }
+                }
+                lastSample = now
             }
         }
         val currentArtist = playerState.artist
