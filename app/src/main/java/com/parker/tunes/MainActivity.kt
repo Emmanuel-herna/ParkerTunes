@@ -62,6 +62,7 @@ import androidx.navigation.compose.*
 import com.google.common.util.concurrent.ListenableFuture
 import com.parker.tunes.data.PlayHistoryEntity
 import com.parker.tunes.data.BackupManager
+import com.parker.tunes.data.PlaybackSettingsStore
 import com.parker.tunes.data.EqualizerSettingsEntity
 import com.parker.tunes.data.FavoriteEntity
 import com.parker.tunes.data.MusicApi
@@ -1285,6 +1286,15 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val backupManager = remember(dao, context, settingsPrefs) { BackupManager(context, dao, settingsPrefs) }
+    val playbackSettingsStore = remember(context) { PlaybackSettingsStore(context) }
+    var gaplessPlayback by remember { mutableStateOf(true) }
+    LaunchedEffect(playbackSettingsStore) {
+        playbackSettingsStore.settings.collect { saved ->
+            crossfadeSeconds = saved.crossfadeSeconds
+            smartAutoplay = saved.smartAutoplay
+            gaplessPlayback = saved.gaplessPlayback
+        }
+    }
     var backupStatus by remember { mutableStateOf<String?>(null) }
     val exportBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -1399,6 +1409,7 @@ fun SettingsScreen(
                 Switch(checked = smartAutoplay, onCheckedChange = {
                     smartAutoplay = it
                     settingsPrefs.edit().putBoolean("smart_autoplay", it).apply()
+                    scope.launch { playbackSettingsStore.setSmartAutoplay(it) }
                 })
             }
             Text("Track transition fade · ${crossfadeSeconds}s", color = MaterialTheme.colorScheme.onSurface,
@@ -1408,12 +1419,21 @@ fun SettingsScreen(
                 onValueChange = {
                     crossfadeSeconds = it.toInt().coerceIn(0, 12)
                     settingsPrefs.edit().putInt("crossfade_seconds", crossfadeSeconds).apply()
+                    scope.launch { playbackSettingsStore.setCrossfadeSeconds(crossfadeSeconds) }
                 },
                 valueRange = 0f..12f,
                 steps = 11
             )
             Text("0 seconds disables the fade. ExoPlayer keeps playlist transitions gapless; the fade gently lowers and restores volume at track boundaries.",
                 color = Muted, fontSize = 11.sp)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Gapless playback", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
+                    Text("Native ExoPlayer playlist playback", color = Muted, fontSize = 12.sp)
+                }
+                Text(if (gaplessPlayback) "On" else "Off", color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold)
+            }
         }
 
         Column(
