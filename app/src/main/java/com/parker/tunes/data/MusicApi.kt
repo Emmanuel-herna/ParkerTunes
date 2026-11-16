@@ -25,6 +25,13 @@ import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.util.LinkedHashMap
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONArray
+
+data class LyricLine(val timeMs: Long, val text: String)
+data class SyncedLyrics(val lines: List<LyricLine>)
+data class Lyrics(val syncedLyrics: SyncedLyrics?, val plainText: String?)
 
 interface MusicApi {
     suspend fun search(query: String): SearchResult
@@ -36,6 +43,7 @@ interface MusicApi {
     suspend fun getArtistProfile(artist: Artist): ArtistProfile
     suspend fun getAlbumTracks(albumId: String): List<Song>
     suspend fun getStreamUrl(songId: String): String
+    suspend fun getLyrics(title: String, artist: String): Lyrics? = null
     suspend fun getLyrics(songId: String): String?
     suspend fun getCoverArt(songId: String): String?
 }
@@ -51,6 +59,8 @@ class NewPipeMusicApi : MusicApi {
         var nextPage: Page?
     )
 
+    private val lyricsClient = OkHttpClient()
+    private val lyricsCache = LinkedHashMap<String, Lyrics?>()
     private val cacheLock = Any()
     private val resultCache = object : LinkedHashMap<String, SearchResult>(24, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, SearchResult>?): Boolean =
@@ -325,6 +335,44 @@ class NewPipeMusicApi : MusicApi {
         } catch (_: Exception) {
             ""
         }
+    }
+
+    override suspend fun getLyrics(title: String, artist: String): Lyrics? = withContext(Dispatchers.IO) {
+        val cleanTitle = title.trim()
+        val cleanArtist = artist.trim()
+        if (cleanTitle.isBlank() || cleanArtist.isBlank()) return@withContext null
+        val key = "$cleanTitle|$cleanArtist".lowercase()
+        synchronized(cacheLock) {
+            if (lyricsCache.containsKey(key)) return@withContext lyricsCache[key]
+        }
+        val result = runCatching {
+            val url = Uri.parse("https://lrclib.net/api/search").buildUpon()
+                .appendQueryParameter("track_name", cleanTitle)
+                .appendQueryParameter("artist_name", cleanArtist).build().toString()
+            val request = Request.Builder().url(url).header("User-Agent", "ParkerTunes/1.0 (Android)").build()
+            lyricsClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use null
+                val array = JSONArray(response.body?.string().orEmpty())
+                val item = (0 until array.length()).map { array.getJSONObject(it) }
+                    .firstOrNull { it.optString("syncedLyrics").isNotBlank() || it.optString("plainLyrics").isNotBlank() }
+                    ?: return@use null
+                val lrc = item.optString("syncedLyrics").takeIf { it.isNotBlank() }
+                val plain = item.optString("plainLyrics").takeIf { it.isNotBlank() }
+                val lines = lrc?.lineSequence()?.mapNotNull { raw ->
+                    val match = Regex("\\\\[(\\\\d{2}):(\\\\d{2})\\\\.(\\\\d{2,3})]\\\\s*(.*)").matchEntire(raw.trim())
+                        ?: return@mapNotNull null
+                    val ms = (match.groupValues[1].toLong() * 60 + match.groupValues[2].toLong()) * 1000 +
+                        match.groupValues[3].padEnd(3, '0').take(3).toLong()
+                    LyricLine(ms, match.groupValues[4])
+                }?.toList().orEmpty()
+                Lyrics(lines.takeIf { it.isNotEmpty() }?.let { SyncedLyrics(it) }, plain)
+            }
+        }.getOrNull()
+        synchronized(cacheLock) {
+            lyricsCache[key] = result
+            if (lyricsCache.size > 100) lyricsCache.remove(lyricsCache.keys.first())
+        }
+        result
     }
 
     override suspend fun getLyrics(songId: String): String? = null
