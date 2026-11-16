@@ -23,17 +23,15 @@ class AddonMusicApi(
     private val registry by lazy { LibraryDatabase.get(appContext).sourceRegistryDao() }
     private val client = AddonClient()
 
-    override suspend fun search(query: String): SearchResult = withContext(Dispatchers.IO) {
-        val baseResults = youtube.search(query)
-        val sources = runCatching { registry.enabledSnapshot() }.getOrDefault(emptyList())
-        if (sources.isEmpty()) return@withContext baseResults
-        val extra = sources.flatMap { source ->
-            runCatching {
-                val settings = registry.settings(source.id).associate { it.key to it.value }
-                client.search(source.id, source.baseUrl, query, 30, StreamRequest.Best, false, settings)
-            }.getOrDefault(emptyList())
-        }
-        baseResults.copy(songs = (baseResults.songs + extra).distinctBy { it.id })
+    override suspend fun search(query: String): SearchResult = youtube.search(query)
+
+    fun addonSources() = registry.enabled()
+
+    suspend fun searchAddon(sourceId: String, query: String): List<Song> = withContext(Dispatchers.IO) {
+        val source = registry.get(sourceId) ?: return@withContext emptyList()
+        if (!source.enabled) return@withContext emptyList()
+        val settings = registry.settings(sourceId).associate { it.key to it.value }
+        client.search(source.id, source.baseUrl, query, 30, StreamRequest.Best, false, settings)
     }
 
     override suspend fun searchMore(query: String): List<Song> = youtube.searchMore(query)
