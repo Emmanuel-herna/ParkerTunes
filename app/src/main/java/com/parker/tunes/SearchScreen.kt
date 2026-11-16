@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -26,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.border
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
@@ -42,6 +45,7 @@ import com.parker.tunes.data.LibraryDao
 import com.parker.tunes.data.MusicApi
 import com.parker.tunes.data.RecentSearchEntity
 import com.parker.tunes.model.Song
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -111,6 +115,7 @@ fun SearchScreen(
     var results by remember { mutableStateOf<List<Song>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var searchFocused by remember { mutableStateOf(false) }
 
     LaunchedEffect(query, api, activeSource) {
         val clean = query.trim()
@@ -123,15 +128,18 @@ fun SearchScreen(
         loading = true
         error = null
         kotlinx.coroutines.delay(300)
-        val outcome = runCatching { withContext(Dispatchers.IO) { api.search(clean) } }
-        outcome.onSuccess {
-            results = it
-            if (it.isNotEmpty()) recentVm.recordQuery(clean)
-        }.onFailure {
-            error = it.message ?: "Search is temporarily unavailable."
+        try {
+            val found = withContext(Dispatchers.IO) { api.search(clean) }
+            results = found
+            if (found.isNotEmpty()) recentVm.recordQuery(clean)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            error = failure.message ?: "Search is temporarily unavailable."
             results = emptyList()
+        } finally {
+            loading = false
         }
-        loading = false
     }
 
     Column(
@@ -178,7 +186,8 @@ fun SearchScreen(
         Row(
             Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp))
                 .background(SearchSurface)
-                .then(if (query.isNotEmpty()) Modifier else Modifier),
+                .border(if (searchFocused) 1.dp else 0.dp, if (searchFocused) SearchAccent.copy(alpha = 0.7f) else Color.Transparent, RoundedCornerShape(26.dp))
+                .onFocusChanged { searchFocused = it.isFocused },
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(Icons.Default.Search, null, tint = SearchMuted, modifier = Modifier.padding(start = 16.dp).size(21.dp))
@@ -315,7 +324,7 @@ private fun SearchResultRow(song: Song, onClick: () -> Unit) {
         }
         Box(Modifier.padding(start = 8.dp).size(30.dp).clip(CircleShape).background(SearchAccent)
             .clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.MusicNote, null, tint = Color.Black, modifier = Modifier.size(16.dp))
+            Icon(Icons.Default.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(19.dp))
         }
     }
 }
