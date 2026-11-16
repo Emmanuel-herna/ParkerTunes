@@ -15,9 +15,10 @@ import java.util.concurrent.TimeUnit
  */
 internal class ParkerTunesDownloader : Downloader() {
     private val client = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(20, TimeUnit.SECONDS)
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .writeTimeout(8, TimeUnit.SECONDS)
+        .callTimeout(8, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
