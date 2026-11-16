@@ -63,9 +63,60 @@ class PlaybackService : MediaSessionService() {
         WidgetProvider.update(this, player)
     }
 
+    private fun maybeAppendRelated(player: ExoPlayer) {
+        val prefs = getSharedPreferences("parker_tunes_settings", MODE_PRIVATE)
+        if (!prefs.getBoolean("smart_autoplay", true) || autoplayResolving ||
+            player.repeatMode != Player.REPEAT_MODE_OFF ||
+            player.currentMediaItemIndex < 0 ||
+            player.currentMediaItemIndex < player.mediaItemCount - 1
+        ) return
+        val current = player.currentMediaItem ?: return
+        val songId = current.mediaId.takeIf { it.isNotBlank() } ?: return
+        autoplayResolving = true
+        serviceScope.launch {
+            try {
+                val app = application as ParkerTunesApp
+                val related = withContext(Dispatchers.IO) { app.musicApi.getRelatedSongs(songId) }
+                val queuedIds = (0 until player.mediaItemCount).mapNotNull { index ->
+                    runCatching { player.getMediaItemAt(index).mediaId }.getOrNull()
+                }.toSet()
+                val additions = related.asSequence().filter { it.id !in queuedIds }
+                    .distinctBy { it.id }.take(5).toList()
+                val mediaItems = withContext(Dispatchers.IO) {
+                    additions.mapNotNull { song ->
+                        runCatching {
+                            val stream = app.musicApi.getStreamUrl(song.id)
+                            if (stream.isBlank()) null else androidx.media3.common.MediaItem.Builder()
+                                .setMediaId(song.id)
+                                .setUri(stream)
+                                .setMediaMetadata(
+                                    androidx.media3.common.MediaMetadata.Builder()
+                                        .setTitle(song.title)
+                                        .setArtist(song.artist)
+                                        .setArtworkUri(song.coverUrl?.let(android.net.Uri::parse))
+                                        .build()
+                                ).build()
+                        }.getOrNull()
+                    }
+                }
+                if (mediaItems.isNotEmpty()) {
+                    player.addMediaItems(mediaItems)
+                    if (player.playbackState == Player.STATE_ENDED) {
+                        player.seekToNextMediaItem()
+                        player.prepare()
+                        player.play()
+                    }
+                }
+            } finally {
+                autoplayResolving = false
+            }
+        }
+    }
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
     override fun onDestroy() {
+        serviceScope.cancel()
         equalizerManager?.close()
         equalizerManager = null
         EqualizerRegistry.manager = null
