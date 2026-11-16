@@ -179,6 +179,16 @@ fun ParkerTunesRoot() {
                         record(mediaItem)
                     }
 
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        if (isPlaying) {
+                            val current = activePlayer.currentMediaItem
+                            if (current?.mediaId != lastRecordedMediaId) {
+                                lastRecordedMediaId = current?.mediaId
+                                record(current)
+                            }
+                        }
+                    }
+
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         if (playbackState == Player.STATE_ENDED) {
                             val current = activePlayer.currentMediaItem
@@ -401,7 +411,7 @@ private fun HomeScreen(
                 HomeSectionHeading("QUICK ACCESS", "Favorites")
                 if (favorites.isEmpty()) {
                     Text(
-                        "Songs you heart will be ready here.",
+                        "Songs you favorite will be ready here.",
                         color = Muted,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(horizontal = 22.dp)
@@ -916,8 +926,10 @@ fun LibraryScreen(dao: com.parker.tunes.data.LibraryDao) {
     var selectedPlaylist by remember { mutableStateOf<com.parker.tunes.data.PlaylistEntity?>(null) }
     val scope = rememberCoroutineScope()
     val playlists by dao.playlists().collectAsState(initial = emptyList())
-    val favorites by dao.favorites().collectAsState(initial = emptyList())
-    val history by dao.history().collectAsState(initial = emptyList())
+    val favorites by remember(dao) { dao.favorites().flowOn(Dispatchers.IO) }
+        .collectAsState(initial = emptyList())
+    val history by remember(dao) { dao.history().flowOn(Dispatchers.IO) }
+        .collectAsState(initial = emptyList())
     val tracksFlow: kotlinx.coroutines.flow.Flow<List<com.parker.tunes.data.PlaylistTrackEntity>> = remember(selectedPlaylist?.id) {
         selectedPlaylist?.let { dao.playlistTracks(it.id) }
             ?: kotlinx.coroutines.flow.flowOf(emptyList())
