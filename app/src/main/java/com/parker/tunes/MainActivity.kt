@@ -67,6 +67,11 @@ import com.parker.tunes.data.PlaybackSettings
 import com.parker.tunes.data.EqualizerSettingsEntity
 import com.parker.tunes.data.FavoriteEntity
 import com.parker.tunes.data.MusicApi
+import com.parker.tunes.core.lyrics.LyricsParser
+import com.parker.tunes.core.lyrics.LyricsLine as KaraokeLyricsLine
+import com.parker.tunes.core.lyrics.VLine
+import com.parker.tunes.core.lyrics.activeRows
+import com.parker.tunes.data.LyricsCacheEntity
 import com.parker.tunes.data.AddonMusicApi
 import com.parker.tunes.model.Artist
 import com.parker.tunes.model.Album
@@ -509,7 +514,7 @@ fun ParkerTunesRoot() {
                     }
                 ) {
                     NowPlayingScreen(
-                        controller, playerObserver, playerState,
+                        controller, playerObserver, playerState, api, dao,
                         isResolving = resolvingSongId != null &&
                             resolvingSongId == controller?.currentMediaItem?.mediaId,
                         loadError = playbackLoadError,
@@ -825,6 +830,8 @@ private fun NowPlayingScreen(
     player: MediaController?,
     playerObserver: PlayerUiStateObserver?,
     playerState: PlayerUiState,
+    api: MusicApi,
+    dao: com.parker.tunes.data.LibraryDao,
     isResolving: Boolean,
     loadError: String?,
     onOpenEqualizer: () -> Unit,
@@ -868,6 +875,45 @@ private fun NowPlayingScreen(
     val coverScale = (1f - (dragOffset / 900f).coerceIn(0f, 0.16f))
     val shuffle = playerState.shuffleEnabled
     val repeat = playerState.repeatMode
+    val songId = player?.currentMediaItem?.mediaId.orEmpty()
+    var lyricRows by remember(songId) { mutableStateOf<List<VLine>>(emptyList()) }
+    var plainLyrics by remember(songId) { mutableStateOf<String?>(null) }
+    var lyricsLoading by remember(songId) { mutableStateOf(false) }
+    LaunchedEffect(songId, title, artist, api, dao) {
+        lyricRows = emptyList()
+        plainLyrics = null
+        if (songId.isNotBlank() && title.isNotBlank() && artist.isNotBlank()) {
+            lyricsLoading = true
+            val cached = withContext(Dispatchers.IO) { dao.lyrics(songId) }
+            val cachedRows = cached?.syncedLyrics?.let(LyricsParser::parse).orEmpty()
+            if (cachedRows.isNotEmpty()) {
+                lyricRows = VLine.of(cachedRows)
+                plainLyrics = cached?.plainLyrics
+            } else {
+                val fetched = runCatching { api.getLyrics(title, artist) }.getOrNull()
+                val lines = fetched?.syncedLyrics?.lines.orEmpty()
+                if (lines.isNotEmpty()) {
+                    val mapped = lines.map { KaraokeLyricsLine(it.timeMs, it.text) }
+                    lyricRows = VLine.of(mapped)
+                    val serialized = mapped.joinToString("\n") { line ->
+                        val total = line.timeMs.coerceAtLeast(0L)
+                        "[%02d:%02d.%02d]%s".format(total / 60_000, (total / 1_000) % 60,
+                            (total % 1_000) / 10, line.text)
+                    }
+                    withContext(Dispatchers.IO) {
+                        dao.saveLyrics(LyricsCacheEntity(songId, serialized, fetched.plainText))
+                    }
+                } else {
+                    plainLyrics = fetched?.plainText
+                    if (fetched != null) withContext(Dispatchers.IO) {
+                        dao.saveLyrics(LyricsCacheEntity(songId, null, fetched.plainText))
+                    }
+                }
+            }
+            lyricsLoading = false
+        }
+    }
+    val activeLyricRows = remember(lyricRows, position) { activeRows(lyricRows, position) }
 
     Column(
         Modifier.fillMaxSize()
@@ -989,6 +1035,53 @@ private fun NowPlayingScreen(
                 Text(formatTime(duration), color = Muted, fontSize = 11.sp)
             }
         }
+        if (lyricRows.isNotEmpty() || !plainLyrics.isNullOrBlank() || lyricsLoading) {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 148.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = .72f))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("LYRICS", color = MaterialTheme.colorScheme.primary,
+                        fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
+                    Spacer(Modifier.weight(1f))
+                    if (lyricsLoading) CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
+                }
+                if (lyricRows.isNotEmpty()) {
+                    val visibleIndices = (activeLyricRows + (lyricRows.indices.filter {
+                        it !in activeLyricRows && !lyricRows[it].isGap &&
+                            lyricRows[it].timeMs >= position
+                    }.take(2))).distinct().sorted().take(4)
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        items(visibleIndices) { index ->
+                            val line = lyricRows[index]
+                            if (line.text.isNotBlank()) {
+                                Text(
+                                    line.text,
+                                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp))
+                                        .clickable { player?.seekTo(line.timeMs) }
+                                        .padding(vertical = 3.dp, horizontal = 5.dp),
+                                    color = if (index in activeLyricRows) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = .55f),
+                                    fontSize = if (index in activeLyricRows) 16.sp else 13.sp,
+                                    fontWeight = if (index in activeLyricRows) FontWeight.Bold else FontWeight.Medium,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                } else if (!plainLyrics.isNullOrBlank()) {
+                    Text(plainLyrics.orEmpty(), color = MaterialTheme.colorScheme.onSurface.copy(alpha = .78f),
+                        fontSize = 12.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                } else if (lyricsLoading) {
+                    Text("Finding lyrics…", color = Muted, fontSize = 12.sp)
+                }
+            }
+        }
+
         Row(
             Modifier.fillMaxWidth().padding(vertical = 16.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
