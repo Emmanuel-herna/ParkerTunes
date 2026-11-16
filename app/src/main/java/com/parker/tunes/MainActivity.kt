@@ -12,6 +12,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -217,7 +219,17 @@ fun ParkerTunesRoot() {
                             .edit().putBoolean("light_mode", it).apply()
                     }
                 }
-                composable("nowplaying") {
+                composable(
+                    route = "nowplaying",
+                    enterTransition = {
+                        fadeIn(animationSpec = tween(240)) +
+                            slideInVertically(animationSpec = tween(280)) { it / 12 }
+                    },
+                    exitTransition = {
+                        fadeOut(animationSpec = tween(180)) +
+                            slideOutVertically(animationSpec = tween(220)) { it / 10 }
+                    }
+                ) {
                     NowPlayingScreen(controller, playerObserver, playerState) {
                         nav.popBackStack()
                     }
@@ -433,6 +445,13 @@ private fun NowPlayingScreen(
     var seeking by remember { mutableStateOf(false) }
     var seekValue by remember { mutableFloatStateOf(0f) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
+    var coverExpanded by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { coverExpanded = true }
+    val coverEntryScale by animateFloatAsState(
+        targetValue = if (coverExpanded) 1f else 0.88f,
+        animationSpec = tween(320),
+        label = "coverExpandTransition"
+    )
     val animatedDrag by animateFloatAsState(dragOffset, animationSpec = tween(120), label = "playerDismissDrag")
     val coverScale = (1f - (animatedDrag / 900f).coerceIn(0f, 0.16f))
     val shuffle = playerState.shuffleEnabled
@@ -471,7 +490,7 @@ private fun NowPlayingScreen(
         }
         Box(
             Modifier.fillMaxWidth().weight(1f).padding(vertical = 26.dp)
-                .graphicsLayer { scaleX = coverScale; scaleY = coverScale }
+                .graphicsLayer { scaleX = coverScale * coverEntryScale; scaleY = coverScale * coverEntryScale }
                 .shadow(22.dp, RoundedCornerShape(28.dp))
                 .clip(RoundedCornerShape(28.dp)).background(
                     androidx.compose.ui.graphics.Brush.linearGradient(
