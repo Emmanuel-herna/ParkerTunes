@@ -52,6 +52,9 @@ interface LibraryDao {
     @Query("SELECT * FROM playlist_tracks WHERE playlistId = :playlistId ORDER BY position ASC")
     fun playlistTracks(playlistId: String): Flow<List<PlaylistTrackEntity>>
 
+    @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId AND songId = :songId")
+    suspend fun removeTrack(playlistId: String, songId: String)
+
     @Query("SELECT * FROM favorites ORDER BY addedAt DESC")
     fun favorites(): Flow<List<FavoriteEntity>>
 
