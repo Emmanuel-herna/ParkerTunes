@@ -286,6 +286,8 @@ fun SearchScreen(
 private fun SongRow(song: Song, dao: com.parker.tunes.data.LibraryDao, onClick: () -> Unit) {
     val scope = rememberCoroutineScope()
     var favorite by remember(song.id) { mutableStateOf(false) }
+    var showPlaylistPicker by remember { mutableStateOf(false) }
+    val playlists by dao.playlists().collectAsState(initial = emptyList())
     LaunchedEffect(song.id) { favorite = dao.isFavorite(song.id) }
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
@@ -302,6 +304,9 @@ private fun SongRow(song: Song, dao: com.parker.tunes.data.LibraryDao, onClick: 
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(song.artist, color = Muted, fontSize = 13.sp, maxLines = 1)
         }
+        IconButton(onClick = { showPlaylistPicker = true }) {
+            Icon(Icons.Default.PlaylistAdd, contentDescription = "Add to playlist", tint = Muted)
+        }
         IconButton(onClick = {
             scope.launch {
                 if (favorite) dao.removeFavorite(song.id)
@@ -316,6 +321,44 @@ private fun SongRow(song: Song, dao: com.parker.tunes.data.LibraryDao, onClick: 
             )
         }
         Icon(Icons.Default.PlayCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
+    }
+    if (showPlaylistPicker) {
+        AlertDialog(
+            onDismissRequest = { showPlaylistPicker = false },
+            title = { Text("Add to playlist") },
+            text = {
+                if (playlists.isEmpty()) {
+                    Text("Create a playlist in Your Library first.")
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        playlists.forEach { playlist ->
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        dao.addTrack(
+                                            com.parker.tunes.data.PlaylistTrackEntity(
+                                                playlistId = playlist.id,
+                                                songId = song.id,
+                                                position = System.currentTimeMillis().toInt(),
+                                                title = song.title,
+                                                artist = song.artist
+                                            )
+                                        )
+                                    }
+                                    showPlaylistPicker = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(playlist.name, modifier = Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPlaylistPicker = false }) { Text("Close") }
+            }
+        )
     }
 }
 
