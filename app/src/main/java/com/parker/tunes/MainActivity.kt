@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.ComponentName
 import android.net.Uri
+import android.widget.Toast
 import android.os.Bundle
 import android.os.Build
 import androidx.activity.ComponentActivity
@@ -328,6 +329,31 @@ fun ParkerTunesRoot() {
             }
         }
 
+        val queueSong: (Song, Boolean) -> Unit = { song, playNext ->
+            val activeController = controller
+            if (activeController != null) scope.launch {
+                runCatching {
+                    val uri = withContext(Dispatchers.IO) {
+                        val local = dao.download(song.id)?.takeIf {
+                            it.status == com.parker.tunes.data.DownloadEntity.STATUS_COMPLETE &&
+                                File(it.filePath).isFile && File(it.filePath).length() > 0L
+                        }
+                        if (local != null) Uri.fromFile(File(local.filePath))
+                        else Uri.parse(api.getStreamUrl(song.id))
+                    }
+                    val metadata = MediaMetadata.Builder().setTitle(song.title).setArtist(song.artist)
+                        .setArtworkUri(song.coverUrl?.let(Uri::parse)).build()
+                    MediaItem.Builder().setMediaId(song.id).setUri(uri).setMediaMetadata(metadata).build()
+                }.onSuccess { item ->
+                    val insertAt = if (playNext) (activeController.currentMediaItemIndex + 1).coerceAtLeast(0) else activeController.mediaItemCount
+                    activeController.addMediaItem(insertAt, item)
+                    Toast.makeText(context, if (playNext) "Playing next: ${song.title}" else "Added to queue: ${song.title}", Toast.LENGTH_SHORT).show()
+                }.onFailure { failure ->
+                    Toast.makeText(context, failure.message ?: "Couldn't add this song to the queue.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
@@ -395,7 +421,7 @@ fun ParkerTunesRoot() {
                     MoodResultsScreen(mood = mood, api = api, onBack = { nav.popBackStack() }, onPlay = playSong)
                 }
                 composable("search") {
-                    SearchScreen(api = api, dao = dao, downloads = app.downloads, onPlay = playSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist") })
+                    SearchScreen(api = api, dao = dao, downloads = app.downloads, onPlay = playSong, onQueue = queueSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist") })
                 }
                 composable("artist") {
                     selectedArtist?.let { artist ->
