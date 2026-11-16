@@ -80,6 +80,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -294,16 +295,23 @@ fun ParkerTunesRoot() {
 
                 scope.launch {
                     val result = runCatching {
-                        withContext(Dispatchers.IO) { api.getStreamUrl(song.id) }
+                        val localFile = withContext(Dispatchers.IO) {
+                            dao.download(song.id)?.takeIf { item ->
+                                item.status == com.parker.tunes.data.DownloadEntity.STATUS_COMPLETE &&
+                                    File(item.filePath).isFile && File(item.filePath).length() > 0L
+                            }?.let { File(it.filePath) }
+                        }
+                        if (localFile != null) Uri.fromFile(localFile)
+                        else Uri.parse(withContext(Dispatchers.IO) { api.getStreamUrl(song.id) })
                     }
                     if (resolvingSongId == song.id) {
-                        result.onSuccess { streamUrl ->
-                            if (streamUrl.isBlank()) {
+                        result.onSuccess { playbackUri ->
+                            if (playbackUri == null || playbackUri.toString().isBlank()) {
                                 playbackLoadError = "Couldn't load this song. Tap the song again to retry."
                             } else {
                                 val playableItem = MediaItem.Builder()
                                     .setMediaId(song.id)
-                                    .setUri(streamUrl)
+                                    .setUri(playbackUri)
                                     .setMediaMetadata(metadata)
                                     .build()
                                 activeController.setMediaItem(playableItem)
@@ -386,7 +394,7 @@ fun ParkerTunesRoot() {
                     MoodResultsScreen(mood = mood, api = api, onBack = { nav.popBackStack() }, onPlay = playSong)
                 }
                 composable("search") {
-                    SearchScreen(api = api, dao = dao, onPlay = playSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist") })
+                    SearchScreen(api = api, dao = dao, downloads = app.downloads, onPlay = playSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist") })
                 }
                 composable("artist") {
                     selectedArtist?.let { artist ->
@@ -399,7 +407,7 @@ fun ParkerTunesRoot() {
                         AlbumScreen(album = album, api = api, onBack = { nav.popBackStack() }, onPlay = playSong)
                     }
                 }
-                composable("library") { LibraryScreen(dao) }
+                composable("library") { LibraryScreen(dao, app.downloads, playSong) }
                 composable("stats") { StatsScreen(dao = dao, onBack = { nav.popBackStack() }) }
                 composable("equalizer") {
                     EqualizerScreen(manager = equalizerManager, onBack = { nav.popBackStack() }, onChanged = persistEqualizer)
