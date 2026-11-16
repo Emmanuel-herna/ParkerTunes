@@ -5,5 +5,5 @@ plugins {
     id("com.google.devtools.ksp") version "2.0.21-1.0.28" apply false
     id("com.google.gms.google-services") version "4.6.0" apply false
     id("com.google.firebase.appdistribution") version "5.3.1" apply false
-    id("io.github.takahirom.roborazzi") version "1.76.0" apply false
+    id("io.github.takahirom.roborazzi") version "1.50.0" apply false
 }
