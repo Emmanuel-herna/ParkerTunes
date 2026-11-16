@@ -23,6 +23,9 @@ class AddonMusicApi(
         .callTimeout(25, TimeUnit.SECONDS)
         .build()
 
+    @Volatile
+    private var manifestCache: CachedManifest? = null
+
     val configuredAddonUrl: String
         get() = preferences.getString(KEY_ADDON_URL, "").orEmpty()
 
@@ -33,7 +36,7 @@ class AddonMusicApi(
     suspend fun validateAddon(rawUrl: String): String = withContext(Dispatchers.IO) {
         val base = normalizeBase(rawUrl)
         require(base.startsWith("https://", ignoreCase = true)) { "Addons must use HTTPS." }
-        val manifest = getJson(endpoint(base, "manifest.json"))
+        val manifest = manifestFor(base)
         val id = manifest.optString("id")
         require(id.isNotBlank()) { "This server did not return a valid addon manifest." }
         val resources = manifest.optJSONArray("resources")
@@ -59,7 +62,7 @@ class AddonMusicApi(
             validateAddon(addonBase)
             val url = Uri.parse(endpoint(addonBase, "search")).buildUpon()
                 .appendQueryParameter("q", query.trim())
-                .appendQueryParameter("quality", "LOSSLESS")
+                .appendQueryParameter("quality", qualityFor(addonBase))
                 .build().toString()
             val payload = getJson(url)
             val tracks = payload.optJSONArray("tracks") ?: return@runCatching emptyList<Song>()
@@ -95,7 +98,7 @@ class AddonMusicApi(
         if (!directStream.isNullOrBlank()) return@withContext directStream
 
         val url = Uri.parse(endpoint(base, "stream", trackId)).buildUpon()
-            .appendQueryParameter("quality", "LOSSLESS").build().toString()
+            .appendQueryParameter("quality", qualityFor(base)).build().toString()
         getJson(url).optString("url").also {
             require(it.startsWith("https://", true)) {
                 "The addon did not return a playable stream URL."
@@ -108,6 +111,34 @@ class AddonMusicApi(
 
     override suspend fun getCoverArt(songId: String): String? =
         if (parseAddonSongId(songId) == null) youtube.getCoverArt(songId) else null
+
+    private suspend fun manifestFor(base: String): JSONObject = withContext(Dispatchers.IO) {
+        val cached = manifestCache
+        if (cached != null && cached.base == base &&
+            System.currentTimeMillis() - cached.savedAtMs < MANIFEST_CACHE_MS
+        ) return@withContext cached.manifest
+
+        val manifest = getJson(endpoint(base, "manifest.json"))
+        manifestCache = CachedManifest(base, System.currentTimeMillis(), manifest)
+        manifest
+    }
+
+    /** Honor the addon's declared quality default/options instead of guessing. */
+    private suspend fun qualityFor(base: String): String {
+        val manifest = manifestFor(base)
+        val settings = manifest.optJSONArray("settings") ?: return "LOSSLESS"
+        for (index in 0 until settings.length()) {
+            val setting = settings.optJSONObject(index) ?: continue
+            if (setting.optString("key") != "quality") continue
+            setting.optString("default").takeIf { it.isNotBlank() }?.let { return it }
+            val options = setting.optJSONArray("options")
+            if (options != null && options.length() > 0) {
+                val first = options.optJSONObject(0)?.optString("value").orEmpty()
+                if (first.isNotBlank()) return first
+            }
+        }
+        return "LOSSLESS"
+    }
 
     private fun getJson(url: String): JSONObject {
         val request = Request.Builder().url(url).header("Accept", "application/json").get().build()
@@ -153,8 +184,15 @@ class AddonMusicApi(
     private fun decode(value: String): String =
         String(Base64.decode(value, Base64.URL_SAFE or Base64.NO_WRAP), Charsets.UTF_8)
 
+    private data class CachedManifest(
+        val base: String,
+        val savedAtMs: Long,
+        val manifest: JSONObject
+    )
+
     private companion object {
         const val PREFS = "parker_tunes_settings"
         const val KEY_ADDON_URL = "addon_source_url"
+        const val MANIFEST_CACHE_MS = 10 * 60 * 1000L
     }
 }
