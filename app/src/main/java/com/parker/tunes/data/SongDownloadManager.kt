@@ -6,6 +6,8 @@ import androidx.core.content.ContextCompat
 import android.os.StatFs
 import com.parker.tunes.model.Song
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -174,14 +176,16 @@ class SongDownloadManager(
             _progress.value = _progress.value + (song.id to 100)
         } catch (cancelled: CancellationException) {
             temporary.delete()
-            dao.saveDownload(
-                DownloadEntity(
-                    songId = song.id, title = song.title, artist = song.artist,
-                    coverUrl = song.coverUrl, filePath = destination.absolutePath,
-                    fileSizeBytes = 0L, downloadedAt = 0L, durationSec = song.durationSec,
-                    status = DownloadEntity.STATUS_FAILED, errorMessage = "Download cancelled"
+            withContext(NonCancellable) {
+                dao.saveDownload(
+                    DownloadEntity(
+                        songId = song.id, title = song.title, artist = song.artist,
+                        coverUrl = song.coverUrl, filePath = destination.absolutePath,
+                        fileSizeBytes = 0L, downloadedAt = 0L, durationSec = song.durationSec,
+                        status = DownloadEntity.STATUS_FAILED, errorMessage = "Download cancelled"
+                    )
                 )
-            )
+            }
             throw cancelled
         } catch (failure: Exception) {
             temporary.delete()
