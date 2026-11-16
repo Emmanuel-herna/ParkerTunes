@@ -1,5 +1,14 @@
 package com.parker.tunes.player
 
+import android.os.Bundle
+import androidx.media3.session.CommandButton
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
+import androidx.media3.common.util.UnstableApi
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
+import com.parker.tunes.data.FavoriteEntity
+
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -14,12 +23,56 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@OptIn(UnstableApi::class)
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private var equalizerManager: EqualizerManager? = null
     private var crossfadeController: CrossfadeController? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var autoplayResolving = false
+    private val favoriteCommand = SessionCommand(ACTION_FAVORITE, Bundle.EMPTY)
+    private val sessionCallback = object : MediaSession.Callback {
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): MediaSession.ConnectionResult {
+            val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS
+                .buildUpon().add(favoriteCommand).build()
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(commands)
+                .build()
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle
+        ): ListenableFuture<SessionResult> {
+            if (customCommand.customAction == ACTION_FAVORITE) {
+                val item = session.player.currentMediaItem
+                val songId = item?.mediaId.orEmpty()
+                if (songId.isNotBlank()) {
+                    serviceScope.launch(Dispatchers.IO) {
+                        val dao = (application as ParkerTunesApp).database.libraryDao()
+                        if (dao.isFavorite(songId)) dao.removeFavorite(songId)
+                        else dao.addFavorite(FavoriteEntity(
+                            songId = songId,
+                            title = item?.mediaMetadata?.title?.toString().orEmpty(),
+                            artist = item?.mediaMetadata?.artist?.toString().orEmpty(),
+                            coverUrl = item?.mediaMetadata?.artworkUri?.toString()
+                        ))
+                    }
+                }
+                return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+            }
+            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
+        }
+    }
+
+    private companion object {
+        const val ACTION_FAVORITE = "com.parker.tunes.action.FAVORITE"
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -61,7 +114,14 @@ class PlaybackService : MediaSessionService() {
                 WidgetProvider.update(this@PlaybackService, player)
             }
         })
-        mediaSession = MediaSession.Builder(this, player).build()
+        val favoriteButton = CommandButton.Builder(CommandButton.ICON_HEART_UNFILLED)
+            .setDisplayName("Save to favourites")
+            .setSessionCommand(favoriteCommand)
+            .build()
+        mediaSession = MediaSession.Builder(this, player)
+            .setCallback(sessionCallback)
+            .setMediaButtonPreferences(listOf(favoriteButton))
+            .build()
         WidgetProvider.update(this, player)
     }
 
