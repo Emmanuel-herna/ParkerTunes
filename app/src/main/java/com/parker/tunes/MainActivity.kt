@@ -22,6 +22,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -41,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.platform.LocalContext
@@ -48,6 +52,7 @@ import coil.compose.AsyncImage
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.navigation.compose.*
@@ -61,7 +66,9 @@ import com.parker.tunes.player.PlaybackService
 import com.parker.tunes.player.PlayerUiState
 import com.parker.tunes.player.PlayerUiStateObserver
 import com.parker.tunes.ui.theme.ParkerTunesTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -95,7 +102,7 @@ fun ParkerTunesRoot() {
     val backStackEntry by nav.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     var query by remember { mutableStateOf("") }
-    var selectedTab by remember { mutableStateOf("Search") }
+    var selectedTab by remember { mutableStateOf("Home") }
     var lightMode by remember {
         mutableStateOf(context.getSharedPreferences("parker_tunes_settings", android.content.Context.MODE_PRIVATE)
             .getBoolean("light_mode", false))
@@ -143,6 +150,73 @@ fun ParkerTunesRoot() {
         val currentTitle = playerState.title
         val currentArtist = playerState.artist
 
+        // Persist every newly selected media item from Media3 callbacks. This
+        // also covers tracks started from Home, playlists, and system controls.
+        DisposableEffect(controller, dao) {
+            val activePlayer = controller
+            if (activePlayer == null) {
+                onDispose { }
+            } else {
+                var lastRecordedMediaId: String? = null
+                val historyListener = object : Player.Listener {
+                    private fun record(item: MediaItem?) {
+                        val songId = item?.mediaId?.takeIf { it.isNotBlank() } ?: return
+                        val metadata = item.mediaMetadata
+                        scope.launch(Dispatchers.IO) {
+                            dao.recordPlay(
+                                PlayHistoryEntity(
+                                    songId = songId,
+                                    title = metadata.title?.toString().orEmpty(),
+                                    artist = metadata.artist?.toString().orEmpty(),
+                                    coverUrl = metadata.artworkUri?.toString()
+                                )
+                            )
+                        }
+                    }
+
+                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        lastRecordedMediaId = mediaItem?.mediaId
+                        record(mediaItem)
+                    }
+
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_ENDED) {
+                            val current = activePlayer.currentMediaItem
+                            if (current?.mediaId != lastRecordedMediaId) {
+                                lastRecordedMediaId = current?.mediaId
+                                record(current)
+                            }
+                        }
+                    }
+                }
+                activePlayer.addListener(historyListener)
+                onDispose { activePlayer.removeListener(historyListener) }
+            }
+        }
+
+        val playSong: (Song) -> Unit = { song ->
+            scope.launch {
+                runCatching {
+                    val streamUrl = api.getStreamUrl(song.id)
+                    val item = MediaItem.Builder()
+                        .setMediaId(song.id)
+                        .setUri(streamUrl)
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(song.title)
+                                .setArtist(song.artist)
+                                .setArtworkUri(song.coverUrl?.let(Uri::parse))
+                                .build()
+                        )
+                        .build()
+                    controller?.setMediaItem(item)
+                    controller?.prepare()
+                    controller?.play()
+                    nav.navigate("nowplaying")
+                }
+            }
+        }
+
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
@@ -169,7 +243,7 @@ fun ParkerTunesRoot() {
                             )
                         }
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                            listOf("Search", "Library", "Settings").forEach { item ->
+                            listOf("Home", "Search", "Library", "Settings").forEach { item ->
                                 NavigationBarItem(
                                     selected = selectedTab == item,
                                     onClick = {
@@ -179,6 +253,7 @@ fun ParkerTunesRoot() {
                                     icon = {
                                         Icon(
                                             when (item) {
+                                                "Home" -> Icons.Default.Home
                                                 "Search" -> Icons.Default.Search
                                                 "Library" -> Icons.Default.LibraryMusic
                                                 else -> Icons.Default.Settings
@@ -195,32 +270,14 @@ fun ParkerTunesRoot() {
         ) { padding ->
             NavHost(
                 navController = nav,
-                startDestination = "search",
+                startDestination = "home",
                 modifier = Modifier.padding(padding)
             ) {
+                composable("home") {
+                    HomeScreen(dao = dao, onPlay = playSong)
+                }
                 composable("search") {
-                    SearchScreen(query, { query = it }, api, dao) { song ->
-                        scope.launch {
-                            runCatching {
-                                val url = api.getStreamUrl(song.id)
-                                val item = MediaItem.Builder()
-                                    .setUri(url)
-                                    .setMediaMetadata(
-                                        MediaMetadata.Builder()
-                                            .setTitle(song.title)
-                                            .setArtist(song.artist)
-                                            .setArtworkUri(song.coverUrl?.let(Uri::parse))
-                                            .build()
-                                    )
-                                    .build()
-                                controller?.setMediaItem(item)
-                                controller?.prepare()
-                                controller?.play()
-                                dao.recordPlay(PlayHistoryEntity(songId = song.id, title = song.title, artist = song.artist))
-                                nav.navigate("nowplaying")
-                            }
-                        }
-                    }
+                    SearchScreen(query, { query = it }, api, dao, onPlay = playSong)
                 }
                 composable("library") { LibraryScreen(dao) }
                 composable("settings") {
@@ -258,6 +315,259 @@ private fun ScreenTitle(kicker: String, title: String, subtitle: String? = null)
         Text(title, color = MaterialTheme.colorScheme.onBackground, fontSize = 30.sp,
             fontWeight = FontWeight.Bold)
         if (subtitle != null) Text(subtitle, color = Muted, fontSize = 14.sp)
+    }
+}
+
+@Composable
+private fun HomeScreen(
+    dao: com.parker.tunes.data.LibraryDao,
+    onPlay: (Song) -> Unit
+) {
+    // Room Flow collection is moved to IO; Home never calls the music network API.
+    val recentFlow = remember(dao) { dao.recentlyPlayed().flowOn(Dispatchers.IO) }
+    val favoriteFlow = remember(dao) { dao.favorites().flowOn(Dispatchers.IO) }
+    val mostPlayedFlow = remember(dao) { dao.mostPlayed().flowOn(Dispatchers.IO) }
+    val recent by recentFlow.collectAsState(initial = emptyList())
+    val favorites by favoriteFlow.collectAsState(initial = emptyList())
+    val mostPlayed by mostPlayedFlow.collectAsState(initial = emptyList())
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(top = 24.dp, bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
+        item {
+            Column(Modifier.padding(horizontal = 22.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(
+                    "YOUR MUSIC, ALWAYS CLOSE",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
+                Text(
+                    "Good to have you back",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text("Pick up right where you left off.", color = Muted, fontSize = 13.sp)
+            }
+        }
+
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                HomeSectionHeading("RECENTLY PLAYED", "Jump back in")
+                if (recent.isEmpty()) {
+                    Box(Modifier.padding(horizontal = 22.dp).fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(MaterialTheme.colorScheme.surface).padding(vertical = 24.dp)) {
+                        EmptyState(
+                            Icons.Default.History,
+                            "Nothing here yet",
+                            "Search for your first song!"
+                        )
+                    }
+                } else {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 22.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        items(recent, key = { it.id }) { entry ->
+                            HomeSongCard(
+                                song = Song(
+                                    id = entry.songId,
+                                    title = entry.title.ifBlank { entry.songId },
+                                    artist = entry.artist,
+                                    coverUrl = entry.coverUrl
+                                ),
+                                onClick = {
+                                    onPlay(Song(
+                                        id = entry.songId,
+                                        title = entry.title.ifBlank { entry.songId },
+                                        artist = entry.artist,
+                                        coverUrl = entry.coverUrl
+                                    ))
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                HomeSectionHeading("QUICK ACCESS", "Favorites")
+                if (favorites.isEmpty()) {
+                    Text(
+                        "Songs you heart will be ready here.",
+                        color = Muted,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 22.dp)
+                    )
+                } else {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 22.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        items(favorites.take(12), key = { it.songId }) { entry ->
+                            HomeSongCard(
+                                song = Song(
+                                    id = entry.songId,
+                                    title = entry.title.ifBlank { entry.songId },
+                                    artist = entry.artist,
+                                    coverUrl = entry.coverUrl
+                                ),
+                                onClick = {
+                                    onPlay(Song(
+                                        id = entry.songId,
+                                        title = entry.title.ifBlank { entry.songId },
+                                        artist = entry.artist,
+                                        coverUrl = entry.coverUrl
+                                    ))
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                HomeSectionHeading("LISTEN AGAIN", "Your most played")
+                if (mostPlayed.isEmpty()) {
+                    Text(
+                        "Play a few songs and your regulars will appear here.",
+                        color = Muted,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 22.dp)
+                    )
+                } else {
+                    Column(
+                        Modifier.padding(horizontal = 22.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        mostPlayed.forEach { entry ->
+                            HomeListenAgainRow(
+                                entry = entry,
+                                onClick = {
+                                    onPlay(Song(
+                                        id = entry.songId,
+                                        title = entry.title.ifBlank { entry.songId },
+                                        artist = entry.artist,
+                                        coverUrl = entry.coverUrl
+                                    ))
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeSectionHeading(eyebrow: String, title: String) {
+    Column(Modifier.padding(horizontal = 22.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(
+            eyebrow,
+            color = MaterialTheme.colorScheme.primary,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.8.sp
+        )
+        Text(title, color = MaterialTheme.colorScheme.onBackground,
+            fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun HomeSongCard(song: Song, onClick: () -> Unit) {
+    Column(
+        Modifier.width(142.dp).clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Box(
+            Modifier.size(142.dp).shadow(7.dp, RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surface),
+            contentAlignment = Alignment.Center
+        ) {
+            if (song.coverUrl.isNullOrBlank()) {
+                Icon(Icons.Default.Album, null, tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(42.dp))
+            } else {
+                AsyncImage(
+                    model = song.coverUrl,
+                    contentDescription = "${song.title} cover art",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+        Text(
+            song.title,
+            color = MaterialTheme.colorScheme.onBackground,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 8.dp, start = 2.dp, end = 2.dp)
+        )
+        Text(
+            song.artist,
+            color = Muted,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 2.dp, end = 2.dp, bottom = 2.dp)
+        )
+    }
+}
+
+@Composable
+private fun HomeListenAgainRow(
+    entry: com.parker.tunes.data.PlayCountItem,
+    onClick: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick).padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            Modifier.size(54.dp).clip(RoundedCornerShape(11.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = .12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (entry.coverUrl.isNullOrBlank()) {
+                Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.primary)
+            } else {
+                AsyncImage(
+                    model = entry.coverUrl,
+                    contentDescription = "Cover art",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            Text(entry.title.ifBlank { entry.songId }, color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(entry.artist, color = Muted, fontSize = 12.sp, maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
+        }
+        Text(
+            "${entry.playCount} ${if (entry.playCount == 1) "play" else "plays"}",
+            color = MaterialTheme.colorScheme.primary,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
@@ -362,7 +672,7 @@ private fun SongRow(song: Song, dao: com.parker.tunes.data.LibraryDao, onClick: 
         IconButton(onClick = {
             scope.launch {
                 if (favorite) dao.removeFavorite(song.id)
-                else dao.addFavorite(FavoriteEntity(songId = song.id, title = song.title, artist = song.artist))
+                else dao.addFavorite(FavoriteEntity(songId = song.id, title = song.title, artist = song.artist, coverUrl = song.coverUrl))
                 favorite = !favorite
             }
         }) {
