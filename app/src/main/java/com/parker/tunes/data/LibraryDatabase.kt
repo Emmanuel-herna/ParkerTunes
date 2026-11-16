@@ -38,7 +38,8 @@ data class PlayHistoryEntity(
     val playedAt: Long = System.currentTimeMillis(),
     @ColumnInfo(defaultValue = "''") val title: String = "",
     @ColumnInfo(defaultValue = "''") val artist: String = "",
-    val coverUrl: String? = null
+    val coverUrl: String? = null,
+    @ColumnInfo(defaultValue = "0") val playDurationMs: Long = 0L
 )
 
 @Entity(tableName = "equalizer_settings")
@@ -73,7 +74,7 @@ data class RecentSearchEntity(
     val songId: String? = null
 )
 
-data class PlayCountItem(
+data class ActiveHour(val hour: Int, val plays: Int)\ndata class ArtistListeningTime(val artist: String, val durationMs: Long)\n\ndata class PlayCountItem(
     val songId: String,
     val title: String,
     val artist: String,
@@ -134,6 +135,21 @@ interface LibraryDao {
     @Insert
     suspend fun recordPlay(item: PlayHistoryEntity)
 
+    @Query("UPDATE play_history SET playDurationMs = playDurationMs + :durationMs WHERE id = (SELECT id FROM play_history WHERE songId = :songId ORDER BY playedAt DESC LIMIT 1)")
+    suspend fun addPlayDuration(songId: String, durationMs: Long)
+
+    @Query("SELECT COALESCE(SUM(playDurationMs), 0) FROM play_history")
+    fun totalListeningTime(): Flow<Long>
+
+    @Query("SELECT COALESCE(SUM(playDurationMs), 0) FROM play_history WHERE playedAt >= :since")
+    fun listeningTimeSince(since: Long): Flow<Long>
+
+    @Query("SELECT CAST(strftime('%H', playedAt / 1000, 'unixepoch', 'localtime') AS INTEGER) AS hour, COUNT(*) AS plays FROM play_history GROUP BY hour ORDER BY plays DESC LIMIT 1")
+    fun mostActiveHour(): Flow<ActiveHour?>
+
+    @Query("SELECT artist, SUM(playDurationMs) AS durationMs FROM play_history WHERE artist != ''' GROUP BY artist ORDER BY durationMs DESC LIMIT 5")
+    fun topArtistsByTime(): Flow<List<ArtistListeningTime>>
+
     @Query("SELECT * FROM play_history ORDER BY playedAt DESC LIMIT 100")
     fun history(): Flow<List<PlayHistoryEntity>>
 
@@ -156,7 +172,7 @@ interface LibraryDao {
 
 @Database(
     entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class, EqualizerSettingsEntity::class, LyricsCacheEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class LibraryDatabase : RoomDatabase() {
@@ -201,13 +217,13 @@ abstract class LibraryDatabase : RoomDatabase() {
             }
         }
 
-        fun get(context: Context): LibraryDatabase =
+        private val MIGRATION_6_7 = object : Migration(6, 7) {\n            override fun migrate(db: SupportSQLiteDatabase) {\n                db.execSQL("ALTER TABLE play_history ADD COLUMN playDurationMs INTEGER NOT NULL DEFAULT 0")\n            }\n        }\n\n        fun get(context: Context): LibraryDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     LibraryDatabase::class.java,
                     "parker_tunes.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).build().also { INSTANCE = it }
             }
     }
 }
