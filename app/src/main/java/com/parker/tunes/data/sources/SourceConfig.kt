@@ -7,7 +7,11 @@ object SourceConfig {
             value = value.dropLast("/manifest.json".length).trimEnd('/')
         }
         if (value.isBlank()) return ""
-        if (!value.contains("://")) value = "https://$value"
+        if (value.startsWith("http://", ignoreCase = true)) {
+            value = "https://" + value.substringAfter("://")
+        } else if (!value.contains("://")) {
+            value = "https://$value"
+        }
         return value
     }
 
