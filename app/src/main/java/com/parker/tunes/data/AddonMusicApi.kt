@@ -37,6 +37,7 @@ class AddonMusicApi(
 
     fun configureAddon(url: String) {
         preferences.edit().putString(KEY_ADDON_URL, normalizeBase(url)).apply()
+        synchronized(searchCache) { searchCache.clear() }
     }
 
     suspend fun validateAddon(rawUrl: String): String = withContext(Dispatchers.IO) {
