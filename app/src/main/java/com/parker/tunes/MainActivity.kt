@@ -426,7 +426,7 @@ fun ParkerTunesRoot() {
                         loadError = playbackLoadError,
                         onOpenEqualizer = { nav.navigate("equalizer") },
                         onBack = { nav.popBackStack() }
-                    }
+                    )
                 }
             }
         }
