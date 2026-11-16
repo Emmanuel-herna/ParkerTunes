@@ -41,6 +41,20 @@ data class PlayHistoryEntity(
     val coverUrl: String? = null
 )
 
+@Entity(tableName = "equalizer_settings")
+data class EqualizerSettingsEntity(
+    @PrimaryKey val id: Int = 1,
+    val preset: Int = -1,
+    val bandLevels: String = "",
+    val bassEnabled: Boolean = false,
+    val bassStrength: Int = 0,
+    val virtualizerEnabled: Boolean = false,
+    val virtualizerStrength: Int = 0,
+    val loudnessEnabled: Boolean = false,
+    val loudnessGain: Int = 0,
+    val monoEnabled: Boolean = false
+)
+
 @Entity(tableName = "recent_searches")
 data class RecentSearchEntity(
     @PrimaryKey val query: String,
@@ -60,7 +74,7 @@ data class PlayCountItem(
 )
 
 @Dao
-interface LibraryDao {
+interface LibraryDao {\n    @Query("SELECT * FROM equalizer_settings WHERE id = 1 LIMIT 1")\n    fun equalizerSettings(): Flow<EqualizerSettingsEntity?>\n\n    @Insert(onConflict = OnConflictStrategy.REPLACE)\n    suspend fun saveEqualizerSettings(settings: EqualizerSettingsEntity)\n
     @Query("SELECT * FROM recent_searches ORDER BY searchedAt DESC LIMIT 20")
     fun recentSearches(): Flow<List<RecentSearchEntity>>
 
@@ -155,13 +169,19 @@ abstract class LibraryDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS equalizer_settings (id INTEGER NOT NULL, preset INTEGER NOT NULL, bandLevels TEXT NOT NULL, bassEnabled INTEGER NOT NULL, bassStrength INTEGER NOT NULL, virtualizerEnabled INTEGER NOT NULL, virtualizerStrength INTEGER NOT NULL, loudnessEnabled INTEGER NOT NULL, loudnessGain INTEGER NOT NULL, monoEnabled INTEGER NOT NULL, PRIMARY KEY(id))")
+            }
+        }
+
         fun get(context: Context): LibraryDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     LibraryDatabase::class.java,
                     "parker_tunes.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { INSTANCE = it }
             }
     }
 }
