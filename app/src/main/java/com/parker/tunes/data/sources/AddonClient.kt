@@ -122,7 +122,7 @@ class AddonClient(private val http: OkHttpClient = OkHttpClient.Builder()
             val fmt = json.optString("format")
             if (fmt.lowercase() in setOf("mp3","flac","aac","alac","wav","opus","eac3-joc","eac3_joc")) fmt else
                 url.substringBefore('?').substringAfterLast('.', "").takeIf { it.isNotBlank() }
-        }.lowercase().ifBlank { null }
+        }.lowercase().takeIf { it.isNotBlank() }
         val modes = json.optJSONArray("audioModes")
         val atmos = codec in setOf("eac3-joc","eac3_joc") ||
             (0 until (modes?.length() ?: 0)).any { modes?.optString(it)?.contains("DOLBY_ATMOS", true) == true }
