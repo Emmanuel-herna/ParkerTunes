@@ -18,6 +18,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <receiver android:name=".player.WidgetProvider" android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.parker.tunes.widget.TOGGLE" />
+                <action android:name="com.parker.tunes.widget.NEXT" />
+                <action android:name="com.parker.tunes.widget.PREVIOUS" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_now_playing_info" />
+        </receiver>
         <service
             android:name=".player.PlaybackService"
             android:exported="false"
