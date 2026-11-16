@@ -1,7 +1,7 @@
 package com.parker.tunes
 
 import android.app.Application
-import com.parker.tunes.data.DemoMusicApi
+import com.parker.tunes.data.AddonMusicApi
 import com.parker.tunes.data.LibraryDatabase
 import com.parker.tunes.data.MusicApi
 
@@ -12,6 +12,6 @@ class ParkerTunesApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        musicApi = DemoMusicApi()
+        musicApi = AddonMusicApi(this)
     }
 }
