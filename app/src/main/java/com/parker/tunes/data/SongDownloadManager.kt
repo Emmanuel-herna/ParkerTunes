@@ -1,6 +1,8 @@
 package com.parker.tunes.data
 
 import android.content.Context
+import android.content.Intent
+import androidx.core.content.ContextCompat
 import android.os.StatFs
 import com.parker.tunes.model.Song
 import kotlinx.coroutines.CancellationException
@@ -67,12 +69,14 @@ class SongDownloadManager(
 
     fun enqueue(song: Song) {
         if (jobs[song.id]?.isActive == true) return
+        ContextCompat.startForegroundService(appContext, Intent(appContext, DownloadKeepAliveService::class.java))
         val job = scope.launch {
             try {
                 queueMutex.withLock { downloadOne(song) }
             } finally {
                 jobs.remove(song.id)
                 _progress.value = _progress.value - song.id
+                if (jobs.isEmpty()) appContext.stopService(Intent(appContext, DownloadKeepAliveService::class.java))
             }
         }
         jobs[song.id] = job
