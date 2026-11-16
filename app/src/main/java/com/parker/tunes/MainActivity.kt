@@ -863,26 +863,31 @@ private fun MiniPlayer(
     onClick: () -> Unit, onPlayPause: () -> Unit, onNext: () -> Unit
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp)
-            .clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onClick).animateContentSize(animationSpec = tween(220)).padding(horizontal = 12.dp, vertical = 9.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color(0xF01D1D1D))
+            .clickable(onClick = onClick)
+            .animateContentSize(animationSpec = tween(220))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (coverUrl.isNullOrBlank()) {
-            Icon(Icons.Default.Album, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(38.dp))
-        } else {
-            AsyncImage(model = coverUrl, contentDescription = "Current cover art",
-                modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)))
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF303030)),
+            contentAlignment = Alignment.Center) {
+            if (coverUrl.isNullOrBlank()) Icon(Icons.Default.Album, null, tint = Color.White)
+            else AsyncImage(model = coverUrl, contentDescription = "Current cover art",
+                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
         Column(Modifier.weight(1f).padding(start = 10.dp)) {
-            Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold,
+            Text(title, color = Color.White, fontWeight = FontWeight.Bold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
-            Text(artist, color = Muted, fontSize = 11.sp, maxLines = 1)
+            Text(artist, color = Color(0xFFA7A7A7), fontSize = 11.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButton(onClick = onPlayPause) {
-            Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, "Play or pause")
+            Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                "Play or pause", tint = Color.White)
         }
-        IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, "Next") }
+        IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, "Next", tint = Color.White) }
     }
 }
 
