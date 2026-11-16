@@ -103,18 +103,35 @@ fun SpotifyHomeScreen(
             }
         }
 
+        if (recent.isNotEmpty()) {
+            item(key = "recent_section") {
+                Column {
+                    SectionHeading("Recently played")
+                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(recent.take(20), key = { "recent_card_" + it.id }) { track ->
+                            val song = Song(track.songId, track.title.ifBlank { track.songId }, track.artist, track.coverUrl)
+                            Column(Modifier.width(200.dp).clickable { onPlay(song) }, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Box(Modifier.size(width = 200.dp, height = 176.dp).clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF202020)), contentAlignment = Alignment.Center) {
+                                    if (track.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = SpotifyGray, modifier = Modifier.size(42.dp))
+                                    else AsyncImage(model = track.coverUrl, contentDescription = "Track cover",
+                                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                }
+                                Text(song.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(song.artist.ifBlank { "Unknown artist" }, color = SpotifyGray, fontSize = 13.sp,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (historyReady) {
             item(key = "recommendations_section") {
                 Column {
-                    SectionHeading(
-                        if (latestTrack != null && latestTrack.artist.isNotBlank()) {
-                            "Because you listened to ${latestTrack.artist}"
-                        } else if (latestTrack != null) {
-                            "Made for you"
-                        } else {
-                            "Trending now"
-                        }
-                    )
+                    SectionHeading("Made for you")
                     if (recommendationsLoading) {
                         RecommendationShimmer()
                     } else if (recommendations.isNotEmpty()) {
@@ -150,31 +167,6 @@ fun SpotifyHomeScreen(
                                     Text(song.artist.ifBlank { "Unknown artist" }, color = SpotifyGray,
                                         fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (recent.isNotEmpty()) {
-            item(key = "recent_section") {
-                Column {
-                    SectionHeading("Recently played")
-                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(recent.take(20), key = { "recent_card_" + it.id }) { track ->
-                            val song = Song(track.songId, track.title.ifBlank { track.songId }, track.artist, track.coverUrl)
-                            Column(Modifier.width(200.dp).clickable { onPlay(song) }, verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                                Box(Modifier.size(width = 200.dp, height = 176.dp).clip(RoundedCornerShape(12.dp))
-                                    .background(Color(0xFF202020)), contentAlignment = Alignment.Center) {
-                                    if (track.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = SpotifyGray, modifier = Modifier.size(42.dp))
-                                    else AsyncImage(model = track.coverUrl, contentDescription = "Track cover",
-                                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                                }
-                                Text(song.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(song.artist.ifBlank { "Unknown artist" }, color = SpotifyGray, fontSize = 13.sp,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
