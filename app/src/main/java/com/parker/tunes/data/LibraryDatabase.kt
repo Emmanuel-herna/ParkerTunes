@@ -74,7 +74,10 @@ data class RecentSearchEntity(
     val songId: String? = null
 )
 
-data class ActiveHour(val hour: Int, val plays: Int)\ndata class ArtistListeningTime(val artist: String, val durationMs: Long)\n\ndata class PlayCountItem(
+data class ActiveHour(val hour: Int, val plays: Int)
+data class ArtistListeningTime(val artist: String, val durationMs: Long)
+
+data class PlayCountItem(
     val songId: String,
     val title: String,
     val artist: String,
@@ -217,7 +220,13 @@ abstract class LibraryDatabase : RoomDatabase() {
             }
         }
 
-        private val MIGRATION_6_7 = object : Migration(6, 7) {\n            override fun migrate(db: SupportSQLiteDatabase) {\n                db.execSQL("ALTER TABLE play_history ADD COLUMN playDurationMs INTEGER NOT NULL DEFAULT 0")\n            }\n        }\n\n        fun get(context: Context): LibraryDatabase =
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE play_history ADD COLUMN playDurationMs INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        fun get(context: Context): LibraryDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
