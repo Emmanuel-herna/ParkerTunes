@@ -356,17 +356,24 @@ fun ParkerTunesRoot() {
                                     File(item.filePath).isFile && File(item.filePath).length() > 0L
                             }?.let { File(it.filePath) }
                         }
-                        if (localFile != null) Uri.fromFile(localFile)
-                        else Uri.parse(withContext(Dispatchers.IO) { api.getStreamUrl(song.id) })
+                        if (localFile != null) Uri.fromFile(localFile) to null
+                        else {
+                            val addonStream = if (api is AddonMusicApi) {
+                                withContext(Dispatchers.IO) { api.getAddonStream(song.id) }
+                            } else null
+                            if (addonStream != null) Uri.parse(addonStream.url) to addonStream.format.mimeType
+                            else Uri.parse(withContext(Dispatchers.IO) { api.getStreamUrl(song.id) }) to null
+                        }
                     }
                     if (resolvingSongId == song.id) {
-                        result.onSuccess { playbackUri ->
+                        result.onSuccess { (playbackUri, mimeType) ->
                             if (playbackUri == null || playbackUri.toString().isBlank()) {
                                 playbackLoadError = "Couldn't load this song. Tap the song again to retry."
                             } else {
                                 val playableItem = MediaItem.Builder()
                                     .setMediaId(song.id)
                                     .setUri(playbackUri)
+                                    .apply { mimeType?.let(::setMimeType) }
                                     .setMediaMetadata(metadata)
                                     .build()
                                 activeController.setMediaItem(playableItem)
@@ -386,18 +393,23 @@ fun ParkerTunesRoot() {
             val activeController = controller
             if (activeController != null) scope.launch {
                 runCatching {
-                    val uri = withContext(Dispatchers.IO) {
+                    val (uri, mimeType) = withContext(Dispatchers.IO) {
                         val local = dao.download(song.id)?.takeIf {
                             it.status == com.parker.tunes.data.DownloadEntity.STATUS_COMPLETE &&
                                 File(it.filePath).isFile && File(it.filePath).length() > 0L
                         }
-                        if (local != null) Uri.fromFile(File(local.filePath))
-                        else Uri.parse(api.getStreamUrl(song.id))
+                        if (local != null) Uri.fromFile(File(local.filePath)) to null
+                        else {
+                            val addonStream = if (api is AddonMusicApi) api.getAddonStream(song.id) else null
+                            if (addonStream != null) Uri.parse(addonStream.url) to addonStream.format.mimeType
+                            else Uri.parse(api.getStreamUrl(song.id)) to null
+                        }
                     }
                     val metadata = MediaMetadata.Builder().setTitle(song.title).setArtist(song.artist)
                         .setAlbumTitle(song.album).setTrackNumber(song.trackNumber ?: 0)
                         .setArtworkUri(song.coverUrl?.let(Uri::parse)).build()
-                    MediaItem.Builder().setMediaId(song.id).setUri(uri).setMediaMetadata(metadata).build()
+                    MediaItem.Builder().setMediaId(song.id).setUri(uri).apply { mimeType?.let(::setMimeType) }
+                        .setMediaMetadata(metadata).build()
                 }.onSuccess { item ->
                     val insertAt = if (playNext) (activeController.currentMediaItemIndex + 1).coerceAtLeast(0) else activeController.mediaItemCount
                     activeController.addMediaItem(insertAt, item)
