@@ -177,7 +177,7 @@ fun ParkerTunesRoot() {
                                 controller?.setMediaItem(item)
                                 controller?.prepare()
                                 controller?.play()
-                                dao.recordPlay(PlayHistoryEntity(songId = song.id))
+                                dao.recordPlay(PlayHistoryEntity(songId = song.id, title = song.title, artist = song.artist))
                                 nav.navigate("nowplaying")
                             }
                         }
@@ -293,7 +293,7 @@ private fun SongRow(song: Song, dao: com.parker.tunes.data.LibraryDao, onClick: 
         IconButton(onClick = {
             scope.launch {
                 if (favorite) dao.removeFavorite(song.id)
-                else dao.addFavorite(FavoriteEntity(songId = song.id))
+                else dao.addFavorite(FavoriteEntity(songId = song.id, title = song.title, artist = song.artist))
                 favorite = !favorite
             }
         }) {
@@ -438,9 +438,17 @@ fun LibraryScreen(dao: com.parker.tunes.data.LibraryDao) {
             "Playlists" -> if (playlists.isEmpty()) EmptyState(Icons.Default.QueueMusic, "No playlists yet", "Create playlists as you build your collection.")
                 else LazyColumn { items(playlists) { Text(it.name, modifier = Modifier.padding(12.dp)) } }
             "Favorites" -> if (favorites.isEmpty()) EmptyState(Icons.Default.FavoriteBorder, "No favourites yet", "Songs you favourite will appear here.")
-                else LazyColumn { items(favorites) { Text(it.songId, modifier = Modifier.padding(12.dp)) } }
+                else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(favorites, key = { it.songId }) {
+                        LibrarySongRow(it.title.ifBlank { it.songId }, it.artist, Icons.Default.Favorite)
+                    }
+                }
             else -> if (history.isEmpty()) EmptyState(Icons.Default.History, "No listening history", "Tracks you play will appear here.")
-                else LazyColumn { items(history) { Text(it.songId, modifier = Modifier.padding(12.dp)) } }
+                else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(history, key = { it.id }) {
+                        LibrarySongRow(it.title.ifBlank { it.songId }, it.artist, Icons.Default.History)
+                    }
+                }
         }
     }
     if (showCreate) {
@@ -477,6 +485,22 @@ fun LibraryScreen(dao: com.parker.tunes.data.LibraryDao) {
                 TextButton(onClick = { showCreate = false }) { Text("Cancel") }
             }
         )
+    }
+}
+
+@Composable
+private fun LibrarySongRow(title: String, artist: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp))
+            .background(MaterialTheme.colorScheme.surface).padding(13.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (artist.isNotBlank()) Text(artist, color = Muted, fontSize = 12.sp)
+        }
     }
 }
 
