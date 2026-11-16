@@ -63,6 +63,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.parker.tunes.data.PlayHistoryEntity
 import com.parker.tunes.data.BackupManager
 import com.parker.tunes.data.PlaybackSettingsStore
+import com.parker.tunes.data.PlaybackSettings
 import com.parker.tunes.data.EqualizerSettingsEntity
 import com.parker.tunes.data.FavoriteEntity
 import com.parker.tunes.data.MusicApi
@@ -1289,6 +1290,13 @@ fun SettingsScreen(
     val playbackSettingsStore = remember(context) { PlaybackSettingsStore(context) }
     var gaplessPlayback by remember { mutableStateOf(true) }
     LaunchedEffect(playbackSettingsStore) {
+        playbackSettingsStore.initialize(
+            PlaybackSettings(
+                crossfadeSeconds = settingsPrefs.getInt("crossfade_seconds", 0),
+                smartAutoplay = settingsPrefs.getBoolean("smart_autoplay", true),
+                gaplessPlayback = true
+            )
+        )
         playbackSettingsStore.settings.collect { saved ->
             crossfadeSeconds = saved.crossfadeSeconds
             smartAutoplay = saved.smartAutoplay
