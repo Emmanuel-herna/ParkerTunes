@@ -1,10 +1,14 @@
 package com.parker.tunes
 
+import android.Manifest
 import android.content.ComponentName
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -63,6 +67,14 @@ fun ParkerTunesRoot() {
     val api = app.musicApi
     val dao = app.database.libraryDao()
     val scope = rememberCoroutineScope()
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* Media notifications are enabled when permission is granted. */ }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
     val nav = rememberNavController()
     var query by remember { mutableStateOf("") }
     var selectedTab by remember { mutableStateOf("Search") }
