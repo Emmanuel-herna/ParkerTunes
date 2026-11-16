@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -78,7 +79,10 @@ fun ParkerTunesRoot() {
     val nav = rememberNavController()
     var query by remember { mutableStateOf("") }
     var selectedTab by remember { mutableStateOf("Search") }
-    var lightMode by remember { mutableStateOf(false) }
+    var lightMode by remember {
+        mutableStateOf(context.getSharedPreferences("parker_tunes_settings", android.content.Context.MODE_PRIVATE)
+            .getBoolean("light_mode", false))
+    }
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var controllerFuture by remember { mutableStateOf<ListenableFuture<MediaController>?>(null) }
 
@@ -134,6 +138,7 @@ fun ParkerTunesRoot() {
                         MiniPlayer(
                             title = currentTitle,
                             artist = currentArtist,
+                            coverUrl = controller?.currentMediaItem?.mediaMetadata?.artworkUri?.toString(),
                             playing = isPlaying,
                             onClick = { nav.navigate("nowplaying") },
                             onPlayPause = {
@@ -196,9 +201,15 @@ fun ParkerTunesRoot() {
                     }
                 }
                 composable("library") { LibraryScreen(dao) }
-                composable("settings") { SettingsScreen(lightMode) { lightMode = it } }
+                composable("settings") {
+                    SettingsScreen(lightMode) {
+                        lightMode = it
+                        context.getSharedPreferences("parker_tunes_settings", android.content.Context.MODE_PRIVATE)
+                            .edit().putBoolean("light_mode", it).apply()
+                    }
+                }
                 composable("nowplaying") {
-                    NowPlayingScreen(controller, refresh, currentTitle, currentArtist) {
+                    NowPlayingScreen(controller, refresh, currentTitle, currentArtist, controller?.currentMediaItem?.mediaMetadata?.artworkUri?.toString()) {
                         nav.popBackStack()
                     }
                 }
@@ -297,7 +308,12 @@ private fun SongRow(song: Song, dao: com.parker.tunes.data.LibraryDao, onClick: 
     ) {
         Box(Modifier.size(52.dp).clip(RoundedCornerShape(12.dp)).background(Accent.copy(alpha = .16f)),
             contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.primary)
+            if (song.coverUrl.isNullOrBlank()) {
+                Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.primary)
+            } else {
+                AsyncImage(model = song.coverUrl, contentDescription = "Cover art",
+                    modifier = Modifier.fillMaxSize())
+            }
         }
         Column(Modifier.weight(1f)) {
             Text(song.title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold,
@@ -364,7 +380,7 @@ private fun SongRow(song: Song, dao: com.parker.tunes.data.LibraryDao, onClick: 
 
 @Composable
 private fun MiniPlayer(
-    title: String, artist: String, playing: Boolean,
+    title: String, artist: String, coverUrl: String?, playing: Boolean,
     onClick: () -> Unit, onPlayPause: () -> Unit, onNext: () -> Unit
 ) {
     Row(
@@ -373,7 +389,12 @@ private fun MiniPlayer(
             .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Default.Album, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(38.dp))
+        if (coverUrl.isNullOrBlank()) {
+            Icon(Icons.Default.Album, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(38.dp))
+        } else {
+            AsyncImage(model = coverUrl, contentDescription = "Current cover art",
+                modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)))
+        }
         Column(Modifier.weight(1f).padding(start = 10.dp)) {
             Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
@@ -388,7 +409,7 @@ private fun MiniPlayer(
 
 @Composable
 private fun NowPlayingScreen(
-    player: MediaController?, refresh: Int, title: String, artist: String, onBack: () -> Unit
+    player: MediaController?, refresh: Int, title: String, artist: String, coverUrl: String?, onBack: () -> Unit
 ) {
     val duration = (player?.duration ?: 0L).coerceAtLeast(0L)
     val position = (player?.currentPosition ?: 0L).coerceAtLeast(0L).coerceAtMost(duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
@@ -417,7 +438,12 @@ private fun NowPlayingScreen(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Album, null, tint = Color.White.copy(alpha = .82f), modifier = Modifier.size(112.dp))
+            if (coverUrl.isNullOrBlank()) {
+                Icon(Icons.Default.Album, null, tint = Color.White.copy(alpha = .82f), modifier = Modifier.size(112.dp))
+            } else {
+                AsyncImage(model = coverUrl, contentDescription = "Album cover",
+                    modifier = Modifier.fillMaxSize())
+            }
         }
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, color = MaterialTheme.colorScheme.onBackground, fontSize = 24.sp,
