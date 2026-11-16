@@ -901,7 +901,7 @@ private fun NowPlayingScreen(
                             (total % 1_000) / 10, line.text)
                     }
                     withContext(Dispatchers.IO) {
-                        dao.saveLyrics(LyricsCacheEntity(songId, serialized, fetched.plainText))
+                        dao.saveLyrics(LyricsCacheEntity(songId, serialized, fetched?.plainText))
                     }
                 } else {
                     plainLyrics = fetched?.plainText ?: cached?.plainLyrics
