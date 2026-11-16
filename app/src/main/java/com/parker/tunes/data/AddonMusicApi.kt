@@ -2,6 +2,8 @@ package com.parker.tunes.data
 
 import android.content.Context
 import com.parker.tunes.data.sources.AddonClient
+import com.parker.tunes.data.sources.AddonEntity
+import com.parker.tunes.data.sources.AddonSettingsEntity
 import com.parker.tunes.data.sources.SourceConfig
 import com.parker.tunes.data.sources.StreamRequest
 import com.parker.tunes.model.Artist
