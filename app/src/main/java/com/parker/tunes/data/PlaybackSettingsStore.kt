@@ -26,6 +26,14 @@ class PlaybackSettingsStore(private val context: Context) {
         )
     }
 
+    suspend fun initialize(defaults: PlaybackSettings) {
+        context.playbackSettingsDataStore.edit { prefs ->
+            if (prefs[CROSSFADE_SECONDS] == null) prefs[CROSSFADE_SECONDS] = defaults.crossfadeSeconds.coerceIn(0, 12)
+            if (prefs[SMART_AUTOPLAY] == null) prefs[SMART_AUTOPLAY] = defaults.smartAutoplay
+            if (prefs[GAPLESS_PLAYBACK] == null) prefs[GAPLESS_PLAYBACK] = defaults.gaplessPlayback
+        }
+    }
+
     suspend fun setCrossfadeSeconds(value: Int) {
         context.playbackSettingsDataStore.edit { it[CROSSFADE_SECONDS] = value.coerceIn(0, 12) }
     }
