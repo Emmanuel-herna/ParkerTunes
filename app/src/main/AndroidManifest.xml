@@ -19,7 +19,7 @@
             </intent-filter>
         </activity>
         <service
-            android:name="androidx.media3.session.MediaSessionService"
+            android:name=".player.PlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
