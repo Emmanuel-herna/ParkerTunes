@@ -1127,19 +1127,29 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         ScreenTitle("Make it yours", "Settings", "A few things to shape your listening.")
-        Row(
+        Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .clickable(onClick = onOpenEqualizer).padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                .background(MaterialTheme.colorScheme.surface).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(Icons.Default.GraphicEq, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
-            Column(Modifier.weight(1f)) {
-                Text("Sound & Audio", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
-                Text("Equalizer, bass, spatial sound and loudness", color = Muted, fontSize = 12.sp)
+            Text("Sound & Audio", color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = onOpenEqualizer).padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Icon(Icons.Default.GraphicEq, null, tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(26.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Equalizer", color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Medium)
+                    Text("Presets, frequency bands, bass and spatial sound",
+                        color = Muted, fontSize = 12.sp)
+                }
+                Icon(Icons.Default.ChevronRight, "Open equalizer", tint = Muted)
             }
-            Icon(Icons.Default.ChevronRight, "Open equalizer", tint = Muted)
         }
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
