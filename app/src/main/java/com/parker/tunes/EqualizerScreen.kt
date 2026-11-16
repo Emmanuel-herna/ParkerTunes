@@ -162,8 +162,11 @@ fun EqualizerScreen(
 
 @Composable
 private fun EqualizerCurve(state: EqualizerState) {
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val axisColor = MaterialTheme.colorScheme.onSurface.copy(alpha = .18f)
     Canvas(Modifier.fillMaxWidth().height(76.dp).clip(RoundedCornerShape(16.dp))
-        .background(MaterialTheme.colorScheme.surface).padding(10.dp)) {
+        .background(surfaceColor).padding(10.dp)) {
         if (state.bandLevels.isEmpty()) return@Canvas
         val mid = size.height / 2f
         val range = (state.maxLevel - state.minLevel).toFloat().coerceAtLeast(1f)
@@ -174,9 +177,9 @@ private fun EqualizerCurve(state: EqualizerState) {
             val y = size.height - ((value - state.minLevel) / range) * size.height
             if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        drawLine(MaterialTheme.colorScheme.onSurface.copy(alpha = .18f),
+        drawLine(axisColor,
             Offset(0f, mid), Offset(size.width, mid), strokeWidth = 1.dp.toPx())
-        drawPath(path, MaterialTheme.colorScheme.primary, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
+        drawPath(path, primaryColor, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
     }
 }
 
