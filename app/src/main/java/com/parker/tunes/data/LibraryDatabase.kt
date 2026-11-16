@@ -87,6 +87,9 @@ interface LibraryDao {
     @Query("SELECT * FROM play_history ORDER BY playedAt DESC LIMIT 20")
     fun recentlyPlayed(): Flow<List<PlayHistoryEntity>>
 
+    @Query("DELETE FROM play_history WHERE id = :historyId")
+    suspend fun removeHistory(historyId: Long)
+
     @Query("""
         SELECT songId, MAX(title) AS title, MAX(artist) AS artist,
                MAX(coverUrl) AS coverUrl, COUNT(*) AS playCount
