@@ -80,6 +80,9 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val savedRate = getSharedPreferences("parker_tunes_settings", MODE_PRIVATE)
+            .getInt("preferred_refresh_rate", 120)
+        applyPreferredRefreshRate(this, savedRate)
         setContent { ParkerTunesTheme { ParkerTunesRoot() } }
     }
 }
