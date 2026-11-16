@@ -139,7 +139,7 @@ abstract class LibraryDatabase : RoomDatabase() {
             }
         }
 
-        private val MIGRATION_3_4 = object : Migration(3, 4) {\n            override fun migrate(db: SupportSQLiteDatabase) {\n                db.execSQL("CREATE TABLE IF NOT EXISTS recent_searches (query TEXT NOT NULL, searchedAt INTEGER NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, coverUrl TEXT, PRIMARY KEY(query))")\n            }\n        }\n\n        fun get(context: Context): LibraryDatabase =
+        private val MIGRATION_3_4 = object : Migration(3, 4) {\n            override fun migrate(db: SupportSQLiteDatabase) {\n                db.execSQL("CREATE TABLE IF NOT EXISTS recent_searches (query TEXT NOT NULL, searchedAt INTEGER NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, coverUrl TEXT, songId TEXT, PRIMARY KEY(query))")\n            }\n        }\n\n        fun get(context: Context): LibraryDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
