@@ -110,6 +110,8 @@ fun ParkerTunesRoot() {
             .getBoolean("light_mode", false))
     }
     var controller by remember { mutableStateOf<MediaController?>(null) }
+    var resolvingSongId by remember { mutableStateOf<String?>(null) }
+    var playbackLoadError by remember { mutableStateOf<String?>(null) }
     var controllerFuture by remember { mutableStateOf<ListenableFuture<MediaController>?>(null) }
 
     DisposableEffect(context) {
@@ -177,8 +179,11 @@ fun ParkerTunesRoot() {
                     }
 
                     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                        lastRecordedMediaId = mediaItem?.mediaId
-                        record(mediaItem)
+                        val nextId = mediaItem?.mediaId
+                        if (!nextId.isNullOrBlank() && nextId != lastRecordedMediaId) {
+                            lastRecordedMediaId = nextId
+                            record(mediaItem)
+                        }
                     }
 
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -207,24 +212,45 @@ fun ParkerTunesRoot() {
         }
 
         val playSong: (Song) -> Unit = { song ->
-            scope.launch {
-                runCatching {
-                    val streamUrl = api.getStreamUrl(song.id)
-                    val item = MediaItem.Builder()
-                        .setMediaId(song.id)
-                        .setUri(streamUrl)
-                        .setMediaMetadata(
-                            MediaMetadata.Builder()
-                                .setTitle(song.title)
-                                .setArtist(song.artist)
-                                .setArtworkUri(song.coverUrl?.let(Uri::parse))
-                                .build()
-                        )
-                        .build()
-                    controller?.setMediaItem(item)
-                    controller?.prepare()
-                    controller?.play()
-                    nav.navigate("nowplaying")
+            val activeController = controller
+            if (activeController != null) {
+                val metadata = MediaMetadata.Builder()
+                    .setTitle(song.title)
+                    .setArtist(song.artist)
+                    .setArtworkUri(song.coverUrl?.let(Uri::parse))
+                    .build()
+                val placeholder = MediaItem.Builder()
+                    .setMediaId(song.id)
+                    .setMediaMetadata(metadata)
+                    .build()
+                activeController.setMediaItem(placeholder)
+                resolvingSongId = song.id
+                playbackLoadError = null
+                nav.navigate("nowplaying") { launchSingleTop = true }
+
+                scope.launch {
+                    val result = runCatching {
+                        withContext(Dispatchers.IO) { api.getStreamUrl(song.id) }
+                    }
+                    if (resolvingSongId == song.id) {
+                        result.onSuccess { streamUrl ->
+                            if (streamUrl.isBlank()) {
+                                playbackLoadError = "Couldn't load this song. Tap the song again to retry."
+                            } else {
+                                val playableItem = MediaItem.Builder()
+                                    .setMediaId(song.id)
+                                    .setUri(streamUrl)
+                                    .setMediaMetadata(metadata)
+                                    .build()
+                                activeController.setMediaItem(playableItem)
+                                activeController.prepare()
+                                activeController.play()
+                            }
+                        }.onFailure {
+                            playbackLoadError = it.message ?: "Couldn't load this song. Tap the song again to retry."
+                        }
+                        resolvingSongId = null
+                    }
                 }
             }
         }
@@ -310,7 +336,12 @@ fun ParkerTunesRoot() {
                             slideOutVertically(animationSpec = tween(220)) { it / 10 }
                     }
                 ) {
-                    NowPlayingScreen(controller, playerObserver, playerState) {
+                    NowPlayingScreen(
+                        controller, playerObserver, playerState,
+                        isResolving = resolvingSongId != null &&
+                            resolvingSongId == controller?.currentMediaItem?.mediaId,
+                        loadError = playbackLoadError
+                    ) {
                         nav.popBackStack()
                     }
                 }
@@ -856,7 +887,12 @@ private fun MiniPlayer(
 
 @Composable
 private fun NowPlayingScreen(
-    player: MediaController?, playerObserver: PlayerUiStateObserver?, playerState: PlayerUiState, onBack: () -> Unit
+    player: MediaController?,
+    playerObserver: PlayerUiStateObserver?,
+    playerState: PlayerUiState,
+    isResolving: Boolean,
+    loadError: String?,
+    onBack: () -> Unit
 ) {
     val progressFlow = remember(playerObserver) {
         playerObserver?.progress ?: kotlinx.coroutines.flow.MutableStateFlow(com.parker.tunes.player.PlayerProgress())
@@ -868,6 +904,9 @@ private fun NowPlayingScreen(
     val title = playerState.title
     val artist = playerState.artist
     val coverUrl = playerState.artworkUri
+    val coverCandidates = remember(coverUrl) { playerCoverCandidates(coverUrl) }
+    var coverCandidateIndex by remember(coverUrl) { mutableIntStateOf(0) }
+    var coverImageLoaded by remember(coverUrl) { mutableStateOf(false) }
     var seeking by remember { mutableStateOf(false) }
     var seekValue by remember { mutableFloatStateOf(0f) }
     val dragAnimation = remember { Animatable(0f) }
@@ -933,9 +972,17 @@ private fun NowPlayingScreen(
             Spacer(Modifier.weight(1f))
             IconButton(onClick = {}) { Icon(Icons.Default.MoreHoriz, "More") }
         }
+        val coverPulse by animateFloatAsState(
+            targetValue = if (isResolving && !coverImageLoaded) 0.965f else 1f,
+            animationSpec = tween(650),
+            label = "coverLoadingPulse"
+        )
         Box(
             Modifier.fillMaxWidth().weight(1f).padding(vertical = 26.dp)
-                .graphicsLayer { scaleX = coverScale * coverEntryScale; scaleY = coverScale * coverEntryScale }
+                .graphicsLayer {
+                    scaleX = coverScale * coverEntryScale * coverPulse
+                    scaleY = coverScale * coverEntryScale * coverPulse
+                }
                 .shadow(22.dp, RoundedCornerShape(28.dp))
                 .clip(RoundedCornerShape(28.dp)).background(
                     androidx.compose.ui.graphics.Brush.linearGradient(
@@ -944,17 +991,39 @@ private fun NowPlayingScreen(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            if (coverUrl.isNullOrBlank()) {
-                Icon(Icons.Default.Album, null, tint = Color.White.copy(alpha = .82f), modifier = Modifier.size(112.dp))
+            if (coverCandidates.isNotEmpty() && coverCandidateIndex < coverCandidates.size) {
+                AsyncImage(
+                    model = coverCandidates[coverCandidateIndex],
+                    contentDescription = "Album cover",
+                    modifier = Modifier.fillMaxSize().graphicsLayer { alpha = if (coverImageLoaded) 1f else 0f },
+                    contentScale = ContentScale.Crop,
+                    onSuccess = { coverImageLoaded = true },
+                    onError = {
+                        if (coverCandidateIndex < coverCandidates.lastIndex) coverCandidateIndex++
+                    }
+                )
             } else {
-                AsyncImage(model = coverUrl, contentDescription = "Album cover",
-                    modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                Icon(Icons.Default.Album, null, tint = Color.White.copy(alpha = .82f),
+                    modifier = Modifier.size(112.dp))
+            }
+            if (!coverImageLoaded) {
+                CircularProgressIndicator(
+                    Modifier.size(28.dp), color = Color.White.copy(alpha = .72f), strokeWidth = 2.dp
+                )
             }
         }
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, color = MaterialTheme.colorScheme.onBackground, fontSize = 24.sp,
                 fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(artist, color = Muted, fontSize = 15.sp)
+            if (isResolving) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                    Text("Loading stream…", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                }
+            } else if (!loadError.isNullOrBlank()) {
+                Text(loadError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            }
             Slider(
                 value = if (seeking) seekValue else position.toFloat().coerceIn(0f, duration.toFloat().coerceAtLeast(1f)),
                 onValueChange = {
@@ -982,10 +1051,13 @@ private fun NowPlayingScreen(
                 Icon(Icons.Default.SkipPrevious, "Previous", modifier = Modifier.size(36.dp))
             }
             FilledIconButton(
-                onClick = { player?.let { if (it.isPlaying) it.pause() else it.play() } },
+                onClick = { if (!isResolving) player?.let { if (it.isPlaying) it.pause() else it.play() } },
+                enabled = !isResolving,
                 modifier = Modifier.size(68.dp)
             ) {
-                Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, "Play or pause",
+                if (isResolving) CircularProgressIndicator(
+                    Modifier.size(28.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.5.dp
+                ) else Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, "Play or pause",
                     modifier = Modifier.size(34.dp))
             }
             IconButton(onClick = { player?.seekToNextMediaItem() }) {
@@ -1002,6 +1074,18 @@ private fun NowPlayingScreen(
             }
         }
     }
+}
+
+private fun playerCoverCandidates(coverUrl: String?): List<String> {
+    if (coverUrl.isNullOrBlank()) return emptyList()
+    val videoId = Regex("""/vi/([A-Za-z0-9_-]{11})/""")
+        .find(coverUrl)?.groupValues?.getOrNull(1)
+    if (videoId != null) return listOf(
+        "https://i.ytimg.com/vi/$videoId/maxresdefault.jpg",
+        "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
+        "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
+    )
+    return listOf(coverUrl)
 }
 
 private fun formatTime(ms: Long): String {
