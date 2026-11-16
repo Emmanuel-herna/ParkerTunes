@@ -100,10 +100,9 @@ data class VLine(
                 val next = sorted.getOrNull(sortedIndex + 1)?.value
                 val clean = line.text.trim()
                 if (clean.isEmpty()) {
-                    val previous = result.lastOrNull()
-                    if (previous != null && previous.text.isNotBlank() && previous.endMs < line.timeMs &&
-                        line.timeMs - previous.endMs >= GAP_THRESHOLD_MS) {
-                        result += gap(previous.endMs, origin)
+                    val nextSung = sorted.drop(sortedIndex + 1).firstOrNull { it.value.text.isNotBlank() }?.value
+                    if (nextSung != null && nextSung.timeMs - line.timeMs >= GAP_THRESHOLD_MS) {
+                        result += VLine(line.timeMs, "", origin, nextSung.timeMs, isGap = false)
                     }
                     return@forEachIndexed
                 }
@@ -123,8 +122,9 @@ data class VLine(
                     cursor = end
                     if (cursor < clean.length && clean[cursor].isWhitespace()) cursor++
                 }
-                val lineEnd = line.endMs ?: words.maxOfOrNull { it.endMs }
+                val inferredEnd = line.endMs ?: words.maxOfOrNull { it.endMs }
                     ?: next?.timeMs?.takeIf { it > line.timeMs } ?: (line.timeMs + 3_000L)
+                val lineEnd = if (line.opposite) maxOf(inferredEnd, line.timeMs + 3_000L) else inferredEnd
                 val syllables = words.flatMapIndexed { index, word ->
                     val base = spans.getOrNull(index)?.first ?: 0
                     word.syllables.map { syllable ->
@@ -145,7 +145,8 @@ data class VLine(
                     of(listOf(backing.copy(text = stripped, words = adjusted))).firstOrNull()
                 }
                 result += VLine(
-                    timeMs = line.timeMs, text = clean, origin = origin, endMs = maxOf(lineEnd, line.timeMs + 1),
+                    timeMs = line.timeMs, text = clean, origin = origin,
+                    endMs = maxOf(lineEnd, bg?.endMs ?: line.timeMs, line.timeMs + 1),
                     words = words, wordSpans = spans, sweepSpans = syllables.map { it.first },
                     isWordSynced = words.isNotEmpty(), opposite = line.opposite, background = bg,
                     growingWords = words.mapIndexedNotNull { i, word ->
