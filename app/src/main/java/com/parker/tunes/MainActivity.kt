@@ -60,6 +60,7 @@ import androidx.media3.session.SessionToken
 import androidx.navigation.compose.*
 import com.google.common.util.concurrent.ListenableFuture
 import com.parker.tunes.data.PlayHistoryEntity
+import com.parker.tunes.data.EqualizerSettingsEntity
 import com.parker.tunes.data.FavoriteEntity
 import com.parker.tunes.data.MusicApi
 import com.parker.tunes.data.AddonMusicApi
@@ -69,6 +70,9 @@ import com.parker.tunes.model.Song
 import com.parker.tunes.player.PlaybackService
 import com.parker.tunes.player.PlayerUiState
 import com.parker.tunes.player.PlayerUiStateObserver
+import com.parker.tunes.player.EqualizerManager
+import com.parker.tunes.player.EqualizerRegistry
+import com.parker.tunes.player.EqualizerState
 import com.parker.tunes.ui.theme.ParkerTunesTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -165,6 +169,34 @@ fun ParkerTunesRoot() {
 
     MaterialTheme(colorScheme = scheme) {
         val playerObserver = remember(controller) { controller?.let(::PlayerUiStateObserver) }
+        val equalizerManager = remember(controller) { EqualizerRegistry.manager }
+        LaunchedEffect(equalizerManager, dao) {
+            if (equalizerManager != null) {
+                dao.equalizerSettings().flowOn(Dispatchers.IO).collect { saved ->
+                    if (saved != null) {
+                        equalizerManager.applySaved(EqualizerState(
+                            preset = saved.preset,
+                            bandLevels = saved.bandLevels.split(',').mapNotNull { it.toIntOrNull() },
+                            bassEnabled = saved.bassEnabled, bassStrength = saved.bassStrength,
+                            virtualizerEnabled = saved.virtualizerEnabled, virtualizerStrength = saved.virtualizerStrength,
+                            loudnessEnabled = saved.loudnessEnabled, loudnessGain = saved.loudnessGain,
+                            monoEnabled = saved.monoEnabled
+                        ))
+                    }
+                }
+            }
+        }
+        val persistEqualizer: (EqualizerState) -> Unit = { state ->
+            scope.launch(Dispatchers.IO) {
+                dao.saveEqualizerSettings(EqualizerSettingsEntity(
+                    preset = state.preset, bandLevels = state.bandLevels.joinToString(","),
+                    bassEnabled = state.bassEnabled, bassStrength = state.bassStrength,
+                    virtualizerEnabled = state.virtualizerEnabled, virtualizerStrength = state.virtualizerStrength,
+                    loudnessEnabled = state.loudnessEnabled, loudnessGain = state.loudnessGain,
+                    monoEnabled = state.monoEnabled
+                ))
+            }
+        }
         DisposableEffect(playerObserver) {
             onDispose { playerObserver?.close() }
         }
@@ -356,9 +388,13 @@ fun ParkerTunesRoot() {
                     }
                 }
                 composable("library") { LibraryScreen(dao) }
+                composable("equalizer") {
+                    EqualizerScreen(manager = equalizerManager, onBack = { nav.popBackStack() }, onChanged = persistEqualizer)
+                }
                 composable("settings") {
                     SettingsScreen(
                         lightMode = lightMode,
+                        onOpenEqualizer = { nav.navigate("equalizer") },
                         addonApi = api as? AddonMusicApi,
                         preferredRefreshRate = preferredRefreshRate,
                         onRefreshRate = { requestedRate ->
@@ -387,9 +423,9 @@ fun ParkerTunesRoot() {
                         controller, playerObserver, playerState,
                         isResolving = resolvingSongId != null &&
                             resolvingSongId == controller?.currentMediaItem?.mediaId,
-                        loadError = playbackLoadError
-                    ) {
-                        nav.popBackStack()
+                        loadError = playbackLoadError,
+                        onOpenEqualizer = { nav.navigate("equalizer") },
+                        onBack = { nav.popBackStack() }
                     }
                 }
             }
@@ -702,6 +738,7 @@ private fun NowPlayingScreen(
     playerState: PlayerUiState,
     isResolving: Boolean,
     loadError: String?,
+    onOpenEqualizer: () -> Unit,
     onBack: () -> Unit
 ) {
     val progressFlow = remember(playerObserver) {
@@ -887,6 +924,9 @@ private fun NowPlayingScreen(
             IconButton(onClick = { player?.seekToNextMediaItem() }) {
                 Icon(Icons.Default.SkipNext, "Next", modifier = Modifier.size(36.dp))
             }
+            IconButton(onClick = onOpenEqualizer) {
+                Icon(Icons.Default.GraphicEq, "Equalizer", tint = MaterialTheme.colorScheme.primary)
+            }
             IconButton(onClick = {
                 player?.repeatMode = when (repeat) {
                     androidx.media3.common.Player.REPEAT_MODE_OFF -> androidx.media3.common.Player.REPEAT_MODE_ALL
@@ -1066,6 +1106,7 @@ private fun LibrarySongRow(title: String, artist: String, icon: androidx.compose
 @Composable
 fun SettingsScreen(
     lightMode: Boolean,
+    onOpenEqualizer: () -> Unit,
     addonApi: AddonMusicApi?,
     preferredRefreshRate: Int,
     onRefreshRate: (Int) -> Unit,
@@ -1083,6 +1124,20 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         ScreenTitle("Make it yours", "Settings", "A few things to shape your listening.")
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .clickable(onClick = onOpenEqualizer).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Icon(Icons.Default.GraphicEq, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Sound & Audio", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+                Text("Equalizer, bass, spatial sound and loudness", color = Muted, fontSize = 12.sp)
+            }
+            Icon(Icons.Default.ChevronRight, "Open equalizer", tint = Muted)
+        }
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
                 .background(MaterialTheme.colorScheme.surface).padding(16.dp),
