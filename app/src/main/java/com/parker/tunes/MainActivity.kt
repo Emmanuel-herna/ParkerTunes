@@ -81,10 +81,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private val Ink = Color(0xFF090B12)
-private val Panel = Color(0xFF151925)
+private val Ink = Color(0xFF000000)
+private val Panel = Color(0xFF1A1A1A)
 private val Accent = Color(0xFFB69CFF)
-private val Muted = Color(0xFF9298AA)
+private val Muted = Color(0xFFA7A7A7)
 
 @Composable
 fun ParkerTunesRoot() {
@@ -264,43 +264,43 @@ fun ParkerTunesRoot() {
                     enter = fadeIn() + slideInVertically { it / 3 },
                     exit = fadeOut() + slideOutVertically { it / 3 }
                 ) {
-                    Column {
-                        AnimatedVisibility(
-                            visible = playerState.hasItem,
-                            enter = fadeIn(), exit = fadeOut()
-                        ) {
-                            MiniPlayer(
-                                title = currentTitle,
-                                artist = currentArtist,
-                                coverUrl = playerState.artworkUri,
-                                playing = isPlaying,
-                                onClick = { nav.navigate("nowplaying") },
-                                onPlayPause = {
-                                    controller?.let { if (it.isPlaying) it.pause() else it.play() }
-                                },
-                                onNext = { controller?.seekToNextMediaItem() }
-                            )
+                    Column(Modifier.fillMaxWidth().background(Color.Black).padding(bottom = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AnimatedVisibility(visible = playerState.hasItem, enter = fadeIn(), exit = fadeOut()) {
+                            MiniPlayer(title = currentTitle, artist = currentArtist, coverUrl = playerState.artworkUri,
+                                playing = isPlaying, onClick = { nav.navigate("nowplaying") },
+                                onPlayPause = { controller?.let { if (it.isPlaying) it.pause() else it.play() } },
+                                onNext = { controller?.seekToNextMediaItem() })
                         }
-                        NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                            listOf("Home", "Search", "Library", "Settings").forEach { item ->
-                                NavigationBarItem(
-                                    selected = selectedTab == item,
-                                    onClick = {
-                                        selectedTab = item
-                                        nav.navigate(item.lowercase()) { launchSingleTop = true }
-                                    },
-                                    icon = {
-                                        Icon(
-                                            when (item) {
-                                                "Home" -> Icons.Default.Home
-                                                "Search" -> Icons.Default.Search
-                                                "Library" -> Icons.Default.LibraryMusic
-                                                else -> Icons.Default.Settings
-                                            }, contentDescription = item
-                                        )
-                                    },
-                                    label = { Text(item) }
-                                )
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(Modifier.weight(1f).height(58.dp).clip(RoundedCornerShape(30.dp))
+                                .background(Color(0xFF1A1A1A)).padding(horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
+                                listOf("Home", "Explore", "Library").forEach { item ->
+                                    val active = selectedTab == item
+                                    Row(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(24.dp))
+                                        .clickable {
+                                            selectedTab = item
+                                            nav.navigate(when (item) { "Home" -> "home"; "Explore" -> "search"; else -> "library" }) {
+                                                launchSingleTop = true
+                                            }
+                                        }.padding(horizontal = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                                        Icon(when (item) { "Home" -> Icons.Default.Home; "Explore" -> Icons.Default.GridView
+                                            else -> Icons.Default.LibraryBooks }, item,
+                                            tint = if (active) Color.White else Color(0xFFA7A7A7), modifier = Modifier.size(22.dp))
+                                        if (active) Text(item, color = Color.White, fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
+                                    }
+                                }
+                            }
+                            Box(Modifier.size(58.dp).clip(CircleShape).background(Color(0xFF242424))
+                                .clickable {
+                                    selectedTab = "Explore"
+                                    nav.navigate("search") { launchSingleTop = true }
+                                }, contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Search, "Search", tint = Color.White, modifier = Modifier.size(25.dp))
                             }
                         }
                     }
@@ -313,7 +313,7 @@ fun ParkerTunesRoot() {
                 modifier = Modifier.padding(padding)
             ) {
                 composable("home") {
-                    HomeScreen(dao = dao, onPlay = playSong)
+                    SpotifyHomeScreen(dao = dao, player = controller, onPlay = playSong, onSettings = { nav.navigate("settings") })
                 }
                 composable("search") {
                     SearchScreen(query, { query = it }, api, dao, onPlay = playSong)
