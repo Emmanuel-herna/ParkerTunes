@@ -52,6 +52,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.parker.tunes.data.PlayHistoryEntity
 import com.parker.tunes.data.FavoriteEntity
 import com.parker.tunes.data.MusicApi
+import com.parker.tunes.data.AddonMusicApi
 import com.parker.tunes.model.Song
 import com.parker.tunes.player.PlaybackService
 import com.parker.tunes.player.PlayerUiState
@@ -212,7 +213,7 @@ fun ParkerTunesRoot() {
                 }
                 composable("library") { LibraryScreen(dao) }
                 composable("settings") {
-                    SettingsScreen(lightMode) {
+                    SettingsScreen(lightMode, api as? AddonMusicApi) {
                         lightMode = it
                         context.getSharedPreferences("parker_tunes_settings", android.content.Context.MODE_PRIVATE)
                             .edit().putBoolean("light_mode", it).apply()
@@ -708,8 +709,22 @@ private fun LibrarySongRow(title: String, artist: String, icon: androidx.compose
 }
 
 @Composable
-fun SettingsScreen(lightMode: Boolean, onLightMode: (Boolean) -> Unit) {
-    Column(Modifier.fillMaxSize().padding(22.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+fun SettingsScreen(
+    lightMode: Boolean,
+    addonApi: AddonMusicApi?,
+    onLightMode: (Boolean) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var addonUrl by remember(addonApi) {
+        mutableStateOf(addonApi?.configuredAddonUrl.orEmpty())
+    }
+    var addonStatus by remember { mutableStateOf<String?>(null) }
+    var checkingAddon by remember { mutableStateOf(false) }
+
+    Column(
+        Modifier.fillMaxSize().padding(22.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
         ScreenTitle("Make it yours", "Settings", "A few things to shape your listening.")
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
@@ -721,6 +736,69 @@ fun SettingsScreen(lightMode: Boolean, onLightMode: (Boolean) -> Unit) {
                 Text("Switch between dark and light mode", color = Muted, fontSize = 12.sp)
             }
             Switch(checked = lightMode, onCheckedChange = onLightMode)
+        }
+
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.surface).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Optional music source", color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            Text(
+                "Connect a BitChord-compatible addon. Its tracks will appear alongside YouTube results.",
+                color = Muted, fontSize = 12.sp
+            )
+            OutlinedTextField(
+                value = addonUrl,
+                onValueChange = { addonUrl = it; addonStatus = null },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Addon HTTPS URL") },
+                placeholder = { Text("https://example.com") }
+            )
+            Button(
+                onClick = {
+                    scope.launch {
+                        checkingAddon = true
+                        addonStatus = "Checking addon manifest…"
+                        runCatching {
+                            requireNotNull(addonApi) { "Addon support is unavailable." }
+                                .validateAddon(addonUrl)
+                        }.onSuccess { name ->
+                            addonApi?.configureAddon(addonUrl)
+                            addonStatus = "Connected: $name. Its tracks will appear in Search."
+                        }.onFailure { failure ->
+                            addonStatus = failure.message ?: "Could not connect to this addon."
+                        }
+                        checkingAddon = false
+                    }
+                },
+                enabled = !checkingAddon && addonUrl.isNotBlank() && addonApi != null,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (checkingAddon) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Checking…")
+                } else Text("Verify and connect")
+            }
+            if (addonApi?.configuredAddonUrl?.isNotBlank() == true) {
+                TextButton(
+                    onClick = {
+                        addonApi.configureAddon("")
+                        addonUrl = ""
+                        addonStatus = "Addon disconnected. YouTube remains available."
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Disconnect addon") }
+            }
+            addonStatus?.let { Text(it, color = Muted, fontSize = 12.sp) }
+            Text(
+                "Addons must provide /manifest.json, /search and /stream/{id} over HTTPS. " +
+                    "BitChord-only authenticated addons are not supported yet.",
+                color = Muted, fontSize = 11.sp
+            )
         }
         Text("ParkerTunes  •  Version 1.0.0", color = Muted, fontSize = 12.sp)
     }
