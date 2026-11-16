@@ -908,6 +908,16 @@ private fun NowPlayingScreen(
     val coverCandidates = remember(coverUrl) { playerCoverCandidates(coverUrl) }
     var coverCandidateIndex by remember(coverUrl) { mutableIntStateOf(0) }
     var coverImageLoaded by remember(coverUrl) { mutableStateOf(false) }
+    val coverImageAlpha by animateFloatAsState(
+        targetValue = if (coverImageLoaded) 1f else 0f,
+        animationSpec = tween(360),
+        label = "coverFadeIn"
+    )
+    val coverImageScale by animateFloatAsState(
+        targetValue = if (coverImageLoaded) 1f else 0.975f,
+        animationSpec = tween(420),
+        label = "coverLoadScale"
+    )
     var seeking by remember { mutableStateOf(false) }
     var seekValue by remember { mutableFloatStateOf(0f) }
     val dragAnimation = remember { Animatable(0f) }
@@ -996,7 +1006,11 @@ private fun NowPlayingScreen(
                 AsyncImage(
                     model = coverCandidates[coverCandidateIndex],
                     contentDescription = "Album cover",
-                    modifier = Modifier.fillMaxSize().graphicsLayer { alpha = if (coverImageLoaded) 1f else 0f },
+                    modifier = Modifier.fillMaxSize().graphicsLayer {
+                        alpha = coverImageAlpha
+                        scaleX = coverImageScale
+                        scaleY = coverImageScale
+                    },
                     contentScale = ContentScale.Crop,
                     onSuccess = { coverImageLoaded = true },
                     onError = {
