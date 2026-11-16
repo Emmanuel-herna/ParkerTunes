@@ -1,5 +1,6 @@
 package com.parker.tunes
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -24,9 +25,12 @@ import androidx.compose.ui.unit.sp
 import androidx.media3.session.MediaController
 import coil.compose.AsyncImage
 import com.parker.tunes.data.LibraryDao
+import com.parker.tunes.data.MusicApi
 import com.parker.tunes.model.Song
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 
 private val SpotifyBlack = Color(0xFF000000)
 private val SpotifyGray = Color(0xFFA7A7A7)
@@ -35,6 +39,7 @@ private val SpotifyAccent = Color(0xFFB69CFF)
 @Composable
 fun SpotifyHomeScreen(
     dao: LibraryDao,
+    api: MusicApi,
     player: MediaController?,
     onPlay: (Song) -> Unit,
     onSettings: () -> Unit,
@@ -43,6 +48,35 @@ fun SpotifyHomeScreen(
     val recent by remember(dao) { dao.recentlyPlayed().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
     val mostPlayed by remember(dao) { dao.mostPlayed().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
     val favorites by remember(dao) { dao.favorites().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
+    var historyReady by remember(dao) { mutableStateOf(false) }
+    var recommendations by remember(api) { mutableStateOf(emptyList<Song>()) }
+    var recommendationsLoading by remember(api) { mutableStateOf(false) }
+    val latestTrack = recent.firstOrNull()
+    val recommendationKey = latestTrack?.songId?.let { "related:$it" } ?: "trending"
+
+    LaunchedEffect(dao) {
+        withContext(Dispatchers.IO) { dao.recentlyPlayed().first() }
+        historyReady = true
+    }
+
+    LaunchedEffect(api, historyReady, recommendationKey) {
+        if (!historyReady) return@LaunchedEffect
+        val cached = HomeRecommendationCache.get(recommendationKey)
+        if (cached != null) {
+            recommendations = cached
+            recommendationsLoading = false
+        } else {
+            recommendationsLoading = true
+            recommendations = emptyList()
+            val loaded = withContext(Dispatchers.IO) {
+                val lastSongId = latestTrack?.songId
+                if (lastSongId != null) api.getRelatedSongs(lastSongId) else api.getTrending()
+            }
+            recommendations = loaded
+            HomeRecommendationCache.put(recommendationKey, loaded)
+            recommendationsLoading = false
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(SpotifyBlack),
@@ -65,6 +99,60 @@ fun SpotifyHomeScreen(
                     .clip(CircleShape).background(SpotifyAccent).clickable(onClick = onSettings),
                     contentAlignment = Alignment.Center) {
                     Text("P", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        if (historyReady) {
+            item(key = "recommendations_section") {
+                Column {
+                    SectionHeading(
+                        if (latestTrack != null && latestTrack.artist.isNotBlank()) {
+                            "Because you listened to ${latestTrack.artist}"
+                        } else if (latestTrack != null) {
+                            "Made for you"
+                        } else {
+                            "Trending now"
+                        }
+                    )
+                    if (recommendationsLoading) {
+                        RecommendationShimmer()
+                    } else if (recommendations.isNotEmpty()) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            items(recommendations, key = { "recommendation_" + it.id }) { song ->
+                                Column(
+                                    Modifier.width(184.dp).clickable { onPlay(song) },
+                                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                                ) {
+                                    Box(
+                                        Modifier.size(184.dp).clip(RoundedCornerShape(12.dp))
+                                            .background(Color(0xFF202020)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (song.coverUrl.isNullOrBlank()) {
+                                            Icon(Icons.Default.MusicNote, null, tint = SpotifyGray,
+                                                modifier = Modifier.size(42.dp))
+                                        } else {
+                                            AsyncImage(
+                                                model = song.coverUrl,
+                                                contentDescription = "Recommended track cover",
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        }
+                                    }
+                                    Text(song.title, color = Color.White, fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold, maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis)
+                                    Text(song.artist.ifBlank { "Unknown artist" }, color = SpotifyGray,
+                                        fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -162,6 +250,58 @@ fun SpotifyHomeScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+
+@Composable
+private fun RecommendationShimmer() {
+    val transition = rememberInfiniteTransition(label = "recommendationShimmer")
+    val alpha by transition.animateFloat(
+        initialValue = 0.32f,
+        targetValue = 0.78f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 850),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "recommendationShimmerAlpha"
+    )
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        items(3) {
+            Column(Modifier.width(184.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    Modifier.size(184.dp).clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF303030).copy(alpha = alpha))
+                )
+                Box(
+                    Modifier.fillMaxWidth(0.82f).height(14.dp).clip(RoundedCornerShape(5.dp))
+                        .background(Color(0xFF303030).copy(alpha = alpha))
+                )
+                Box(
+                    Modifier.fillMaxWidth(0.55f).height(11.dp).clip(RoundedCornerShape(5.dp))
+                        .background(Color(0xFF303030).copy(alpha = alpha * 0.8f))
+                )
+            }
+        }
+    }
+}
+
+private object HomeRecommendationCache {
+    private val entries = object : LinkedHashMap<String, List<Song>>(12, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
+            size > 12
+    }
+
+    @Synchronized
+    fun get(key: String): List<Song>? = entries[key]
+
+    @Synchronized
+    fun put(key: String, songs: List<Song>) {
+        entries[key] = songs
     }
 }
 
