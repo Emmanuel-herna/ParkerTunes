@@ -35,6 +35,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.border
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -129,6 +131,7 @@ fun SearchScreen(
         key = "recent-searches-${System.identityHashCode(dao)}",
         factory = remember(dao) { RecentSearchesFactory(dao) }
     )
+    val context = LocalContext.current
     val recent by recentVm.recent.collectAsState()
     val savedDownloads by remember(dao) { dao.downloads().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
     val downloadProgress by downloads.progress.collectAsState()
@@ -367,7 +370,10 @@ fun SearchScreen(
                                         }
                                     }
                                 },
-                                onDownload = { downloads.enqueue(song) },
+                                onDownload = {
+                                    if (downloads.hasLowStorage()) Toast.makeText(context, "Low storage · free up at least 200 MB first.", Toast.LENGTH_LONG).show()
+                                    else downloads.enqueue(song)
+                                },
                                 onCancelDownload = { downloads.cancel(song.id) },
                                 onRemoveDownload = { scope -> scope.launch(Dispatchers.IO) { downloads.remove(song.id) } },
                                 onClick = {
