@@ -1318,7 +1318,11 @@ fun SettingsScreen(
     ) { uri ->
         if (uri != null) scope.launch {
             runCatching { backupManager.importFrom(uri) }
-                .onSuccess { count -> backupStatus = "Backup merged. $count new library items imported." }
+                .onSuccess { count ->
+                    playbackSettingsStore.setCrossfadeSeconds(settingsPrefs.getInt("crossfade_seconds", 0))
+                    playbackSettingsStore.setSmartAutoplay(settingsPrefs.getBoolean("smart_autoplay", true))
+                    backupStatus = "Backup merged. $count new library items imported."
+                }
                 .onFailure { backupStatus = it.message ?: "Could not import backup." }
         }
     }
