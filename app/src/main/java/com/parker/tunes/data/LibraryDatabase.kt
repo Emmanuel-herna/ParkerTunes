@@ -147,7 +147,7 @@ interface LibraryDao {
     @Query("SELECT CAST(strftime('%H', playedAt / 1000, 'unixepoch', 'localtime') AS INTEGER) AS hour, COUNT(*) AS plays FROM play_history GROUP BY hour ORDER BY plays DESC LIMIT 1")
     fun mostActiveHour(): Flow<ActiveHour?>
 
-    @Query("SELECT artist, SUM(playDurationMs) AS durationMs FROM play_history WHERE artist != ''' GROUP BY artist ORDER BY durationMs DESC LIMIT 5")
+    @Query("SELECT artist, SUM(playDurationMs) AS durationMs FROM play_history WHERE artist != '' GROUP BY artist ORDER BY durationMs DESC LIMIT 5")
     fun topArtistsByTime(): Flow<List<ArtistListeningTime>>
 
     @Query("SELECT * FROM play_history ORDER BY playedAt DESC LIMIT 100")
