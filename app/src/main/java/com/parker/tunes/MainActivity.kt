@@ -478,34 +478,92 @@ fun LibraryScreen(dao: com.parker.tunes.data.LibraryDao) {
     var tab by remember { mutableStateOf("Playlists") }
     var showCreate by remember { mutableStateOf(false) }
     var playlistName by remember { mutableStateOf("") }
+    var selectedPlaylist by remember { mutableStateOf<com.parker.tunes.data.PlaylistEntity?>(null) }
     val scope = rememberCoroutineScope()
     val playlists by dao.playlists().collectAsState(initial = emptyList())
     val favorites by dao.favorites().collectAsState(initial = emptyList())
     val history by dao.history().collectAsState(initial = emptyList())
-    Column(Modifier.fillMaxSize().padding(22.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        ScreenTitle("Keep it close", "Your library", "Everything you want to come back to.")
-        TabRow(selectedTabIndex = listOf("Playlists", "Favorites", "History").indexOf(tab)) {
-            listOf("Playlists", "Favorites", "History").forEach { label ->
-                Tab(selected = tab == label, onClick = { tab = label }, text = { Text(label, fontSize = 12.sp) })
+    val tracksFlow = remember(selectedPlaylist?.id) {
+        selectedPlaylist?.let { dao.playlistTracks(it.id) }
+            ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }
+    val playlistTracks by tracksFlow.collectAsState(initial = emptyList())
+
+    Column(Modifier.fillMaxSize().padding(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        if (selectedPlaylist != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { selectedPlaylist = null }) {
+                    Icon(Icons.Default.ArrowBack, "Back to playlists")
+                }
+                Column {
+                    Text("PLAYLIST", color = MaterialTheme.colorScheme.primary, fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Text(selectedPlaylist!!.name, color = MaterialTheme.colorScheme.onBackground,
+                        fontSize = 23.sp, fontWeight = FontWeight.Bold)
+                }
             }
-        }
-        when (tab) {
-            "Playlists" -> if (playlists.isEmpty()) EmptyState(Icons.Default.QueueMusic, "No playlists yet", "Create playlists as you build your collection.")
-                else LazyColumn { items(playlists) { Text(it.name, modifier = Modifier.padding(12.dp)) } }
-            "Favorites" -> if (favorites.isEmpty()) EmptyState(Icons.Default.FavoriteBorder, "No favourites yet", "Songs you favourite will appear here.")
-                else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (playlistTracks.isEmpty()) {
+                EmptyState(Icons.Default.QueueMusic, "This playlist is empty",
+                    "Add songs from the Search screen using the playlist button.")
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(playlistTracks, key = { it.songId }) { track ->
+                        LibrarySongRow(track.title.ifBlank { track.songId }, track.artist, Icons.Default.MusicNote)
+                    }
+                }
+            }
+        } else {
+            ScreenTitle("Keep it close", "Your library", "Everything you want to come back to.")
+            TabRow(selectedTabIndex = listOf("Playlists", "Favorites", "History").indexOf(tab)) {
+                listOf("Playlists", "Favorites", "History").forEach { label ->
+                    Tab(selected = tab == label, onClick = { tab = label }, text = { Text(label, fontSize = 12.sp) })
+                }
+            }
+            when (tab) {
+                "Playlists" -> {
+                    Button(onClick = { showCreate = true }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Add, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Create playlist")
+                    }
+                    if (playlists.isEmpty()) {
+                        EmptyState(Icons.Default.QueueMusic, "No playlists yet", "Create a playlist to organise your music.")
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(playlists, key = { it.id }) { playlist ->
+                                Row(
+                                    Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp))
+                                        .background(MaterialTheme.colorScheme.surface)
+                                        .clickable { selectedPlaylist = playlist }.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.QueueMusic, null, tint = MaterialTheme.colorScheme.primary)
+                                    Text(playlist.name, modifier = Modifier.weight(1f).padding(start = 12.dp),
+                                        color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+                                    Icon(Icons.Default.ChevronRight, null, tint = Muted)
+                                }
+                            }
+                        }
+                    }
+                }
+                "Favorites" -> if (favorites.isEmpty()) {
+                    EmptyState(Icons.Default.FavoriteBorder, "No favourites yet", "Tap the heart on a search result to save it.")
+                } else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(favorites, key = { it.songId }) {
                         LibrarySongRow(it.title.ifBlank { it.songId }, it.artist, Icons.Default.Favorite)
                     }
                 }
-            else -> if (history.isEmpty()) EmptyState(Icons.Default.History, "No listening history", "Tracks you play will appear here.")
-                else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                else -> if (history.isEmpty()) {
+                    EmptyState(Icons.Default.History, "No listening history", "Tracks you play will appear here.")
+                } else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(history, key = { it.id }) {
                         LibrarySongRow(it.title.ifBlank { it.songId }, it.artist, Icons.Default.History)
                     }
                 }
+            }
         }
     }
+
     if (showCreate) {
         AlertDialog(
             onDismissRequest = { showCreate = false },
