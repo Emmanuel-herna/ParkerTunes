@@ -176,6 +176,12 @@ interface LibraryDao {
     @Insert
     suspend fun recordPlay(item: PlayHistoryEntity)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun restorePlayHistory(item: PlayHistoryEntity)
+
+    @Query("SELECT * FROM playlist_tracks WHERE playlistId = :playlistId ORDER BY position ASC")
+    suspend fun playlistTracksSnapshot(playlistId: String): List<PlaylistTrackEntity>
+
     @Query("UPDATE play_history SET playDurationMs = playDurationMs + :durationMs WHERE id = (SELECT id FROM play_history WHERE songId = :songId ORDER BY playedAt DESC LIMIT 1)")
     suspend fun addPlayDuration(songId: String, durationMs: Long)
 
