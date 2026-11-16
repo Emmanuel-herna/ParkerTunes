@@ -483,7 +483,7 @@ fun LibraryScreen(dao: com.parker.tunes.data.LibraryDao) {
     val playlists by dao.playlists().collectAsState(initial = emptyList())
     val favorites by dao.favorites().collectAsState(initial = emptyList())
     val history by dao.history().collectAsState(initial = emptyList())
-    val tracksFlow = remember(selectedPlaylist?.id) {
+    val tracksFlow: kotlinx.coroutines.flow.Flow<List<com.parker.tunes.data.PlaylistTrackEntity>> = remember(selectedPlaylist?.id) {
         selectedPlaylist?.let { dao.playlistTracks(it.id) }
             ?: kotlinx.coroutines.flow.flowOf(emptyList())
     }
