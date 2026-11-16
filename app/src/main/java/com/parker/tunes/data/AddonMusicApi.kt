@@ -97,7 +97,7 @@ class AddonMusicApi(
         val url = Uri.parse(endpoint(base, "stream", trackId)).buildUpon()
             .appendQueryParameter("quality", "LOSSLESS").build().toString()
         getJson(url).optString("url").also {
-            require(it.startsWith("https://", true) || it.startsWith("http://", true)) {
+            require(it.startsWith("https://", true)) {
                 "The addon did not return a playable stream URL."
             }
         }
@@ -123,7 +123,7 @@ class AddonMusicApi(
 
     private fun endpoint(base: String, vararg segments: String): String {
         val builder = Uri.parse(normalizeBase(base)).buildUpon()
-        segments.forEach(builder::appendPath)
+        segments.forEach { builder.appendPath(it) }
         return builder.build().toString()
     }
 
