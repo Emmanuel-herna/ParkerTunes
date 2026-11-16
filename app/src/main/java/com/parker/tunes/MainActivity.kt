@@ -255,7 +255,7 @@ fun SearchScreen(
             error != null -> EmptyState(Icons.Default.CloudOff, "Search couldn't load", error!!)
             results.isNotEmpty() -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(results, key = { it.id }) { song ->
-                    SongRow(song = song, onClick = { onPlay(song) })
+                    SongRow(song = song, dao = dao, onClick = { onPlay(song) })
                 }
             }
             else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -421,6 +421,9 @@ private fun formatTime(ms: Long): String {
 @Composable
 fun LibraryScreen(dao: com.parker.tunes.data.LibraryDao) {
     var tab by remember { mutableStateOf("Playlists") }
+    var showCreate by remember { mutableStateOf(false) }
+    var playlistName by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
     val playlists by dao.playlists().collectAsState(initial = emptyList())
     val favorites by dao.favorites().collectAsState(initial = emptyList())
     val history by dao.history().collectAsState(initial = emptyList())
