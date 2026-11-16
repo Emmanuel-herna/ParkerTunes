@@ -44,6 +44,8 @@ import coil.compose.AsyncImage
 import com.parker.tunes.data.LibraryDao
 import com.parker.tunes.data.MusicApi
 import com.parker.tunes.data.RecentSearchEntity
+import com.parker.tunes.model.Artist
+import com.parker.tunes.model.SearchResult
 import com.parker.tunes.model.Song
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -112,7 +114,7 @@ fun SearchScreen(
     val recent by recentVm.recent.collectAsState()
     var query by remember { mutableStateOf("") }
     var activeSource by remember { mutableStateOf("YouTube") }
-    var results by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var results by remember { mutableStateOf(SearchResult()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var searchFocused by remember { mutableStateOf(false) }
@@ -120,7 +122,7 @@ fun SearchScreen(
     LaunchedEffect(query, api, activeSource) {
         val clean = query.trim()
         if (activeSource != "YouTube" || clean.isBlank()) {
-            results = emptyList()
+            results = SearchResult()
             loading = false
             error = null
             return@LaunchedEffect
@@ -280,21 +282,41 @@ fun SearchScreen(
                 error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                     Text(error ?: "Search failed", color = SearchMuted, modifier = Modifier.padding(top = 24.dp))
                 }
-                results.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                    Text("No songs found", color = SearchMuted, modifier = Modifier.padding(top = 24.dp))
+                results.songs.isEmpty() && results.artists.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                    Text("No artists or songs found", color = SearchMuted, modifier = Modifier.padding(top = 24.dp))
                 }
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 120.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    item {
-                        Text("Songs", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    if (results.artists.isNotEmpty()) {
+                        item {
+                            Text("Artists", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        }
+                        item {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                                items(results.artists, key = { it.id }) { artist ->
+                                    ArtistSearchItem(artist) { query = artist.name }
+                                }
+                            }
+                        }
                     }
-                    items(results, key = { it.id }) { song ->
-                        SearchResultRow(song) {
-                            recentVm.recordFirstResult(query, song)
-                            onPlay(song)
+                    if (results.songs.isNotEmpty()) {
+                        item {
+                            Text(
+                                "Songs",
+                                color = Color.White,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = if (results.artists.isNotEmpty()) 8.dp else 0.dp)
+                            )
+                        }
+                        items(results.songs, key = { it.id }) { song ->
+                            SearchResultRow(song) {
+                                recentVm.recordFirstResult(query, song)
+                                onPlay(song)
+                            }
                         }
                     }
                 }
@@ -350,4 +372,55 @@ private fun ShimmerResults() {
             }
         }
     }
+}
+
+ 
+@Composable
+private fun ArtistSearchItem(artist: Artist, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier.width(84.dp).clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        Box(
+            Modifier.size(72.dp).clip(CircleShape).background(SearchSurface),
+            contentAlignment = Alignment.Center
+        ) {
+            if (artist.avatarUrl.isNullOrBlank()) {
+                Icon(Icons.Default.MusicNote, null, tint = SearchMuted, modifier = Modifier.size(28.dp))
+            } else {
+                AsyncImage(
+                    model = artist.avatarUrl,
+                    contentDescription = "${artist.name} avatar",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+        Text(
+            artist.name,
+            color = Color.White,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        if (artist.subscriberCount > 0L) {
+            Text(
+                formatArtistSubscribers(artist.subscriberCount),
+                color = SearchMuted,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+private fun formatArtistSubscribers(count: Long): String = when {
+    count >= 1_000_000_000L -> String.format("%.1fB subscribers", count / 1_000_000_000.0)
+    count >= 1_000_000L -> String.format("%.1fM subscribers", count / 1_000_000.0)
+    count >= 1_000L -> String.format("%.1fK subscribers", count / 1_000.0)
+    else -> "$count subscribers"
 }
