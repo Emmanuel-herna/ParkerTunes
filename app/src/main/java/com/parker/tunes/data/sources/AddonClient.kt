@@ -149,15 +149,25 @@ class AddonClient(private val http: OkHttpClient = OkHttpClient.Builder()
             ?: options.firstOrNull()?.value ?: "LOSSLESS"
     }
 
-    private data class HttpResult(val code: Int, val body: String?)
+    private data class HttpResult(val code: Int, val body: String?, val retryAfterMs: Long? = null)
     private fun execute(url: String): HttpResult? {
         val req = Request.Builder().url(url).header("Accept","application/json").get().build()
-        http.newCall(req).execute().use { return HttpResult(it.code, it.body?.string()) }
+        http.newCall(req).execute().use {
+            val retryHeader = it.header("Retry-After")
+            val retryMs = retryHeader?.toLongOrNull()?.times(1000L)
+                ?: retryHeader?.let { value ->
+                    runCatching {
+                        java.time.ZonedDateTime.parse(value, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME)
+                            .toInstant().toEpochMilli() - System.currentTimeMillis()
+                    }.getOrNull()
+                }?.coerceAtLeast(0L)
+            return HttpResult(it.code, it.body?.string(), retryMs)
+        }
     }
     private suspend fun requestWithRetry(url: String): HttpResult? {
         val first = runCatching { execute(url) }.getOrNull() ?: return null
         if (first.code != 429) return first
-        delay(1_000L)
+        delay(first.retryAfterMs ?: 1_000L)
         return runCatching { execute(url) }.getOrNull()
     }
     private fun parseManifest(raw: String): AddonManifest {
