@@ -25,6 +25,8 @@ data class AddonSettingsEntity(val addonId: String, val key: String, val value: 
 @Dao
 interface SourceRegistryDao {
     @Query("SELECT * FROM addon_sources ORDER BY name COLLATE NOCASE") fun list(): Flow<List<AddonEntity>>
+    @Query("SELECT * FROM addon_sources WHERE enabled = 1 ORDER BY name COLLATE NOCASE") suspend fun enabledSnapshot(): List<AddonEntity>
+    @Query("SELECT * FROM addon_sources WHERE id = :id LIMIT 1") suspend fun get(id: String): AddonEntity?
     @Query("SELECT * FROM addon_sources WHERE enabled = 1 ORDER BY name COLLATE NOCASE") fun enabled(): Flow<List<AddonEntity>>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insert(source: AddonEntity)
     @Query("DELETE FROM addon_sources WHERE id = :id") suspend fun delete(id: String)
