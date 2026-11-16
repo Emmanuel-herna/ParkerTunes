@@ -18,9 +18,9 @@ class AddonMusicApi(
 ) : MusicApi {
     private val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val client = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .callTimeout(25, TimeUnit.SECONDS)
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .callTimeout(8, TimeUnit.SECONDS)
         .build()
 
     @Volatile
@@ -55,7 +55,7 @@ class AddonMusicApi(
     override suspend fun search(query: String): List<Song> = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext emptyList()
         val addonBase = configuredAddonUrl
-        val youtubeResults = runCatching { youtube.search(query) }.getOrDefault(emptyList())
+        val youtubeResults = youtube.search(query)
         if (addonBase.isBlank()) return@withContext youtubeResults
 
         val addonResults = runCatching {
@@ -90,6 +90,8 @@ class AddonMusicApi(
 
         youtubeResults + addonResults
     }
+
+    override suspend fun searchMore(query: String): List<Song> = youtube.searchMore(query)
 
     override suspend fun getStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
         val parsed = parseAddonSongId(songId)
