@@ -204,6 +204,18 @@ fun ParkerTunesRoot() {
             ?: remember { kotlinx.coroutines.flow.MutableStateFlow(PlayerUiState()) }).collectAsState()
         val isPlaying = playerState.isPlaying
         val currentTitle = playerState.title
+
+        // Count only active playback time for listening statistics.
+        LaunchedEffect(controller) {
+            while (true) {
+                delay(5_000L)
+                val active = controller
+                val mediaId = active?.currentMediaItem?.mediaId
+                if (active?.isPlaying == true && !mediaId.isNullOrBlank()) {
+                    withContext(Dispatchers.IO) { dao.addPlayDuration(mediaId, 5_000L) }
+                }
+            }
+        }
         val currentArtist = playerState.artist
 
         // Persist every newly selected media item from Media3 callbacks. This
@@ -388,6 +400,7 @@ fun ParkerTunesRoot() {
                     }
                 }
                 composable("library") { LibraryScreen(dao) }
+                composable("stats") { StatsScreen(dao = dao, onBack = { nav.popBackStack() }) }
                 composable("equalizer") {
                     EqualizerScreen(manager = equalizerManager, onBack = { nav.popBackStack() }, onChanged = persistEqualizer)
                 }
@@ -395,6 +408,7 @@ fun ParkerTunesRoot() {
                     SettingsScreen(
                         lightMode = lightMode,
                         onOpenEqualizer = { nav.navigate("equalizer") },
+                        onOpenStats = { nav.navigate("stats") },
                         addonApi = api as? AddonMusicApi,
                         preferredRefreshRate = preferredRefreshRate,
                         onRefreshRate = { requestedRate ->
@@ -1110,6 +1124,7 @@ private fun LibrarySongRow(title: String, artist: String, icon: androidx.compose
 fun SettingsScreen(
     lightMode: Boolean,
     onOpenEqualizer: () -> Unit,
+    onOpenStats: () -> Unit,
     addonApi: AddonMusicApi?,
     preferredRefreshRate: Int,
     onRefreshRate: (Int) -> Unit,
@@ -1134,6 +1149,19 @@ fun SettingsScreen(
         ) {
             Text("Sound & Audio", color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = onOpenStats).padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Icon(Icons.Default.BarChart, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Listening stats", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
+                    Text("Your listening time, top artists and songs", color = Muted, fontSize = 12.sp)
+                }
+                Icon(Icons.Default.ChevronRight, "Open listening stats", tint = Muted)
+            }
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                     .clickable(onClick = onOpenEqualizer).padding(vertical = 6.dp),
