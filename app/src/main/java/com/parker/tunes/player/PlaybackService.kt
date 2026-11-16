@@ -31,6 +31,7 @@ class PlaybackService : MediaSessionService() {
     private val observedPlayers = mutableSetOf<ExoPlayer>()
     private var autoplayResolving = false
     private val favoriteCommand = SessionCommand(ACTION_FAVORITE, Bundle.EMPTY)
+    private val skipNextCommand = SessionCommand(ACTION_SKIP_NEXT, Bundle.EMPTY)
 
     private val sessionCallback = object : MediaSession.Callback {
         override fun onConnect(
@@ -38,7 +39,7 @@ class PlaybackService : MediaSessionService() {
             controller: MediaSession.ControllerInfo
         ): MediaSession.ConnectionResult {
             val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS
-                .buildUpon().add(favoriteCommand).build()
+                .buildUpon().add(favoriteCommand).add(skipNextCommand).build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(commands)
                 .build()
@@ -50,6 +51,10 @@ class PlaybackService : MediaSessionService() {
             customCommand: SessionCommand,
             args: Bundle
         ): ListenableFuture<SessionResult> {
+            if (customCommand.customAction == ACTION_SKIP_NEXT) {
+                crossfadeController?.skipToNext() ?: session.player.seekToNextMediaItem()
+                return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+            }
             if (customCommand.customAction == ACTION_FAVORITE) {
                 val item = session.player.currentMediaItem
                 val songId = item?.mediaId.orEmpty()
@@ -73,6 +78,7 @@ class PlaybackService : MediaSessionService() {
 
     private companion object {
         const val ACTION_FAVORITE = "com.parker.tunes.action.FAVORITE"
+        const val ACTION_SKIP_NEXT = "com.parker.tunes.action.SKIP_NEXT"
     }
 
     override fun onCreate() {
