@@ -113,7 +113,7 @@ interface LibraryDao {
     @Query("SELECT * FROM downloads WHERE songId = :songId LIMIT 1")
     suspend fun download(songId: String): DownloadEntity?
 
-    @Query("SELECT * FROM downloads WHERE status = 'COMPLETE' ORDER BY downloadedAt DESC")
+    @Query("SELECT * FROM downloads ORDER BY downloadedAt DESC")
     suspend fun downloadsSnapshot(): List<DownloadEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
