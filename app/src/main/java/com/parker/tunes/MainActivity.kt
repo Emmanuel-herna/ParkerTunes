@@ -1242,6 +1242,8 @@ fun SettingsScreen(
                 .onFailure { backupStatus = it.message ?: "Could not import backup." }
         }
     }
+    var smartAutoplay by remember { mutableStateOf(settingsPrefs.getBoolean("smart_autoplay", true)) }
+    var crossfadeSeconds by remember { mutableIntStateOf(settingsPrefs.getInt("crossfade_seconds", 0).coerceIn(0, 12)) }
     var addonUrl by remember(addonApi) {
         mutableStateOf(addonApi?.configuredAddonUrl.orEmpty())
     }
@@ -1318,6 +1320,38 @@ fun SettingsScreen(
                     modifier = Modifier.weight(1f)) { Text("Import") }
             }
             backupStatus?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp) }
+        }
+
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.surface).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Playback", color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Smart autoplay", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
+                    Text("Play related songs when your queue ends", color = Muted, fontSize = 12.sp)
+                }
+                Switch(checked = smartAutoplay, onCheckedChange = {
+                    smartAutoplay = it
+                    settingsPrefs.edit().putBoolean("smart_autoplay", it).apply()
+                })
+            }
+            Text("Track transition fade · ${crossfadeSeconds}s", color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium)
+            Slider(
+                value = crossfadeSeconds.toFloat(),
+                onValueChange = {
+                    crossfadeSeconds = it.toInt().coerceIn(0, 12)
+                    settingsPrefs.edit().putInt("crossfade_seconds", crossfadeSeconds).apply()
+                },
+                valueRange = 0f..12f,
+                steps = 11
+            )
+            Text("0 seconds disables the fade. ExoPlayer keeps playlist transitions gapless; the fade gently lowers and restores volume at track boundaries.",
+                color = Muted, fontSize = 11.sp)
         }
 
         Column(
