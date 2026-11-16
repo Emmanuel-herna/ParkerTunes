@@ -395,7 +395,7 @@ private fun MiniPlayer(
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp)
             .clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 9.dp),
+            .clickable(onClick = onClick).animateContentSize(animationSpec = tween(220)).padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (coverUrl.isNullOrBlank()) {
@@ -507,7 +507,7 @@ private fun NowPlayingScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { shuffle = !shuffle; player?.shuffleModeEnabled = shuffle }) {
+            IconButton(onClick = { player?.shuffleModeEnabled = !shuffle }) {
                 Icon(Icons.Default.Shuffle, "Shuffle", tint = if (shuffle) MaterialTheme.colorScheme.primary else Muted)
             }
             IconButton(onClick = { player?.seekToPreviousMediaItem() }) {
