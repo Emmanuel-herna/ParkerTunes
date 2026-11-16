@@ -20,6 +20,7 @@ import org.schabi.newpipe.extractor.linkhandler.SearchQueryHandler
 import org.schabi.newpipe.extractor.search.SearchExtractor
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
 import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeMusicSearchExtractor
+import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeStreamExtractor
 import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
@@ -62,6 +63,9 @@ class NewPipeMusicApi : MusicApi {
     private val relatedCache = object : LinkedHashMap<String, List<Song>>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
             size > 12
+    }
+    private val streamCache = object : LinkedHashMap<String, String>(48, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > 48
     }
     private var trendingCache: List<Song>? = null
     private val moodCache = object : LinkedHashMap<String, List<Song>>(24, 0.75f, true) {
@@ -109,12 +113,8 @@ class NewPipeMusicApi : MusicApi {
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (failure: Exception) {
-            throw SearchUnavailableException(
-                failure.message?.takeIf { it.isNotBlank() }
-                    ?: "Search timed out or the music service is unavailable.",
-                failure
-            )
+        } catch (_: Exception) {
+            SearchResult()
         }
     }
 
@@ -239,7 +239,7 @@ class NewPipeMusicApi : MusicApi {
             } else {
                 "https://www.youtube.com/watch?v=$videoId"
             }
-            val extractor = ServiceList.YouTube.getStreamExtractor(url)
+            val extractor = ServiceList.YouTube.getStreamExtractor(url) as YoutubeStreamExtractor
             val info = StreamInfo.getInfo(extractor)
             val related = info.relatedItems
                 .filterIsInstance<StreamInfoItem>()
@@ -293,6 +293,7 @@ class NewPipeMusicApi : MusicApi {
     override suspend fun getStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
         val videoId = extractVideoId(songId) ?: songId.trim()
         if (videoId.isBlank()) return@withContext ""
+        synchronized(cacheLock) { streamCache[videoId] }?.let { return@withContext it }
 
         try {
             NewPipeRuntime.ensureInitialized()
@@ -315,7 +316,9 @@ class NewPipeMusicApi : MusicApi {
                     }.thenByDescending { it.averageBitrate }
                 )
                 .firstOrNull()
-            selectedStream?.content.orEmpty()
+            selectedStream?.content.orEmpty().also { url ->
+                if (url.isNotBlank()) synchronized(cacheLock) { streamCache[videoId] = url }
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -327,7 +330,7 @@ class NewPipeMusicApi : MusicApi {
 
     override suspend fun getCoverArt(songId: String): String? = withContext(Dispatchers.IO) {
         val videoId = extractVideoId(songId) ?: return@withContext null
-        youtubeThumbnail(videoId)
+        "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
     }
 
     private fun extractVideoId(value: String): String? {
