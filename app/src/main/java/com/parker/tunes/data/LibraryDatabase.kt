@@ -84,6 +84,9 @@ data class LyricsCacheEntity(
     val cachedAt: Long = System.currentTimeMillis()
 )
 
+// Compatibility name for the persistent lyrics record used by the player.
+typealias LyricsEntity = LyricsCacheEntity
+
 @Entity(tableName = "recent_searches")
 data class RecentSearchEntity(
     @PrimaryKey val query: String,
