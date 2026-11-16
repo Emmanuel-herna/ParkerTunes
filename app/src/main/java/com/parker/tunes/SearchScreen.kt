@@ -112,7 +112,8 @@ fun SearchScreen(
     api: MusicApi,
     dao: LibraryDao,
     onPlay: (Song) -> Unit,
-    onSettings: () -> Unit
+    onSettings: () -> Unit,
+    onArtist: (Artist) -> Unit
 ) {
     val recentVm: RecentSearchesViewModel = viewModel(
         key = "recent-searches-${System.identityHashCode(dao)}",
@@ -322,7 +323,7 @@ fun SearchScreen(
                         item {
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                                 items(results.artists, key = { it.id }) { artist ->
-                                    ArtistSearchItem(artist) { query = artist.name }
+                                    ArtistSearchItem(artist, onClick = { onArtist(artist) })
                                 }
                             }
                         }
