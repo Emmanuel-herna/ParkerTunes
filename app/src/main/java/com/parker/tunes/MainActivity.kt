@@ -301,7 +301,7 @@ fun ParkerTunesRoot() {
                                     Row(Modifier.weight(1f).widthIn(min = 24.dp).fillMaxHeight().clip(RoundedCornerShape(24.dp))
                                         .clickable {
                                             selectedTab = item
-                                            nav.navigate(when (item) { "Home" -> "home"; "Explore" -> "search"; else -> "library" }) {
+                                            nav.navigate(when (item) { "Home" -> "home"; "Explore" -> "explore"; else -> "library" }) {
                                                 launchSingleTop = true
                                             }
                                         }.padding(horizontal = 8.dp),
@@ -332,7 +332,14 @@ fun ParkerTunesRoot() {
                 modifier = Modifier.padding(padding)
             ) {
                 composable("home") {
-                    SpotifyHomeScreen(dao = dao, api = api, player = controller, onPlay = playSong, onSettings = { nav.navigate("settings") }, onSearch = { selectedTab = "Explore"; nav.navigate("search") })
+                    SpotifyHomeScreen(dao = dao, api = api, player = controller, onPlay = playSong, onSettings = { nav.navigate("settings") }, onSearch = { selectedTab = "Explore"; nav.navigate("explore") })
+                }
+                composable("explore") {
+                    ExploreScreen(onMood = { mood -> nav.navigate("mood/" + Uri.encode(mood)) })
+                }
+                composable("mood/{mood}") { entry ->
+                    val mood = Uri.decode(entry.arguments?.getString("mood").orEmpty())
+                    MoodResultsScreen(mood = mood, api = api, onBack = { nav.popBackStack() }, onPlay = playSong)
                 }
                 composable("search") {
                     SearchScreen(api = api, dao = dao, onPlay = playSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist") })
