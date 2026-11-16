@@ -595,6 +595,7 @@ fun SearchScreen(
     var moreError by remember { mutableStateOf<String?>(null) }
     var hasMore by remember { mutableStateOf(true) }
     var retryToken by remember { mutableIntStateOf(0) }
+    var moreRetryToken by remember { mutableIntStateOf(0) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val resultCache = remember(api) {
         object : LinkedHashMap<String, List<Song>>(24, 0.75f, true) {
@@ -642,7 +643,7 @@ fun SearchScreen(
 
     // Request another page only when the user scrolls close to the bottom.
     // The first screen is always rendered from page one without waiting for covers.
-    LaunchedEffect(query, api, listState) {
+    LaunchedEffect(query, api, listState, moreRetryToken) {
         androidx.compose.runtime.snapshotFlow {
             listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
         }.collect { lastVisible ->
@@ -716,9 +717,7 @@ fun SearchScreen(
                         TextButton(
                             onClick = {
                                 moreError = null
-                                // Moving the list to its end re-triggers the lazy page request.
-                                val last = (results.size - 1).coerceAtLeast(0)
-                                retryToken++
+                                moreRetryToken++
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) { Text("Couldn't load more — tap to retry") }
