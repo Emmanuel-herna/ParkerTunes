@@ -61,7 +61,6 @@ class WidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             views.setOnClickPendingIntent(com.parker.tunes.R.id.widget_title, open)
             views.setOnClickPendingIntent(com.parker.tunes.R.id.widget_artist, open)
-            views.setOnClickPendingIntent(com.parker.tunes.widgetIdRoot(), open)
             views.setOnClickPendingIntent(com.parker.tunes.R.id.widget_play_pause, broadcast(context, ACTION_TOGGLE, 1))
             views.setOnClickPendingIntent(com.parker.tunes.R.id.widget_next, broadcast(context, ACTION_NEXT, 2))
             views.setOnClickPendingIntent(com.parker.tunes.R.id.widget_previous, broadcast(context, ACTION_PREVIOUS, 3))
