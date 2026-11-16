@@ -10,6 +10,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import java.util.LinkedHashMap
 
 /** Optional BitChord-compatible HTTP addon source, layered beside YouTube. */
 class AddonMusicApi(
@@ -25,6 +26,11 @@ class AddonMusicApi(
 
     @Volatile
     private var manifestCache: CachedManifest? = null
+
+    private val searchCache = object : LinkedHashMap<String, List<Song>>(24, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
+            size > 20
+    }
 
     val configuredAddonUrl: String
         get() = preferences.getString(KEY_ADDON_URL, "").orEmpty()
@@ -53,9 +59,11 @@ class AddonMusicApi(
     }
 
     override suspend fun search(query: String): List<Song> = withContext(Dispatchers.IO) {
-        if (query.isBlank()) return@withContext emptyList()
+        val key = query.trim()
+        if (key.isBlank()) return@withContext emptyList()
+        synchronized(searchCache) { searchCache[key] }?.let { return@withContext it }
         val addonBase = configuredAddonUrl
-        val youtubeResults = youtube.search(query)
+        val youtubeResults = youtube.search(key)
         if (addonBase.isBlank()) return@withContext youtubeResults
 
         val addonResults = runCatching {
@@ -88,10 +96,22 @@ class AddonMusicApi(
             }
         }.getOrDefault(emptyList())
 
-        youtubeResults + addonResults
+        (youtubeResults + addonResults).also { combined ->
+            synchronized(searchCache) { searchCache[key] = combined }
+        }
     }
 
-    override suspend fun searchMore(query: String): List<Song> = youtube.searchMore(query)
+    override suspend fun searchMore(query: String): List<Song> = withContext(Dispatchers.IO) {
+        val key = query.trim()
+        if (key.isBlank()) return@withContext emptyList()
+        val more = youtube.searchMore(key)
+        if (more.isNotEmpty()) {
+            synchronized(searchCache) {
+                searchCache[key] = (searchCache[key].orEmpty() + more).distinctBy { it.id }
+            }
+        }
+        more
+    }
 
     override suspend fun getStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
         val parsed = parseAddonSongId(songId)
