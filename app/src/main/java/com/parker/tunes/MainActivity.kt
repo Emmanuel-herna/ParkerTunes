@@ -649,7 +649,7 @@ fun SearchScreen(
         }.collect { lastVisible ->
             val key = query.trim()
             if (key.isNotBlank() && !loading && !loadingMore && hasMore &&
-                results.isNotEmpty() && lastVisible >= results.size - 4
+                results.isNotEmpty() && moreError == null && lastVisible >= results.size - 1
             ) {
                 loadingMore = true
                 moreError = null
