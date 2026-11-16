@@ -983,7 +983,11 @@ private fun formatTime(ms: Long): String {
 }
 
 @Composable
-fun LibraryScreen(dao: com.parker.tunes.data.LibraryDao) {
+fun LibraryScreen(
+    dao: com.parker.tunes.data.LibraryDao,
+    downloadManager: com.parker.tunes.data.SongDownloadManager,
+    onPlay: (Song) -> Unit
+) {
     var tab by remember { mutableStateOf("Playlists") }
     var showCreate by remember { mutableStateOf(false) }
     var playlistName by remember { mutableStateOf("") }
@@ -994,6 +998,9 @@ fun LibraryScreen(dao: com.parker.tunes.data.LibraryDao) {
         .collectAsState(initial = emptyList())
     val history by remember(dao) { dao.history().flowOn(Dispatchers.IO) }
         .collectAsState(initial = emptyList())
+    val downloads by remember(dao) { dao.downloads().flowOn(Dispatchers.IO) }
+        .collectAsState(initial = emptyList())
+    var showDeleteAllDownloads by remember { mutableStateOf(false) }
     val tracksFlow: kotlinx.coroutines.flow.Flow<List<com.parker.tunes.data.PlaylistTrackEntity>> = remember(selectedPlaylist?.id) {
         selectedPlaylist?.let { dao.playlistTracks(it.id) }
             ?: kotlinx.coroutines.flow.flowOf(emptyList())
@@ -1025,8 +1032,8 @@ fun LibraryScreen(dao: com.parker.tunes.data.LibraryDao) {
             }
         } else {
             ScreenTitle("Keep it close", "Your library", "Everything you want to come back to.")
-            TabRow(selectedTabIndex = listOf("Playlists", "Favorites", "History").indexOf(tab)) {
-                listOf("Playlists", "Favorites", "History").forEach { label ->
+            TabRow(selectedTabIndex = listOf("Playlists", "Favorites", "History", "Downloads").indexOf(tab)) {
+                listOf("Playlists", "Favorites", "History", "Downloads").forEach { label ->
                     Tab(selected = tab == label, onClick = { tab = label }, text = { Text(label, fontSize = 12.sp) })
                 }
             }
@@ -1064,15 +1071,78 @@ fun LibraryScreen(dao: com.parker.tunes.data.LibraryDao) {
                         LibrarySongRow(it.title.ifBlank { it.songId }, it.artist, Icons.Default.Favorite)
                     }
                 }
-                else -> if (history.isEmpty()) {
+                "History" -> if (history.isEmpty()) {
                     EmptyState(Icons.Default.History, "No listening history", "Tracks you play will appear here.")
                 } else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(history, key = { it.id }) {
                         LibrarySongRow(it.title.ifBlank { it.songId }, it.artist, Icons.Default.History)
                     }
                 }
+                else -> {
+                    val complete = downloads.filter { it.status == com.parker.tunes.data.DownloadEntity.STATUS_COMPLETE && File(it.filePath).isFile }
+                    val totalBytes = complete.sumOf { it.fileSizeBytes }
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("${complete.size} songs · ${formatFileSize(totalBytes)}",
+                                    color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+                                Text("Saved on this device", color = Muted, fontSize = 12.sp)
+                            }
+                            TextButton(onClick = { showDeleteAllDownloads = true }, enabled = complete.isNotEmpty()) {
+                                Text("Delete all")
+                            }
+                        }
+                        if (complete.isEmpty()) {
+                            EmptyState(Icons.Default.Download, "No downloads yet", "Songs you download will appear here.")
+                        } else {
+                            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(complete, key = { it.songId }) { item ->
+                                    Row(
+                                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                                            .background(MaterialTheme.colorScheme.surface)
+                                            .clickable {
+                                                onPlay(Song(item.songId, item.title, item.artist, item.coverUrl, item.durationSec))
+                                            }.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(Modifier.size(52.dp).clip(RoundedCornerShape(9.dp))
+                                            .background(Panel), contentAlignment = Alignment.Center) {
+                                            if (item.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.primary)
+                                            else AsyncImage(model = item.coverUrl, contentDescription = "Downloaded cover",
+                                                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                        }
+                                        Column(Modifier.weight(1f).padding(start = 11.dp)) {
+                                            Text(item.title, color = MaterialTheme.colorScheme.onSurface,
+                                                fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text("${item.artist} · ${formatFileSize(item.fileSizeBytes)}",
+                                                color = Muted, fontSize = 11.sp, maxLines = 1)
+                                        }
+                                        IconButton(onClick = { scope.launch(Dispatchers.IO) { downloadManager.remove(item.songId) } }) {
+                                            Icon(Icons.Default.Delete, "Remove download", tint = Muted)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
+    }
+
+    if (showDeleteAllDownloads) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAllDownloads = false },
+            title = { Text("Delete all downloads?") },
+            text = { Text("This removes all downloaded audio files from this device.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteAllDownloads = false
+                    scope.launch(Dispatchers.IO) { downloadManager.removeAll() }
+                }) { Text("Delete all") }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteAllDownloads = false }) { Text("Cancel") } }
+        )
     }
 
     if (showCreate) {
@@ -1110,6 +1180,13 @@ fun LibraryScreen(dao: com.parker.tunes.data.LibraryDao) {
             }
         )
     }
+}
+
+private fun formatFileSize(bytes: Long): String {
+    val mb = bytes.coerceAtLeast(0L) / (1024.0 * 1024.0)
+    return if (mb >= 1024.0) String.format("%.1f GB", mb / 1024.0)
+    else if (mb >= 1.0) String.format("%.1f MB", mb)
+    else String.format("%.0f KB", bytes.coerceAtLeast(0L) / 1024.0)
 }
 
 @Composable
