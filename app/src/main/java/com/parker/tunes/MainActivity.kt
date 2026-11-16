@@ -313,7 +313,7 @@ fun ParkerTunesRoot() {
                 modifier = Modifier.padding(padding)
             ) {
                 composable("home") {
-                    SpotifyHomeScreen(dao = dao, player = controller, onPlay = playSong, onSettings = { nav.navigate("settings") }, onSearch = { selectedTab = "Explore"; nav.navigate("search") })
+                    SpotifyHomeScreen(dao = dao, api = api, player = controller, onPlay = playSong, onSettings = { nav.navigate("settings") }, onSearch = { selectedTab = "Explore"; nav.navigate("search") })
                 }
                 composable("search") {
                     SearchScreen(api = api, dao = dao, onPlay = playSong, onSettings = { nav.navigate("settings") })
