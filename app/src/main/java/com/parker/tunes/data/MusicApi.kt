@@ -30,6 +30,7 @@ interface MusicApi {
     /** Fetches the next song page only when the UI asks for it. */
     suspend fun searchMore(query: String): List<Song> = emptyList()
     suspend fun getRelatedSongs(songId: String): List<Song>
+    suspend fun getMoodSongs(moodQuery: String): List<Song>
     suspend fun getTrending(): List<Song>
     suspend fun getArtistProfile(artist: Artist): ArtistProfile
     suspend fun getAlbumTracks(albumId: String): List<Song>
@@ -63,6 +64,9 @@ class NewPipeMusicApi : MusicApi {
             size > 12
     }
     private var trendingCache: List<Song>? = null
+    private val moodCache = object : LinkedHashMap<String, List<Song>>(24, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean = size > 24
+    }
 
     override suspend fun search(query: String): SearchResult = withContext(Dispatchers.IO) {
         val cleanedQuery = query.trim()
@@ -250,6 +254,27 @@ class NewPipeMusicApi : MusicApi {
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    override suspend fun getMoodSongs(moodQuery: String): List<Song> = withContext(Dispatchers.IO) {
+        val mood = moodQuery.trim()
+        if (mood.isBlank()) return@withContext emptyList()
+        val cacheKey = mood.lowercase()
+        synchronized(cacheLock) { moodCache[cacheKey] }?.let { return@withContext it }
+        try {
+            NewPipeRuntime.ensureInitialized()
+            val handler = YoutubeSearchQueryHandlerFactory.getInstance().fromQuery(
+                "$mood playlist songs", listOf(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS), ""
+            )
+            val extractor = YoutubeMusicSearchExtractor(ServiceList.YouTube, handler)
+            extractor.fetchPage()
+            val songs = extractor.initialPage.items.filterIsInstance<StreamInfoItem>()
+                .mapNotNull(::toSong).distinctBy { it.id }.take(30)
+            synchronized(cacheLock) { moodCache[cacheKey] = songs }
+            songs
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) { emptyList() }
     }
 
     override suspend fun getTrending(): List<Song> = withContext(Dispatchers.IO) {
