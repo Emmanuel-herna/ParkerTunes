@@ -186,8 +186,7 @@ fun SearchScreen(
         Row(
             Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp))
                 .background(SearchSurface)
-                .border(if (searchFocused) 1.dp else 0.dp, if (searchFocused) SearchAccent.copy(alpha = 0.7f) else Color.Transparent, RoundedCornerShape(26.dp))
-                .onFocusChanged { searchFocused = it.isFocused },
+                .border(if (searchFocused) 1.dp else 0.dp, if (searchFocused) SearchAccent.copy(alpha = 0.7f) else Color.Transparent, RoundedCornerShape(26.dp)),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(Icons.Default.Search, null, tint = SearchMuted, modifier = Modifier.padding(start = 16.dp).size(21.dp))
@@ -197,7 +196,7 @@ fun SearchScreen(
                 singleLine = true,
                 textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(SearchAccent),
-                modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                modifier = Modifier.weight(1f).padding(horizontal = 12.dp).onFocusChanged { searchFocused = it.isFocused },
                 decorationBox = { inner ->
                     Box {
                         if (query.isEmpty()) Text("Search songs, artists, albums", color = SearchMuted, fontSize = 14.sp)
@@ -322,7 +321,7 @@ private fun SearchResultRow(song: Song, onClick: () -> Unit) {
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(song.artist, color = SearchMuted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Box(Modifier.padding(start = 8.dp).size(30.dp).clip(CircleShape).background(SearchAccent)
+        Box(Modifier.padding(start = 8.dp) .size(24.dp).clip(CircleShape).background(SearchAccent)
             .clickable(onClick = onClick), contentAlignment = Alignment.Center) {
             Icon(Icons.Default.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(19.dp))
         }
