@@ -124,6 +124,12 @@ class AddonMusicApi(
         more
     }
 
+    override suspend fun getRelatedSongs(songId: String): List<Song> =
+        youtube.getRelatedSongs(songId)
+
+    override suspend fun getTrending(): List<Song> =
+        youtube.getTrending()
+
     override suspend fun getStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
         synchronized(streamCache) { streamCache[songId] }?.let { return@withContext it }
         val parsed = parseAddonSongId(songId)
