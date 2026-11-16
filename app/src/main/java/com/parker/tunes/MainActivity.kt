@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -69,6 +70,7 @@ import com.parker.tunes.ui.theme.ParkerTunesTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -588,21 +590,82 @@ fun SearchScreen(
 ) {
     var results by remember { mutableStateOf<List<Song>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
+    var loadingMore by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var moreError by remember { mutableStateOf<String?>(null) }
+    var hasMore by remember { mutableStateOf(true) }
+    var retryToken by remember { mutableIntStateOf(0) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val resultCache = remember(api) {
+        object : LinkedHashMap<String, List<Song>>(24, 0.75f, true) {
+            override fun removeEldestEntry(
+                eldest: MutableMap.MutableEntry<String, List<Song>>?
+            ): Boolean = size > 20
+        }
+    }
 
-    LaunchedEffect(query, api) {
-        if (query.isBlank()) {
+    LaunchedEffect(query, retryToken, api) {
+        val key = query.trim()
+        if (key.isBlank()) {
             results = emptyList()
             error = null
+            moreError = null
             loading = false
+            hasMore = false
         } else {
-            delay(350)
-            loading = true
-            error = null
-            runCatching { api.search(query.trim()) }
-                .onSuccess { results = it }
-                .onFailure { error = it.message ?: "Search is temporarily unavailable." }
-            loading = false
+            val cached = resultCache[key]
+            if (cached != null) {
+                results = cached
+                error = null
+                loading = false
+            } else {
+                results = emptyList()
+                loading = true
+                error = null
+                delay(250)
+                runCatching { api.search(key) }
+                    .onSuccess {
+                        results = it
+                        resultCache[key] = it
+                        hasMore = it.isNotEmpty()
+                    }
+                    .onFailure {
+                        error = it.message ?: "Search is temporarily unavailable."
+                        hasMore = false
+                    }
+                loading = false
+            }
+            moreError = null
+            listState.scrollToItem(0)
+        }
+    }
+
+    // Request another page only when the user scrolls close to the bottom.
+    // The first screen is always rendered from page one without waiting for covers.
+    LaunchedEffect(query, api, listState) {
+        androidx.compose.runtime.snapshotFlow {
+            listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+        }.collect { lastVisible ->
+            val key = query.trim()
+            if (key.isNotBlank() && !loading && !loadingMore && hasMore &&
+                results.isNotEmpty() && lastVisible >= results.size - 4
+            ) {
+                loadingMore = true
+                moreError = null
+                runCatching { api.searchMore(key) }
+                    .onSuccess { more ->
+                        if (more.isEmpty()) {
+                            hasMore = false
+                        } else {
+                            results = (results + more).distinctBy { it.id }
+                            resultCache[key] = results
+                        }
+                    }
+                    .onFailure {
+                        moreError = it.message ?: "Couldn't load more songs."
+                    }
+                loadingMore = false
+            }
         }
     }
 
@@ -627,10 +690,39 @@ fun SearchScreen(
             loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
-            error != null -> EmptyState(Icons.Default.CloudOff, "Search couldn't load", error!!)
-            results.isNotEmpty() -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            error != null -> Column(
+                Modifier.fillMaxWidth().padding(top = 36.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                EmptyState(Icons.Default.CloudOff, "Search couldn't load", error!!)
+                TextButton(onClick = { retryToken++ }) { Text("Tap to retry") }
+            }
+            results.isNotEmpty() -> LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 items(results, key = { it.id }) { song ->
                     SongRow(song = song, dao = dao, onClick = { onPlay(song) })
+                }
+                if (loadingMore) {
+                    item { Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                    } }
+                }
+                if (moreError != null) {
+                    item {
+                        TextButton(
+                            onClick = {
+                                moreError = null
+                                // Moving the list to its end re-triggers the lazy page request.
+                                val last = (results.size - 1).coerceAtLeast(0)
+                                retryToken++
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Couldn't load more — tap to retry") }
+                    }
                 }
             }
             else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
