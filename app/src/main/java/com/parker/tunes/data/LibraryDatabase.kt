@@ -200,6 +200,9 @@ interface LibraryDao {
     @Query("SELECT * FROM play_history ORDER BY playedAt DESC LIMIT 100")
     fun history(): Flow<List<PlayHistoryEntity>>
 
+    @Query("SELECT * FROM play_history ORDER BY playedAt DESC")
+    suspend fun historySnapshot(): List<PlayHistoryEntity>
+
     @Query("SELECT * FROM play_history ORDER BY playedAt DESC LIMIT 20")
     fun recentlyPlayed(): Flow<List<PlayHistoryEntity>>
 
