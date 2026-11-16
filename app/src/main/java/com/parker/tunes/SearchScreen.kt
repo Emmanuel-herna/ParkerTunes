@@ -25,10 +25,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +54,8 @@ import coil.compose.AsyncImage
 import com.parker.tunes.data.LibraryDao
 import com.parker.tunes.data.MusicApi
 import com.parker.tunes.data.RecentSearchEntity
+import com.parker.tunes.data.DownloadEntity
+import com.parker.tunes.data.SongDownloadManager
 import com.parker.tunes.model.Artist
 import com.parker.tunes.model.SearchResult
 import com.parker.tunes.model.Song
@@ -113,13 +118,16 @@ fun SearchScreen(
     dao: LibraryDao,
     onPlay: (Song) -> Unit,
     onSettings: () -> Unit,
-    onArtist: (Artist) -> Unit
+    onArtist: (Artist) -> Unit,
+    downloads: SongDownloadManager
 ) {
     val recentVm: RecentSearchesViewModel = viewModel(
         key = "recent-searches-${System.identityHashCode(dao)}",
         factory = remember(dao) { RecentSearchesFactory(dao) }
     )
     val recent by recentVm.recent.collectAsState()
+    val savedDownloads by remember(dao) { dao.downloads().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
+    val downloadProgress by downloads.progress.collectAsState()
     var query by remember { mutableStateOf("") }
     var activeSource by remember { mutableStateOf("YouTube") }
     var results by remember { mutableStateOf(SearchResult()) }
@@ -339,10 +347,18 @@ fun SearchScreen(
                             )
                         }
                         items(results.songs, key = { it.id }) { song ->
-                            SearchResultRow(song) {
-                                recentVm.recordFirstResult(query, song)
-                                onPlay(song)
-                            }
+                            SearchResultRow(
+                                song = song,
+                                download = savedDownloads.firstOrNull { it.songId == song.id },
+                                progress = downloadProgress[song.id],
+                                onDownload = { downloads.enqueue(song) },
+                                onCancelDownload = { downloads.cancel(song.id) },
+                                onRemoveDownload = { scope -> scope.launch(Dispatchers.IO) { downloads.remove(song.id) } },
+                                onClick = {
+                                    recentVm.recordFirstResult(query, song)
+                                    onPlay(song)
+                                }
+                            )
                         }
                     }
                 }
@@ -352,9 +368,19 @@ fun SearchScreen(
 }
 
 @Composable
-private fun SearchResultRow(song: Song, onClick: () -> Unit) {
+private fun SearchResultRow(
+    song: Song,
+    download: DownloadEntity?,
+    progress: Int?,
+    onDownload: () -> Unit,
+    onCancelDownload: () -> Unit,
+    onRemoveDownload: (kotlinx.coroutines.CoroutineScope) -> Unit,
+    onClick: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var menuExpanded by remember(song.id) { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().height(64.dp).clip(RoundedCornerShape(12.dp))
+        Modifier.fillMaxWidth().height(66.dp).clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -363,13 +389,51 @@ private fun SearchResultRow(song: Song, onClick: () -> Unit) {
             if (song.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = SearchMuted)
             else AsyncImage(model = song.coverUrl, contentDescription = "Song cover",
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            if (progress != null || download?.status == DownloadEntity.STATUS_DOWNLOADING) {
+                CircularProgressIndicator(
+                    progress = { (progress ?: 0).coerceIn(0, 100) / 100f },
+                    modifier = Modifier.size(30.dp), color = SearchAccent, strokeWidth = 3.dp
+                )
+            } else if (download?.status == DownloadEntity.STATUS_COMPLETE) {
+                Icon(Icons.Default.CheckCircle, "Downloaded", tint = SearchAccent,
+                    modifier = Modifier.align(Alignment.BottomEnd).size(19.dp))
+            }
         }
         Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(song.title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+            Text(song.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(song.artist, color = SearchMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(song.artist, color = SearchMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Box(Modifier.padding(start = 8.dp) .size(24.dp).clip(CircleShape).background(SearchAccent)
+        Box {
+            IconButton(onClick = { menuExpanded = true }) {
+                Icon(Icons.Default.MoreVert, "Song options", tint = SearchMuted)
+            }
+            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                when (download?.status) {
+                    DownloadEntity.STATUS_COMPLETE -> DropdownMenuItem(
+                        text = { Text("Remove download") },
+                        leadingIcon = { Icon(Icons.Default.Delete, null) },
+                        onClick = { menuExpanded = false; onRemoveDownload(scope) }
+                    )
+                    DownloadEntity.STATUS_DOWNLOADING -> DropdownMenuItem(
+                        text = { Text("Cancel download") },
+                        leadingIcon = { Icon(Icons.Default.Close, null) },
+                        onClick = { menuExpanded = false; onCancelDownload() }
+                    )
+                    DownloadEntity.STATUS_FAILED -> DropdownMenuItem(
+                        text = { Text("Retry download") },
+                        leadingIcon = { Icon(Icons.Default.Download, null) },
+                        onClick = { menuExpanded = false; onDownload() }
+                    )
+                    else -> DropdownMenuItem(
+                        text = { Text("Download") },
+                        leadingIcon = { Icon(Icons.Default.Download, null) },
+                        onClick = { menuExpanded = false; onDownload() }
+                    )
+                }
+            }
+        }
+        Box(Modifier.padding(start = 2.dp).size(24.dp).clip(CircleShape).background(SearchAccent)
             .clickable(onClick = onClick), contentAlignment = Alignment.Center) {
             Icon(Icons.Default.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(19.dp))
         }
