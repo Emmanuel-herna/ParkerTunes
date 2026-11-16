@@ -1,5 +1,8 @@
 package com.parker.tunes
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -8,6 +11,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -118,6 +125,16 @@ fun SearchScreen(
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var searchFocused by remember { mutableStateOf(false) }
+    var headerVisible by remember { mutableStateOf(true) }
+    val headerScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < -5f) headerVisible = false
+                else if (available.y > 5f) headerVisible = true
+                return Offset.Zero
+            }
+        }
+    }
 
     LaunchedEffect(query, api, activeSource) {
         val clean = query.trim()
@@ -147,6 +164,12 @@ fun SearchScreen(
     Column(
         Modifier.fillMaxSize().background(SearchBlack).padding(horizontal = 16.dp)
     ) {
+        AnimatedVisibility(
+            visible = headerVisible,
+            enter = expandVertically(expandFrom = Alignment.Top),
+            exit = shrinkVertically(shrinkTowards = Alignment.Top)
+        ) {
+            Column {
         Row(
             Modifier.fillMaxWidth().padding(top = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -215,6 +238,8 @@ fun SearchScreen(
         }
 
         Spacer(Modifier.height(20.dp))
+            }
+        }
 
         if (activeSource != "YouTube") {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -222,9 +247,9 @@ fun SearchScreen(
             }
         } else if (query.isBlank()) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 120.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.fillMaxSize().nestedScroll(headerScrollConnection),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 120.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 if (recent.isNotEmpty()) {
                     item {
@@ -286,9 +311,9 @@ fun SearchScreen(
                     Text("No artists or songs found", color = SearchMuted, modifier = Modifier.padding(top = 24.dp))
                 }
                 else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 120.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.fillMaxSize().nestedScroll(headerScrollConnection),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 120.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     if (results.artists.isNotEmpty()) {
                         item {
@@ -328,20 +353,20 @@ fun SearchScreen(
 @Composable
 private fun SearchResultRow(song: Song, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(64.dp).clip(RoundedCornerShape(10.dp))
+        Modifier.fillMaxWidth().height(72.dp).clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)).background(SearchSurface),
+        Box(Modifier.size(60.dp).clip(RoundedCornerShape(10.dp)).background(SearchSurface),
             contentAlignment = Alignment.Center) {
             if (song.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = SearchMuted)
             else AsyncImage(model = song.coverUrl, contentDescription = "Song cover",
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
         Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(song.title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+            Text(song.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(song.artist, color = SearchMuted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(song.artist, color = SearchMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Box(Modifier.padding(start = 8.dp) .size(24.dp).clip(CircleShape).background(SearchAccent)
             .clickable(onClick = onClick), contentAlignment = Alignment.Center) {
@@ -378,12 +403,12 @@ private fun ShimmerResults() {
 @Composable
 private fun ArtistSearchItem(artist: Artist, onClick: () -> Unit) {
     Column(
-        modifier = Modifier.width(84.dp).clickable(onClick = onClick),
+        modifier = Modifier.width(92.dp).clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
         Box(
-            Modifier.size(72.dp).clip(CircleShape).background(SearchSurface),
+            Modifier.size(78.dp).clip(CircleShape).background(SearchSurface),
             contentAlignment = Alignment.Center
         ) {
             if (artist.avatarUrl.isNullOrBlank()) {
