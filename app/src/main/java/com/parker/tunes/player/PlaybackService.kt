@@ -36,12 +36,21 @@ class PlaybackService : MediaSessionService() {
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY) effects.attach(player.audioSessionId)
+                WidgetProvider.update(this@PlaybackService, player)
+            }
+            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                WidgetProvider.update(this@PlaybackService, player)
+            }
+            override fun onMediaMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
+                WidgetProvider.update(this@PlaybackService, player)
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) effects.attach(player.audioSessionId)
+                WidgetProvider.update(this@PlaybackService, player)
             }
         })
         mediaSession = MediaSession.Builder(this, player).build()
+        WidgetProvider.update(this, player)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
