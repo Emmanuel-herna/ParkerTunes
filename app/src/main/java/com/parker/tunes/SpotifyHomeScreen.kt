@@ -254,8 +254,6 @@ fun SpotifyHomeScreen(
 }
 
 @Composable
-
-@Composable
 private fun RecommendationShimmer() {
     val transition = rememberInfiniteTransition(label = "recommendationShimmer")
     val alpha by transition.animateFloat(
