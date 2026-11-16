@@ -72,5 +72,3 @@ class WidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 }
-
-private fun com.parker.tunes.widgetIdRoot(): Int = com.parker.tunes.R.id.widget_title
