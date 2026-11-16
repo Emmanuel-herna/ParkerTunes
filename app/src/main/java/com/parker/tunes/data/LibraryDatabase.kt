@@ -56,6 +56,26 @@ data class EqualizerSettingsEntity(
     val monoEnabled: Boolean = false
 )
 
+@Entity(tableName = "downloads")
+data class DownloadEntity(
+    @PrimaryKey val songId: String,
+    val title: String,
+    val artist: String,
+    val coverUrl: String?,
+    val filePath: String,
+    val fileSizeBytes: Long,
+    val downloadedAt: Long,
+    val durationSec: Long,
+    val status: String = STATUS_COMPLETE,
+    val errorMessage: String? = null
+) {
+    companion object {
+        const val STATUS_DOWNLOADING = "DOWNLOADING"
+        const val STATUS_COMPLETE = "COMPLETE"
+        const val STATUS_FAILED = "FAILED"
+    }
+}
+
 @Entity(tableName = "lyrics_cache")
 data class LyricsCacheEntity(
     @PrimaryKey val songId: String,
@@ -87,6 +107,24 @@ data class PlayCountItem(
 
 @Dao
 interface LibraryDao {
+    @Query("SELECT * FROM downloads ORDER BY downloadedAt DESC")
+    fun downloads(): Flow<List<DownloadEntity>>
+
+    @Query("SELECT * FROM downloads WHERE songId = :songId LIMIT 1")
+    suspend fun download(songId: String): DownloadEntity?
+
+    @Query("SELECT * FROM downloads WHERE status = 'COMPLETE' ORDER BY downloadedAt DESC")
+    suspend fun downloadsSnapshot(): List<DownloadEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveDownload(item: DownloadEntity)
+
+    @Query("DELETE FROM downloads WHERE songId = :songId")
+    suspend fun removeDownload(songId: String)
+
+    @Query("DELETE FROM downloads")
+    suspend fun clearDownloads()
+
     @Query("SELECT * FROM lyrics_cache WHERE songId = :songId LIMIT 1")
     suspend fun lyrics(songId: String): LyricsCacheEntity?
 
@@ -174,8 +212,8 @@ interface LibraryDao {
 }
 
 @Database(
-    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class, EqualizerSettingsEntity::class, LyricsCacheEntity::class],
-    version = 7,
+    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class, EqualizerSettingsEntity::class, LyricsCacheEntity::class, DownloadEntity::class],
+    version = 8,
     exportSchema = false
 )
 abstract class LibraryDatabase : RoomDatabase() {
@@ -226,13 +264,19 @@ abstract class LibraryDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS downloads (songId TEXT NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, coverUrl TEXT, filePath TEXT NOT NULL, fileSizeBytes INTEGER NOT NULL, downloadedAt INTEGER NOT NULL, durationSec INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'COMPLETE', errorMessage TEXT, PRIMARY KEY(songId))")
+            }
+        }
+
         fun get(context: Context): LibraryDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     LibraryDatabase::class.java,
                     "parker_tunes.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).build().also { INSTANCE = it }
             }
     }
 }
