@@ -2,15 +2,17 @@ package com.parker.tunes.screenshots
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
-import io.github.takahirom.roborazzi.captureRoboImage
+import com.github.takahirom.roborazzi.captureRoboImage
 import com.parker.tunes.ui.preview.ParkerTunesPreviewScreen
 import com.parker.tunes.ui.preview.PreviewState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ParkerTunesScreenRoborazziTest {
     @get:Rule
     val composeRule = createComposeRule()
