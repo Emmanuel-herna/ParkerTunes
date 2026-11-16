@@ -44,6 +44,7 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.5.1")
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
     // NewPipe Extractor and its HTTP downloader.
