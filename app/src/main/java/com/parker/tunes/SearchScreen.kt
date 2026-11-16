@@ -133,12 +133,12 @@ fun SearchScreen(
         try {
             val found = withContext(Dispatchers.IO) { api.search(clean) }
             results = found
-            if (found.isNotEmpty()) recentVm.recordQuery(clean)
+            if (found.songs.isNotEmpty() || found.artists.isNotEmpty()) recentVm.recordQuery(clean)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
             error = failure.message ?: "Search is temporarily unavailable."
-            results = emptyList()
+            results = SearchResult()
         } finally {
             loading = false
         }
