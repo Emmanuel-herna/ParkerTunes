@@ -40,7 +40,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.ui.input.pointer.consume
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import androidx.core.content.ContextCompat
