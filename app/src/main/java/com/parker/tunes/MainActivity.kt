@@ -12,6 +12,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,11 +29,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.consume
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import androidx.core.content.ContextCompat
@@ -45,6 +53,8 @@ import com.parker.tunes.data.FavoriteEntity
 import com.parker.tunes.data.MusicApi
 import com.parker.tunes.model.Song
 import com.parker.tunes.player.PlaybackService
+import com.parker.tunes.player.PlayerUiState
+import com.parker.tunes.player.PlayerUiStateObserver
 import com.parker.tunes.ui.theme.ParkerTunesTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -116,29 +126,28 @@ fun ParkerTunesRoot() {
     )
 
     MaterialTheme(colorScheme = scheme) {
-        val isPlaying = controller?.isPlaying == true
-        var refresh by remember { mutableIntStateOf(0) }
-        LaunchedEffect(controller) {
-            while (true) {
-                refresh++
-                delay(500)
-            }
+        val playerObserver = remember(controller) { controller?.let(::PlayerUiStateObserver) }
+        DisposableEffect(playerObserver) {
+            onDispose { playerObserver?.close() }
         }
-        val currentTitle = controller?.currentMediaItem?.mediaMetadata?.title?.toString() ?: "Nothing playing"
-        val currentArtist = controller?.currentMediaItem?.mediaMetadata?.artist?.toString() ?: "Choose a track"
+        val playerState by (playerObserver?.state
+            ?: remember { kotlinx.coroutines.flow.MutableStateFlow(PlayerUiState()) }).collectAsState()
+        val isPlaying = playerState.isPlaying
+        val currentTitle = playerState.title
+        val currentArtist = playerState.artist
 
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
                 Column {
                     AnimatedVisibility(
-                        visible = controller?.currentMediaItem != null,
+                        visible = playerState.hasItem,
                         enter = fadeIn(), exit = fadeOut()
                     ) {
                         MiniPlayer(
                             title = currentTitle,
                             artist = currentArtist,
-                            coverUrl = controller?.currentMediaItem?.mediaMetadata?.artworkUri?.toString(),
+                            coverUrl = playerState.artworkUri,
                             playing = isPlaying,
                             onClick = { nav.navigate("nowplaying") },
                             onPlayPause = {
@@ -209,7 +218,7 @@ fun ParkerTunesRoot() {
                     }
                 }
                 composable("nowplaying") {
-                    NowPlayingScreen(controller, refresh, currentTitle, currentArtist, controller?.currentMediaItem?.mediaMetadata?.artworkUri?.toString()) {
+                    NowPlayingScreen(controller, playerState) {
                         nav.popBackStack()
                     }
                 }
@@ -409,16 +418,43 @@ private fun MiniPlayer(
 
 @Composable
 private fun NowPlayingScreen(
-    player: MediaController?, refresh: Int, title: String, artist: String, coverUrl: String?, onBack: () -> Unit
+    player: MediaController?, playerState: PlayerUiState, onBack: () -> Unit
 ) {
-    val duration = (player?.duration ?: 0L).coerceAtLeast(0L)
-    val position = (player?.currentPosition ?: 0L).coerceAtLeast(0L).coerceAtMost(duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
-    val playing = player?.isPlaying == true
-    var shuffle by remember { mutableStateOf(false) }
-    var repeat by remember { mutableIntStateOf(0) }
+    val duration = playerState.durationMs.coerceAtLeast(0L)
+    val position = playerState.positionMs.coerceAtLeast(0L).coerceAtMost(duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
+    val playing = playerState.isPlaying
+    val title = playerState.title
+    val artist = playerState.artist
+    val coverUrl = playerState.artworkUri
+    var seeking by remember { mutableStateOf(false) }
+    var seekValue by remember { mutableFloatStateOf(0f) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val animatedDrag by animateFloatAsState(dragOffset, animationSpec = tween(120), label = "playerDismissDrag")
+    val coverScale = (1f - (animatedDrag / 900f).coerceIn(0f, 0.16f))
+    val shuffle = playerState.shuffleEnabled
+    val repeat = playerState.repeatMode
 
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 18.dp),
+        Modifier.fillMaxSize()
+            .graphicsLayer { translationY = animatedDrag; alpha = 1f - (animatedDrag / 1000f).coerceIn(0f, 0.12f) }
+            .pointerInput(onBack) {
+                var totalDrag = 0f
+                detectVerticalDragGestures(
+                    onVerticalDrag = { change, dragAmount ->
+                        if (dragAmount > 0f || totalDrag > 0f) {
+                            totalDrag = (totalDrag + dragAmount).coerceAtLeast(0f)
+                            dragOffset = totalDrag
+                            change.consume()
+                        }
+                    },
+                    onDragEnd = {
+                        if (totalDrag > 135f) onBack() else dragOffset = 0f
+                        totalDrag = 0f
+                    },
+                    onDragCancel = { dragOffset = 0f; totalDrag = 0f }
+                )
+            }
+            .padding(horizontal = 24.dp, vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
@@ -431,6 +467,8 @@ private fun NowPlayingScreen(
         }
         Box(
             Modifier.fillMaxWidth().weight(1f).padding(vertical = 26.dp)
+                .graphicsLayer { scaleX = coverScale; scaleY = coverScale }
+                .shadow(22.dp, RoundedCornerShape(28.dp))
                 .clip(RoundedCornerShape(28.dp)).background(
                     androidx.compose.ui.graphics.Brush.linearGradient(
                         listOf(Color(0xFF30264B), Color(0xFF171D31), Color(0xFF44345B))
@@ -442,7 +480,7 @@ private fun NowPlayingScreen(
                 Icon(Icons.Default.Album, null, tint = Color.White.copy(alpha = .82f), modifier = Modifier.size(112.dp))
             } else {
                 AsyncImage(model = coverUrl, contentDescription = "Album cover",
-                    modifier = Modifier.fillMaxSize())
+                    modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
             }
         }
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -450,12 +488,17 @@ private fun NowPlayingScreen(
                 fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(artist, color = Muted, fontSize = 15.sp)
             Slider(
-                value = if (duration > 0) position.toFloat().coerceIn(0f, duration.toFloat()) else 0f,
-                onValueChange = { player?.seekTo(it.toLong()) },
-                valueRange = 0f..(duration.toFloat().coerceAtLeast(1f))
+                value = if (seeking) seekValue else position.toFloat().coerceIn(0f, duration.toFloat().coerceAtLeast(1f)),
+                onValueChange = {
+                    seeking = true
+                    seekValue = it
+                    player?.seekTo(it.toLong())
+                },
+                onValueChangeFinished = { seeking = false },
+                valueRange = 0f..duration.toFloat().coerceAtLeast(1f)
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(formatTime(position), color = Muted, fontSize = 11.sp)
+                Text(formatTime(if (seeking) seekValue.toLong() else position), color = Muted, fontSize = 11.sp)
                 Text(formatTime(duration), color = Muted, fontSize = 11.sp)
             }
         }
@@ -481,10 +524,9 @@ private fun NowPlayingScreen(
                 Icon(Icons.Default.SkipNext, "Next", modifier = Modifier.size(36.dp))
             }
             IconButton(onClick = {
-                repeat = (repeat + 1) % 3
                 player?.repeatMode = when (repeat) {
-                    1 -> androidx.media3.common.Player.REPEAT_MODE_ALL
-                    2 -> androidx.media3.common.Player.REPEAT_MODE_ONE
+                    androidx.media3.common.Player.REPEAT_MODE_OFF -> androidx.media3.common.Player.REPEAT_MODE_ALL
+                    androidx.media3.common.Player.REPEAT_MODE_ALL -> androidx.media3.common.Player.REPEAT_MODE_ONE
                     else -> androidx.media3.common.Player.REPEAT_MODE_OFF
                 }
             }) {
