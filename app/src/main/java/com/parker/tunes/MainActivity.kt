@@ -60,6 +60,7 @@ import androidx.media3.session.SessionToken
 import androidx.navigation.compose.*
 import com.google.common.util.concurrent.ListenableFuture
 import com.parker.tunes.data.PlayHistoryEntity
+import com.parker.tunes.data.BackupManager
 import com.parker.tunes.data.EqualizerSettingsEntity
 import com.parker.tunes.data.FavoriteEntity
 import com.parker.tunes.data.MusicApi
@@ -414,6 +415,8 @@ fun ParkerTunesRoot() {
                 }
                 composable("settings") {
                     SettingsScreen(
+                        dao = dao,
+                        settingsPrefs = settingsPrefs,
                         lightMode = lightMode,
                         onOpenEqualizer = { nav.navigate("equalizer") },
                         onOpenStats = { nav.navigate("stats") },
@@ -1207,6 +1210,8 @@ private fun LibrarySongRow(title: String, artist: String, icon: androidx.compose
 
 @Composable
 fun SettingsScreen(
+    dao: com.parker.tunes.data.LibraryDao,
+    settingsPrefs: android.content.SharedPreferences,
     lightMode: Boolean,
     onOpenEqualizer: () -> Unit,
     onOpenStats: () -> Unit,
@@ -1216,6 +1221,27 @@ fun SettingsScreen(
     onLightMode: (Boolean) -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val backupManager = remember(dao, context, settingsPrefs) { BackupManager(context, dao, settingsPrefs) }
+    var backupStatus by remember { mutableStateOf<String?>(null) }
+    val exportBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) scope.launch {
+            runCatching { backupManager.exportTo(uri) }
+                .onSuccess { backupStatus = "Backup exported successfully." }
+                .onFailure { backupStatus = it.message ?: "Could not export backup." }
+        }
+    }
+    val importBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) scope.launch {
+            runCatching { backupManager.importFrom(uri) }
+                .onSuccess { count -> backupStatus = "Backup merged. $count new library items imported." }
+                .onFailure { backupStatus = it.message ?: "Could not import backup." }
+        }
+    }
     var addonUrl by remember(addonApi) {
         mutableStateOf(addonApi?.configuredAddonUrl.orEmpty())
     }
@@ -1274,6 +1300,24 @@ fun SettingsScreen(
                 Text("Switch between dark and light mode", color = Muted, fontSize = 12.sp)
             }
             Switch(checked = lightMode, onCheckedChange = onLightMode)
+        }
+
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.surface).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Backup & restore", color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            Text("Export playlists, favourites, listening history and sound settings to a JSON file.",
+                color = Muted, fontSize = 12.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = { exportBackup.launch("ParkerTunes-backup.json") },
+                    modifier = Modifier.weight(1f)) { Text("Export") }
+                Button(onClick = { importBackup.launch(arrayOf("application/json", "text/*")) },
+                    modifier = Modifier.weight(1f)) { Text("Import") }
+            }
+            backupStatus?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp) }
         }
 
         Column(
