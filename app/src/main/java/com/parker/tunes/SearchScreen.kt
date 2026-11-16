@@ -71,11 +71,11 @@ class RecentSearchesViewModel(private val dao: LibraryDao) : ViewModel() {
         viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList()
     )
 
-    fun recordQuery(query: String) {
+    fun recordQuery(query: String, kind: String) {
         val clean = query.trim()
         if (clean.isBlank()) return
         viewModelScope.launch(Dispatchers.IO) {
-            dao.saveRecentSearch(RecentSearchEntity(query = clean, searchedAt = System.currentTimeMillis()))
+            dao.saveRecentSearch(RecentSearchEntity(query = clean, searchedAt = System.currentTimeMillis(), title = clean, artist = kind))
         }
     }
 
@@ -88,7 +88,7 @@ class RecentSearchesViewModel(private val dao: LibraryDao) : ViewModel() {
                     query = clean,
                     searchedAt = System.currentTimeMillis(),
                     title = song.title,
-                    artist = song.artist,
+                    artist = "Song",
                     coverUrl = song.coverUrl,
                     songId = song.id
                 )
@@ -151,14 +151,14 @@ fun SearchScreen(
         try {
             val found = withContext(Dispatchers.IO) { api.search(clean) }
             results = found
-            if (found.songs.isNotEmpty() || found.artists.isNotEmpty()) recentVm.recordQuery(clean)
+            if (found.songs.isNotEmpty() || found.artists.isNotEmpty()) recentVm.recordQuery(clean, if (found.songs.isNotEmpty()) "Song" else "Artist")
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
             error = failure.message ?: "Search is temporarily unavailable."
             results = SearchResult()
         } finally {
-            loading = false
+            if (query.trim() == clean) loading = false
         }
     }
 
@@ -323,7 +323,7 @@ fun SearchScreen(
                         item {
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                                 items(results.artists, key = { it.id }) { artist ->
-                                    ArtistSearchItem(artist, onClick = { onArtist(artist) })
+                                    ArtistSearchItem(artist, onClick = { query = artist.name })
                                 }
                             }
                         }
@@ -354,18 +354,18 @@ fun SearchScreen(
 @Composable
 private fun SearchResultRow(song: Song, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(72.dp).clip(RoundedCornerShape(14.dp))
+        Modifier.fillMaxWidth().height(64.dp).clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(60.dp).clip(RoundedCornerShape(10.dp)).background(SearchSurface),
+        Box(Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)).background(SearchSurface),
             contentAlignment = Alignment.Center) {
             if (song.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = SearchMuted)
             else AsyncImage(model = song.coverUrl, contentDescription = "Song cover",
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
         Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(song.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+            Text(song.title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(song.artist, color = SearchMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
