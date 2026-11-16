@@ -1,6 +1,8 @@
 package com.parker.tunes.data
 
 import android.net.Uri
+import com.parker.tunes.model.Artist
+import com.parker.tunes.model.SearchResult
 import com.parker.tunes.model.Song
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -8,6 +10,7 @@ import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.Page
 import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.channel.ChannelInfoItem
 import org.schabi.newpipe.extractor.linkhandler.SearchQueryHandler
 import org.schabi.newpipe.extractor.search.SearchExtractor
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
@@ -16,8 +19,8 @@ import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.util.LinkedHashMap
 
 interface MusicApi {
-    suspend fun search(query: String): List<Song>
-    /** Fetches the next page only when the UI asks for it. */
+    suspend fun search(query: String): SearchResult
+    /** Fetches the next song page only when the UI asks for it. */
     suspend fun searchMore(query: String): List<Song> = emptyList()
     suspend fun getStreamUrl(songId: String): String
     suspend fun getLyrics(songId: String): String?
@@ -25,9 +28,8 @@ interface MusicApi {
 }
 
 /**
- * YouTube Music search through NewPipe's MUSIC_SONGS content filter.
- * NewPipe models YouTube and YouTube Music as one service (service ID 0);
- * this filter routes the query to YoutubeMusicSearchExtractor, not video search.
+ * YouTube Music search through NewPipe's native MUSIC_SONGS and MUSIC_ARTISTS filters.
+ * NewPipe uses service ID 0 for both YouTube and YouTube Music.
  */
 class NewPipeMusicApi : MusicApi {
     private data class SearchSession(
@@ -36,8 +38,8 @@ class NewPipeMusicApi : MusicApi {
     )
 
     private val cacheLock = Any()
-    private val resultCache = object : LinkedHashMap<String, List<Song>>(24, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
+    private val resultCache = object : LinkedHashMap<String, SearchResult>(24, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, SearchResult>?): Boolean =
             size > 20
     }
     private val sessions = object : LinkedHashMap<String, SearchSession>(12, 0.75f, true) {
@@ -45,36 +47,51 @@ class NewPipeMusicApi : MusicApi {
             size > 10
     }
 
-    override suspend fun search(query: String): List<Song> = withContext(Dispatchers.IO) {
+    override suspend fun search(query: String): SearchResult = withContext(Dispatchers.IO) {
         val cleanedQuery = query.trim()
-        if (cleanedQuery.isEmpty()) return@withContext emptyList()
+        if (cleanedQuery.isEmpty()) return@withContext SearchResult()
         synchronized(cacheLock) { resultCache[cleanedQuery] }?.let { return@withContext it }
 
         try {
             NewPipeRuntime.ensureInitialized()
-            val searchHandler: SearchQueryHandler =
-                YoutubeSearchQueryHandlerFactory.getInstance().fromQuery(
-                    cleanedQuery,
-                    listOf(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS),
-                    ""
-                )
+            val factory = YoutubeSearchQueryHandlerFactory.getInstance()
 
-            // Exactly one extractor and one initial-page fetch per uncached query.
-            val extractor = ServiceList.YouTube.getSearchExtractor(searchHandler)
-            extractor.fetchPage()
-            val firstPage = extractor.initialPage
-            val songs = firstPage.items.filterIsInstance<StreamInfoItem>().mapNotNull(::toSong)
+            // Keep the song extractor as the paging session used by searchMore().
+            val songsHandler: SearchQueryHandler = factory.fromQuery(
+                cleanedQuery,
+                listOf(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS),
+                ""
+            )
+            val songsExtractor = ServiceList.YouTube.getSearchExtractor(songsHandler)
+            songsExtractor.fetchPage()
+            val songsPage = songsExtractor.initialPage
+            val songs = songsPage.items.filterIsInstance<StreamInfoItem>().mapNotNull(::toSong)
 
-            synchronized(cacheLock) {
-                resultCache[cleanedQuery] = songs
-                sessions[cleanedQuery] = SearchSession(extractor, firstPage.nextPage)
+            // YouTube Music exposes artist/channel results through its MUSIC_ARTISTS filter.
+            val artistsHandler: SearchQueryHandler = factory.fromQuery(
+                cleanedQuery,
+                listOf(YoutubeSearchQueryHandlerFactory.MUSIC_ARTISTS),
+                ""
+            )
+            val artistsExtractor = ServiceList.YouTube.getSearchExtractor(artistsHandler)
+            artistsExtractor.fetchPage()
+            val artists = artistsExtractor.initialPage.items
+                .filterIsInstance<ChannelInfoItem>()
+                .mapNotNull(::toArtist)
+                .distinctBy { it.id }
+
+            SearchResult(songs = songs, artists = artists).also { combined ->
+                synchronized(cacheLock) {
+                    resultCache[cleanedQuery] = combined
+                    sessions[cleanedQuery] = SearchSession(songsExtractor, songsPage.nextPage)
+                }
             }
-            songs
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
             throw SearchUnavailableException(
-                failure.message?.takeIf { it.isNotBlank() } ?: "Search timed out or the music service is unavailable.",
+                failure.message?.takeIf { it.isNotBlank() }
+                    ?: "Search timed out or the music service is unavailable.",
                 failure
             )
         }
@@ -92,9 +109,10 @@ class NewPipeMusicApi : MusicApi {
             val songs = next.items.filterIsInstance<StreamInfoItem>().mapNotNull(::toSong)
             synchronized(cacheLock) {
                 session.nextPage = next.nextPage
-                val merged = (resultCache[cleanedQuery].orEmpty() + songs)
-                    .distinctBy { it.id }
-                resultCache[cleanedQuery] = merged
+                val previous = resultCache[cleanedQuery] ?: SearchResult()
+                resultCache[cleanedQuery] = previous.copy(
+                    songs = (previous.songs + songs).distinctBy { it.id }
+                )
             }
             songs
         } catch (cancelled: CancellationException) {
@@ -115,6 +133,18 @@ class NewPipeMusicApi : MusicApi {
             artist = item.uploaderName.orEmpty().ifBlank { "Unknown artist" },
             coverUrl = youtubeThumbnail(videoId),
             durationSec = item.duration.coerceAtLeast(0L)
+        )
+    }
+
+    private fun toArtist(item: ChannelInfoItem): Artist? {
+        val url = item.url?.takeIf { it.isNotBlank() } ?: return null
+        val name = item.name?.takeIf { it.isNotBlank() } ?: return null
+        return Artist(
+            id = url,
+            name = name,
+            avatarUrl = item.thumbnails.firstOrNull()?.url,
+            subscriberCount = item.subscriberCount.coerceAtLeast(0L),
+            description = item.description.orEmpty()
         )
     }
 
