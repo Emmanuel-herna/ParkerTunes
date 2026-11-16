@@ -416,10 +416,16 @@ private fun SearchResultRow(
             else AsyncImage(model = song.coverUrl, contentDescription = "Song cover",
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             if (progress != null || download?.status == DownloadEntity.STATUS_DOWNLOADING) {
-                CircularProgressIndicator(
-                    progress = { (progress ?: 0).coerceIn(0, 100) / 100f },
-                    modifier = Modifier.size(30.dp), color = SearchAccent, strokeWidth = 3.dp
-                )
+                if (progress == null) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(30.dp), color = SearchAccent, strokeWidth = 3.dp
+                    )
+                } else {
+                    CircularProgressIndicator(
+                        progress = { progress.coerceIn(0, 100) / 100f },
+                        modifier = Modifier.size(30.dp), color = SearchAccent, strokeWidth = 3.dp
+                    )
+                }
             } else if (download?.status == DownloadEntity.STATUS_COMPLETE) {
                 Icon(Icons.Default.CheckCircle, "Downloaded", tint = SearchAccent,
                     modifier = Modifier.align(Alignment.BottomEnd).size(19.dp))
