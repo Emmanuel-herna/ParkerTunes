@@ -4,6 +4,7 @@ import android.app.Application
 import com.parker.tunes.data.AddonMusicApi
 import com.parker.tunes.data.LibraryDatabase
 import com.parker.tunes.data.MusicApi
+import com.parker.tunes.data.SongDownloadManager
 import coil.Coil
 import coil.ImageLoader
 import coil.disk.DiskCache
@@ -13,6 +14,7 @@ class ParkerTunesApp : Application() {
     lateinit var musicApi: MusicApi
         private set
     val database by lazy { LibraryDatabase.get(this) }
+    val downloads by lazy { SongDownloadManager(this, database.libraryDao(), musicApi) }
 
     override fun onCreate() {
         super.onCreate()
