@@ -55,6 +55,14 @@ data class EqualizerSettingsEntity(
     val monoEnabled: Boolean = false
 )
 
+@Entity(tableName = "lyrics_cache")
+data class LyricsCacheEntity(
+    @PrimaryKey val songId: String,
+    val syncedLyrics: String? = null,
+    val plainLyrics: String? = null,
+    val cachedAt: Long = System.currentTimeMillis()
+)
+
 @Entity(tableName = "recent_searches")
 data class RecentSearchEntity(
     @PrimaryKey val query: String,
@@ -75,6 +83,12 @@ data class PlayCountItem(
 
 @Dao
 interface LibraryDao {
+    @Query("SELECT * FROM lyrics_cache WHERE songId = :songId LIMIT 1")
+    suspend fun lyrics(songId: String): LyricsCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveLyrics(item: LyricsCacheEntity)
+
     @Query("SELECT * FROM equalizer_settings WHERE id = 1 LIMIT 1")
     fun equalizerSettings(): Flow<EqualizerSettingsEntity?>
 
@@ -141,8 +155,8 @@ interface LibraryDao {
 }
 
 @Database(
-    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class, EqualizerSettingsEntity::class],
-    version = 5,
+    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class, EqualizerSettingsEntity::class, LyricsCacheEntity::class],
+    version = 6,
     exportSchema = false
 )
 abstract class LibraryDatabase : RoomDatabase() {
@@ -181,13 +195,19 @@ abstract class LibraryDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS lyrics_cache (songId TEXT NOT NULL, syncedLyrics TEXT, plainLyrics TEXT, cachedAt INTEGER NOT NULL, PRIMARY KEY(songId))")
+            }
+        }
+
         fun get(context: Context): LibraryDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     LibraryDatabase::class.java,
                     "parker_tunes.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build().also { INSTANCE = it }
             }
     }
 }
