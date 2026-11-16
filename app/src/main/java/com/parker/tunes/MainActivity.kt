@@ -15,6 +15,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -340,6 +343,10 @@ private fun SongRow(song: Song, dao: com.parker.tunes.data.LibraryDao, onClick: 
             Text(song.title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(song.artist, color = Muted, fontSize = 13.sp, maxLines = 1)
+            if (song.id.startsWith("addon:")) {
+                Text("ADDON SOURCE", color = MaterialTheme.colorScheme.primary,
+                    fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            }
         }
         IconButton(onClick = { showPlaylistPicker = true }) {
             Icon(Icons.Default.PlaylistAdd, contentDescription = "Add to playlist", tint = Muted)
@@ -444,7 +451,8 @@ private fun NowPlayingScreen(
     val coverUrl = playerState.artworkUri
     var seeking by remember { mutableStateOf(false) }
     var seekValue by remember { mutableFloatStateOf(0f) }
-    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val dragAnimation = remember { Animatable(0f) }
+    val dragScope = rememberCoroutineScope()
     var coverExpanded by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { coverExpanded = true }
     val coverEntryScale by animateFloatAsState(
@@ -452,29 +460,46 @@ private fun NowPlayingScreen(
         animationSpec = tween(320),
         label = "coverExpandTransition"
     )
-    val animatedDrag by animateFloatAsState(dragOffset, animationSpec = tween(120), label = "playerDismissDrag")
-    val coverScale = (1f - (animatedDrag / 900f).coerceIn(0f, 0.16f))
+    val dragOffset = dragAnimation.value
+    val coverScale = (1f - (dragOffset / 900f).coerceIn(0f, 0.16f))
     val shuffle = playerState.shuffleEnabled
     val repeat = playerState.repeatMode
 
     Column(
         Modifier.fillMaxSize()
-            .graphicsLayer { translationY = animatedDrag; alpha = 1f - (animatedDrag / 1000f).coerceIn(0f, 0.12f) }
+            .graphicsLayer { translationY = dragOffset; alpha = 1f - (dragOffset / 1000f).coerceIn(0f, 0.12f) }
             .pointerInput(onBack) {
                 var totalDrag = 0f
                 detectVerticalDragGestures(
                     onVerticalDrag = { change, dragAmount ->
                         if (dragAmount > 0f || totalDrag > 0f) {
                             totalDrag = (totalDrag + dragAmount).coerceAtLeast(0f)
-                            dragOffset = totalDrag
+                            dragScope.launch { dragAnimation.snapTo(totalDrag) }
                             change.consume()
                         }
                     },
                     onDragEnd = {
-                        if (totalDrag > 135f) onBack() else dragOffset = 0f
+                        if (totalDrag > 135f) {
+                            onBack()
+                        } else {
+                            dragScope.launch {
+                                dragAnimation.animateTo(0f, spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow
+                                ))
+                            }
+                        }
                         totalDrag = 0f
                     },
-                    onDragCancel = { dragOffset = 0f; totalDrag = 0f }
+                    onDragCancel = {
+                        dragScope.launch {
+                            dragAnimation.animateTo(0f, spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            ))
+                        }
+                        totalDrag = 0f
+                    }
                 )
             }
             .padding(horizontal = 24.dp, vertical = 18.dp),
