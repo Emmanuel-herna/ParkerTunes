@@ -46,6 +46,22 @@ class SongDownloadManager(
     private val _progress = MutableStateFlow<Map<String, Int>>(emptyMap())
     val progress: StateFlow<Map<String, Int>> = _progress.asStateFlow()
 
+    init {
+        scope.launch {
+            dao.downloads().first()
+                .filter { it.status == DownloadEntity.STATUS_DOWNLOADING }
+                .forEach { stale ->
+                    dao.saveDownload(stale.copy(
+                        status = DownloadEntity.STATUS_FAILED,
+                        errorMessage = "Download interrupted. Tap retry."
+                    ))
+                }
+        }
+    }
+
+    fun hasLowStorage(): Boolean =
+        StatFs(appContext.filesDir.absolutePath).availableBytes < MIN_FREE_BYTES
+
     fun enqueue(song: Song) {
         if (jobs[song.id]?.isActive == true) return
         val job = scope.launch {
@@ -64,7 +80,7 @@ class SongDownloadManager(
     }
 
     suspend fun remove(songId: String) {
-        jobs[songId]?.cancel()
+        jobs[songId]?.cancelAndJoin()
         val existing = dao.download(songId)
         existing?.filePath?.let { File(it).delete() }
         dao.removeDownload(songId)
@@ -72,7 +88,9 @@ class SongDownloadManager(
     }
 
     suspend fun removeAll() {
-        jobs.values.forEach { it.cancel() }
+        val running = jobs.values.toList()
+        running.forEach { it.cancel() }
+        running.joinAll()
         dao.downloadsSnapshot().forEach { item -> File(item.filePath).delete() }
         dao.clearDownloads()
         _progress.value = emptyMap()
