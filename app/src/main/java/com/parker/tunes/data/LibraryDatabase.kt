@@ -74,7 +74,13 @@ data class PlayCountItem(
 )
 
 @Dao
-interface LibraryDao {\n    @Query("SELECT * FROM equalizer_settings WHERE id = 1 LIMIT 1")\n    fun equalizerSettings(): Flow<EqualizerSettingsEntity?>\n\n    @Insert(onConflict = OnConflictStrategy.REPLACE)\n    suspend fun saveEqualizerSettings(settings: EqualizerSettingsEntity)\n
+interface LibraryDao {
+    @Query("SELECT * FROM equalizer_settings WHERE id = 1 LIMIT 1")
+    fun equalizerSettings(): Flow<EqualizerSettingsEntity?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveEqualizerSettings(settings: EqualizerSettingsEntity)
+
     @Query("SELECT * FROM recent_searches ORDER BY searchedAt DESC LIMIT 20")
     fun recentSearches(): Flow<List<RecentSearchEntity>>
 
