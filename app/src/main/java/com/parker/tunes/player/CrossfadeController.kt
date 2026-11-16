@@ -165,7 +165,7 @@ class CrossfadeController(
         if (fading || active.mediaItemCount < 2) return
         val nextIndex = active.currentMediaItemIndex + 1
         if (nextIndex !in 0 until active.mediaItemCount || preloadedForIndex == nextIndex) return
-        val queue = active.mediaItems
+        val queue = (0 until active.mediaItemCount).map { active.getMediaItemAt(it) }
         if (queue.drop(nextIndex).any { it.localConfiguration?.uri == null }) return
 
         incoming.playWhenReady = false
@@ -179,7 +179,7 @@ class CrossfadeController(
 
     private fun MediaMetadata.toRuleSong(durationMs: Long?): Song = Song(
         album = albumTitle?.toString(),
-        trackNumber = trackNumber.takeIf { it > 0 },
+        trackNumber = trackNumber?.takeIf { it > 0 },
         durationMs = durationMs
     )
 
