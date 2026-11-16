@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -39,7 +40,7 @@ fun EqualizerScreen(
 
     Column(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 18.dp, vertical = 14.dp),
+            .padding(horizontal = 18.dp, vertical = 14.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -68,10 +69,7 @@ fun EqualizerScreen(
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
                     FilterChip(selected = state.preset == -1, onClick = {
-                        manager.selectPreset(0)
-                        manager.state.value.let { current ->
-                            current.bandLevels.indices.forEach { manager.setBand(it, current.bandLevels[it]) }
-                        }
+                        manager.setCustom()
                         persist()
                     }, label = { Text("Custom") })
                 }
