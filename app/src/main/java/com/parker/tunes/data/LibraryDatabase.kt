@@ -87,6 +87,14 @@ data class LyricsCacheEntity(
 // Compatibility name for the persistent lyrics record used by the player.
 typealias LyricsEntity = LyricsCacheEntity
 
+@Entity(tableName = "home_recommendation_cache")
+data class RecommendationCacheEntity(
+    @PrimaryKey val queryOrSongId: String,
+    // JSON-encoded Song snapshots render cached cards without network access.
+    val songIdList: String,
+    val fetchedAt: Long = System.currentTimeMillis()
+)
+
 @Entity(tableName = "recent_searches")
 data class RecentSearchEntity(
     @PrimaryKey val query: String,
@@ -139,6 +147,15 @@ interface LibraryDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveEqualizerSettings(settings: EqualizerSettingsEntity)
+
+    @Query("SELECT * FROM home_recommendation_cache WHERE queryOrSongId = :key LIMIT 1")
+    suspend fun recommendationCache(key: String): RecommendationCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveRecommendationCache(item: RecommendationCacheEntity)
+
+    @Query("DELETE FROM home_recommendation_cache WHERE fetchedAt < :before")
+    suspend fun pruneRecommendationCache(before: Long)
 
     @Query("SELECT * FROM recent_searches ORDER BY searchedAt DESC LIMIT 20")
     fun recentSearches(): Flow<List<RecentSearchEntity>>
@@ -224,8 +241,8 @@ interface LibraryDao {
 }
 
 @Database(
-    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class, EqualizerSettingsEntity::class, LyricsCacheEntity::class, DownloadEntity::class, com.parker.tunes.data.sources.AddonEntity::class, com.parker.tunes.data.sources.AddonSettingsEntity::class],
-    version = 9,
+    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class, EqualizerSettingsEntity::class, LyricsCacheEntity::class, DownloadEntity::class, RecommendationCacheEntity::class, com.parker.tunes.data.sources.AddonEntity::class, com.parker.tunes.data.sources.AddonSettingsEntity::class],
+    version = 10,
     exportSchema = false
 )
 abstract class LibraryDatabase : RoomDatabase() {
@@ -290,13 +307,19 @@ abstract class LibraryDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS home_recommendation_cache (queryOrSongId TEXT NOT NULL, songIdList TEXT NOT NULL, fetchedAt INTEGER NOT NULL, PRIMARY KEY(queryOrSongId))")
+            }
+        }
+
         fun get(context: Context): LibraryDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     LibraryDatabase::class.java,
                     "parker_tunes.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10).build().also { INSTANCE = it }
             }
     }
 }
