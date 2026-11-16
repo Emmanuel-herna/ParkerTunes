@@ -115,7 +115,7 @@ fun MoodResultsScreen(mood: String, api: MusicApi, onBack: () -> Unit, onPlay: (
             error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 Text(error ?: "Couldn't load tracks", color = Color(0xFFA7A7A7), modifier = Modifier.padding(24.dp))
             }
-            else -> LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp, bottom = 120.dp),
+            else -> LazyColumn(contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 120.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { Text("Songs for your ${mood.lowercase()} mood", color = Color(0xFFA7A7A7), fontSize = 13.sp,
                     modifier = Modifier.padding(bottom = 8.dp)) }
