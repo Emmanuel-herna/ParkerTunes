@@ -85,6 +85,11 @@ class EqualizerManager(context: Context) : AutoCloseable {
     }
 
     @Synchronized
+    fun setCustom() {
+        update(lastConfig.copy(preset = -1))
+    }
+
+    @Synchronized
     fun selectPreset(index: Int) {
         val eq = equalizer ?: return
         runCatching {
