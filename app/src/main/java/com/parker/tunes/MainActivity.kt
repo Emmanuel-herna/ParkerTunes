@@ -904,7 +904,7 @@ private fun NowPlayingScreen(
                         dao.saveLyrics(LyricsCacheEntity(songId, serialized, fetched.plainText))
                     }
                 } else {
-                    plainLyrics = fetched?.plainText
+                    plainLyrics = fetched?.plainText ?: cached?.plainLyrics
                     if (fetched != null) withContext(Dispatchers.IO) {
                         dao.saveLyrics(LyricsCacheEntity(songId, null, fetched.plainText))
                     }
