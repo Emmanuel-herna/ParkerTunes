@@ -160,7 +160,7 @@ fun ParkerTunesRoot() {
                 modifier = Modifier.padding(padding)
             ) {
                 composable("search") {
-                    SearchScreen(query, { query = it }, api) { song ->
+                    SearchScreen(query, { query = it }, api, dao) { song ->
                         scope.launch {
                             runCatching {
                                 val url = api.getStreamUrl(song.id)
@@ -207,7 +207,10 @@ private fun ScreenTitle(kicker: String, title: String, subtitle: String? = null)
 }
 
 @Composable
-fun SearchScreen(query: String, onQuery: (String) -> Unit, api: MusicApi, onPlay: (Song) -> Unit) {
+fun SearchScreen(
+    query: String, onQuery: (String) -> Unit, api: MusicApi,
+    dao: com.parker.tunes.data.LibraryDao, onPlay: (Song) -> Unit
+) {
     var results by remember { mutableStateOf<List<Song>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -268,7 +271,10 @@ fun SearchScreen(query: String, onQuery: (String) -> Unit, api: MusicApi, onPlay
 }
 
 @Composable
-private fun SongRow(song: Song, onClick: () -> Unit) {
+private fun SongRow(song: Song, dao: com.parker.tunes.data.LibraryDao, onClick: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var favorite by remember(song.id) { mutableStateOf(false) }
+    LaunchedEffect(song.id) { favorite = dao.isFavorite(song.id) }
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick).padding(12.dp),
@@ -283,6 +289,19 @@ private fun SongRow(song: Song, onClick: () -> Unit) {
             Text(song.title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(song.artist, color = Muted, fontSize = 13.sp, maxLines = 1)
+        }
+        IconButton(onClick = {
+            scope.launch {
+                if (favorite) dao.removeFavorite(song.id)
+                else dao.addFavorite(FavoriteEntity(songId = song.id))
+                favorite = !favorite
+            }
+        }) {
+            Icon(
+                if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                contentDescription = "Toggle favourite",
+                tint = if (favorite) Color(0xFFFF7D9C) else Muted
+            )
         }
         Icon(Icons.Default.PlayCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
     }
