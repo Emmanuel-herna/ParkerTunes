@@ -24,16 +24,18 @@ data class PlayerUiState(
     val title: String = "Nothing playing",
     val artist: String = "Choose a track",
     val artworkUri: String? = null,
-    val positionMs: Long = 0L,
-    val durationMs: Long = 0L,
     val shuffleEnabled: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF
 )
+
+data class PlayerProgress(val positionMs: Long = 0L, val durationMs: Long = 0L)
 
 class PlayerUiStateObserver(private val player: Player) : AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _state = MutableStateFlow(snapshot())
     val state: StateFlow<PlayerUiState> = _state.asStateFlow()
+    private val _progress = MutableStateFlow(progressSnapshot())
+    val progress: StateFlow<PlayerProgress> = _progress.asStateFlow()
     private var progressJob: Job? = null
 
     private fun snapshot(): PlayerUiState {
@@ -46,15 +48,19 @@ class PlayerUiStateObserver(private val player: Player) : AutoCloseable {
             title = metadata?.title?.toString() ?: "Nothing playing",
             artist = metadata?.artist?.toString() ?: "Choose a track",
             artworkUri = metadata?.artworkUri?.toString(),
-            positionMs = player.currentPosition.coerceAtLeast(0L),
-            durationMs = player.duration.takeIf { it > 0L } ?: 0L,
             shuffleEnabled = player.shuffleModeEnabled,
             repeatMode = player.repeatMode
         )
     }
 
+    private fun progressSnapshot() = PlayerProgress(
+        positionMs = player.currentPosition.coerceAtLeast(0L),
+        durationMs = player.duration.takeIf { it > 0L } ?: 0L
+    )
+
     private fun publish() {
         _state.value = snapshot()
+        _progress.value = progressSnapshot()
     }
 
     private val listener = object : Player.Listener {
@@ -72,12 +78,8 @@ class PlayerUiStateObserver(private val player: Player) : AutoCloseable {
         progressJob = scope.launch {
             while (isActive) {
                 delay(200L)
-                val current = _state.value
-                val position = player.currentPosition.coerceAtLeast(0L)
-                val duration = player.duration.takeIf { it > 0L } ?: 0L
-                if (current.positionMs != position || current.durationMs != duration) {
-                    _state.value = current.copy(positionMs = position, durationMs = duration)
-                }
+                val next = progressSnapshot()
+                if (_progress.value != next) _progress.value = next
             }
         }
     }
