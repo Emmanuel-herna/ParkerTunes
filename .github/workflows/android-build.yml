@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       APPETIZE_TOKEN: ${{ secrets.APPETIZE_TOKEN }}
+      GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -37,11 +38,61 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Run unit tests
-        run: gradle --no-daemon :app:testDebugUnitTest
-
-      - name: Compile and package debug APK
+      - name: Build debug APK
+        id: build-apk
         run: gradle --no-daemon :app:assembleDebug
+
+      - name: Run Roborazzi screenshot tests
+        id: roborazzi
+        if: ${{ always() && steps.build-apk.outcome == 'success' }}
+        run: gradle --no-daemon :app:recordRoborazziDebug
+
+      - name: Upload Roborazzi screenshots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ParkerTunes-roborazzi-screenshots
+          path: app/build/outputs/roborazzi
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Prepare Firebase service account credentials
+        id: firebase-credentials
+        if: ${{ always() && steps.build-apk.outcome == 'success' }}
+        shell: bash
+        run: |
+          if [[ -z "$GOOGLE_APPLICATION_CREDENTIALS" ]]; then
+            echo "GOOGLE_APPLICATION_CREDENTIALS secret is missing." >&2
+            exit 1
+          fi
+          if [[ "$GOOGLE_APPLICATION_CREDENTIALS" == \{* ]]; then
+            credential_file="$RUNNER_TEMP/firebase-service-account.json"
+            printf '%s' "$GOOGLE_APPLICATION_CREDENTIALS" > "$credential_file"
+          elif [[ -f "$GOOGLE_APPLICATION_CREDENTIALS" ]]; then
+            credential_file="$GOOGLE_APPLICATION_CREDENTIALS"
+          else
+            echo "GOOGLE_APPLICATION_CREDENTIALS must contain service-account JSON or a valid file path." >&2
+            exit 1
+          fi
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$credential_file" >> "$GITHUB_ENV"
+
+      - name: Upload APK to Firebase App Distribution
+        id: firebase-upload
+        if: ${{ always() && steps.build-apk.outcome == 'success' && steps.firebase-credentials.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon appDistributionUploadDebug --stacktrace 2>&1 | tee "$RUNNER_TEMP/firebase-distribution.log"
+
+      - name: Publish Firebase distribution links
+        if: ${{ always() && steps.firebase-upload.outcome == 'success' }}
+        shell: bash
+        run: |
+          echo "### Firebase App Distribution — testers" >> "$GITHUB_STEP_SUMMARY"
+          sed -E 's/\x1B\[[0-9;]*[mK]//g' "$RUNNER_TEMP/firebase-distribution.log" |
+            grep -Eo 'https?://[^[:space:]]+' | sort -u |
+            while IFS= read -r link; do echo "- $link" >> "$GITHUB_STEP_SUMMARY"; done
+          echo "Group: testers" >> "$GITHUB_STEP_SUMMARY"
 
       # The public key is an identifier, not a credential. It is committed so
       # every future workflow run updates the same Appetize app in place.
@@ -101,6 +152,7 @@ jobs:
           fi
 
       - name: Upload debug APK
+        if: ${{ always() && steps.build-apk.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: ParkerTunes-debug
