@@ -2,6 +2,8 @@ package com.parker.tunes.data
 
 import android.net.Uri
 import com.parker.tunes.model.Artist
+import com.parker.tunes.model.ArtistProfile
+import com.parker.tunes.model.Album
 import com.parker.tunes.model.SearchResult
 import com.parker.tunes.model.Song
 import kotlinx.coroutines.CancellationException
@@ -10,7 +12,10 @@ import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.Page
 import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.channel.ChannelInfo
 import org.schabi.newpipe.extractor.channel.ChannelInfoItem
+import org.schabi.newpipe.extractor.playlist.PlaylistInfo
+import org.schabi.newpipe.extractor.playlist.PlaylistInfoItem
 import org.schabi.newpipe.extractor.linkhandler.SearchQueryHandler
 import org.schabi.newpipe.extractor.search.SearchExtractor
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
@@ -25,6 +30,8 @@ interface MusicApi {
     suspend fun searchMore(query: String): List<Song> = emptyList()
     suspend fun getRelatedSongs(songId: String): List<Song>
     suspend fun getTrending(): List<Song>
+    suspend fun getArtistProfile(artist: Artist): ArtistProfile
+    suspend fun getAlbumTracks(albumId: String): List<Song>
     suspend fun getStreamUrl(songId: String): String
     suspend fun getLyrics(songId: String): String?
     suspend fun getCoverArt(songId: String): String?
@@ -154,6 +161,63 @@ class NewPipeMusicApi : MusicApi {
             subscriberCount = item.subscriberCount.coerceAtLeast(0L),
             description = item.description.orEmpty()
         )
+    }
+
+    override suspend fun getArtistProfile(artist: Artist): ArtistProfile = withContext(Dispatchers.IO) {
+        NewPipeRuntime.ensureInitialized()
+        val profileInfo = runCatching { ChannelInfo.getInfo(ServiceList.YouTube, artist.id) }.getOrNull()
+        val resolvedArtist = artist.copy(
+            name = profileInfo?.name?.ifBlank { artist.name } ?: artist.name,
+            avatarUrl = profileInfo?.avatars?.firstOrNull()?.url ?: artist.avatarUrl,
+            subscriberCount = profileInfo?.subscriberCount?.takeIf { it > 0L } ?: artist.subscriberCount,
+            description = profileInfo?.description?.ifBlank { artist.description } ?: artist.description
+        )
+
+        // The native music-song search gives us the artist's currently surfaced top tracks.
+        val topSongs = runCatching {
+            search(artist.name).songs
+                .filter { it.artist.contains(artist.name, ignoreCase = true) ||
+                    artist.name.contains(it.artist, ignoreCase = true) }
+                .distinctBy { it.id }
+                .take(20)
+        }.getOrDefault(emptyList())
+
+        val albums = runCatching {
+            val albumTab = profileInfo?.tabs?.firstOrNull { tab ->
+                tab.contentFilters.any { it.contains("album", ignoreCase = true) } ||
+                    tab.url.contains("/albums", ignoreCase = true)
+            }
+            if (albumTab == null) emptyList() else {
+                val extractor = ServiceList.YouTube.getChannelTabExtractor(albumTab)
+                extractor.fetchPage()
+                extractor.initialPage.items.filterIsInstance<PlaylistInfoItem>()
+                    .mapNotNull { item ->
+                        val albumId = item.url?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                        Album(
+                            id = albumId,
+                            title = item.name.orEmpty(),
+                            coverUrl = item.thumbnails.firstOrNull()?.url,
+                            trackCount = item.streamCount.coerceAtLeast(0L),
+                            year = ""
+                        )
+                    }
+                    .distinctBy { it.id }
+                    .take(30)
+            }
+        }.getOrDefault(emptyList())
+
+        ArtistProfile(artist = resolvedArtist, topSongs = topSongs, albums = albums)
+    }
+
+    override suspend fun getAlbumTracks(albumId: String): List<Song> = withContext(Dispatchers.IO) {
+        val url = albumId.trim()
+        if (url.isBlank()) return@withContext emptyList()
+        runCatching {
+            NewPipeRuntime.ensureInitialized()
+            val extractor = ServiceList.YouTube.getPlaylistExtractor(url)
+            val info = PlaylistInfo.getInfo(extractor)
+            info.relatedItems.distinctBy { it.url }.mapNotNull(::toSong)
+        }.getOrDefault(emptyList())
     }
 
     override suspend fun getRelatedSongs(songId: String): List<Song> = withContext(Dispatchers.IO) {
