@@ -63,6 +63,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import androidx.media3.session.SessionCommand
 import androidx.navigation.compose.*
 import com.google.common.util.concurrent.ListenableFuture
 import com.parker.tunes.data.PlayHistoryEntity
@@ -416,7 +417,7 @@ fun ParkerTunesRoot() {
                             MiniPlayer(title = currentTitle, artist = currentArtist, coverUrl = playerState.artworkUri,
                                 playing = isPlaying, onClick = { nav.navigate("nowplaying") },
                                 onPlayPause = { controller?.let { if (it.isPlaying) it.pause() else it.play() } },
-                                onNext = { controller?.seekToNextMediaItem() })
+                                onNext = { controller?.sendCustomCommand(SessionCommand("com.parker.tunes.action.SKIP_NEXT", Bundle.EMPTY), Bundle.EMPTY) })
                         }
                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1139,7 +1140,7 @@ private fun NowPlayingScreen(
                 ) else Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, "Play or pause",
                     modifier = Modifier.size(34.dp))
             }
-            IconButton(onClick = { player?.seekToNextMediaItem() }) {
+            IconButton(onClick = { player?.sendCustomCommand(SessionCommand("com.parker.tunes.action.SKIP_NEXT", Bundle.EMPTY), Bundle.EMPTY) }) {
                 Icon(Icons.Default.SkipNext, "Next", modifier = Modifier.size(36.dp))
             }
             IconButton(onClick = onOpenEqualizer) {
