@@ -440,6 +440,41 @@ fun LibraryScreen(dao: com.parker.tunes.data.LibraryDao) {
                 else LazyColumn { items(history) { Text(it.songId, modifier = Modifier.padding(12.dp)) } }
         }
     }
+    if (showCreate) {
+        AlertDialog(
+            onDismissRequest = { showCreate = false },
+            title = { Text("New playlist") },
+            text = {
+                OutlinedTextField(
+                    value = playlistName,
+                    onValueChange = { playlistName = it },
+                    singleLine = true,
+                    label = { Text("Playlist name") }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = playlistName.isNotBlank(),
+                    onClick = {
+                        val name = playlistName.trim()
+                        scope.launch {
+                            dao.savePlaylist(
+                                com.parker.tunes.data.PlaylistEntity(
+                                    id = java.util.UUID.randomUUID().toString(),
+                                    name = name
+                                )
+                            )
+                        }
+                        playlistName = ""
+                        showCreate = false
+                    }
+                ) { Text("Create") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreate = false }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 @Composable
