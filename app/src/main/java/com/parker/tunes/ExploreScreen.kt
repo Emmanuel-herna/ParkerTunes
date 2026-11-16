@@ -5,10 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -59,7 +59,7 @@ fun ExploreScreen(onMood: (String) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(moodCategories, key = { it.name }) { mood ->
+            gridItems(moodCategories, key = { it.name }) { mood ->
                 Box(
                     Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(16.dp))
                         .background(Brush.linearGradient(mood.colors)).clickable { onMood(mood.name) }
@@ -119,7 +119,7 @@ fun MoodResultsScreen(mood: String, api: MusicApi, onBack: () -> Unit, onPlay: (
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { Text("Songs for your ${mood.lowercase()} mood", color = Color(0xFFA7A7A7), fontSize = 13.sp,
                     modifier = Modifier.padding(bottom = 8.dp)) }
-                items(songs, key = { it.id }) { song ->
+                lazyItems(songs, key = { it.id }) { song ->
                     Row(Modifier.fillMaxWidth().height(68.dp).clip(RoundedCornerShape(12.dp))
                         .clickable { onPlay(song) }, verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(54.dp).clip(RoundedCornerShape(9.dp)).background(Color(0xFF202020)),
