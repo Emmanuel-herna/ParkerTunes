@@ -8,7 +8,6 @@ import androidx.media3.common.util.UnstableApi
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.parker.tunes.data.FavoriteEntity
-
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -29,8 +28,10 @@ class PlaybackService : MediaSessionService() {
     private var equalizerManager: EqualizerManager? = null
     private var crossfadeController: CrossfadeController? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val observedPlayers = mutableSetOf<ExoPlayer>()
     private var autoplayResolving = false
     private val favoriteCommand = SessionCommand(ACTION_FAVORITE, Bundle.EMPTY)
+
     private val sessionCallback = object : MediaSession.Callback {
         override fun onConnect(
             session: MediaSession,
@@ -77,52 +78,85 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        // ExoPlayer manages audio focus so playback pauses appropriately for calls
-        // and other apps that request audio focus.
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
 
-        val player = ExoPlayer.Builder(this)
-            .setAudioAttributes(audioAttributes, true)
-            .setHandleAudioBecomingNoisy(true)
-            .build()
+        // Both players share the main application looper, allowing the single
+        // MediaSession to move safely between them after each completed fade.
+        val active = buildPlayer(audioAttributes)
+        val spare = buildPlayer(audioAttributes)
 
-        crossfadeController = CrossfadeController(player, getSharedPreferences("parker_tunes_settings", MODE_PRIVATE))
         val effects = EqualizerManager(this)
         equalizerManager = effects
         EqualizerRegistry.manager = effects
-        effects.attach(player.audioSessionId)
-        player.addListener(object : Player.Listener {
-            override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                effects.attach(audioSessionId)
-            }
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY) effects.attach(player.audioSessionId)
-                WidgetProvider.update(this@PlaybackService, player)
-                if (playbackState == Player.STATE_ENDED) maybeAppendRelated(player)
-            }
-            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
-                WidgetProvider.update(this@PlaybackService, player)
-            }
-            override fun onMediaMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
-                WidgetProvider.update(this@PlaybackService, player)
-            }
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (isPlaying) effects.attach(player.audioSessionId)
-                WidgetProvider.update(this@PlaybackService, player)
-            }
-        })
+        effects.attach(active.audioSessionId)
+
         val favoriteButton = CommandButton.Builder(CommandButton.ICON_HEART_UNFILLED)
             .setDisplayName("Save to favourites")
             .setSessionCommand(favoriteCommand)
             .build()
-        mediaSession = MediaSession.Builder(this, player)
+        val session = MediaSession.Builder(this, active)
             .setCallback(sessionCallback)
             .setMediaButtonPreferences(listOf(favoriteButton))
             .build()
-        WidgetProvider.update(this, player)
+        mediaSession = session
+
+        observePlayer(active, effects)
+        observePlayer(spare, effects)
+        crossfadeController = CrossfadeController(
+            initialActive = active,
+            spare = spare,
+            session = session,
+            preferences = getSharedPreferences("parker_tunes_settings", MODE_PRIVATE),
+            onActivePlayerChanged = { nowActive ->
+                effects.attach(nowActive.audioSessionId)
+                WidgetProvider.update(this, nowActive)
+            }
+        )
+        WidgetProvider.update(this, active)
+    }
+
+    private fun buildPlayer(audioAttributes: AudioAttributes): ExoPlayer =
+        ExoPlayer.Builder(this)
+            .setAudioAttributes(audioAttributes, true)
+            .setHandleAudioBecomingNoisy(true)
+            .build()
+
+    private fun observePlayer(player: ExoPlayer, effects: EqualizerManager) {
+        if (!observedPlayers.add(player)) return
+        player.addListener(object : Player.Listener {
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                if (mediaSession?.player === player) effects.attach(audioSessionId)
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (mediaSession?.player === player) {
+                    if (playbackState == Player.STATE_READY) effects.attach(player.audioSessionId)
+                    WidgetProvider.update(this@PlaybackService, player)
+                    if (playbackState == Player.STATE_ENDED) maybeAppendRelated(player)
+                }
+            }
+
+            override fun onMediaItemTransition(
+                mediaItem: androidx.media3.common.MediaItem?,
+                reason: Int
+            ) {
+                if (mediaSession?.player === player) WidgetProvider.update(this@PlaybackService, player)
+            }
+
+            override fun onMediaMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
+                if (mediaSession?.player === player) WidgetProvider.update(this@PlaybackService, player)
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (mediaSession?.player === player) {
+                    if (isPlaying) effects.attach(player.audioSessionId)
+                    WidgetProvider.update(this@PlaybackService, player)
+                }
+            }
+        })
     }
 
     private fun maybeAppendRelated(player: ExoPlayer) {
@@ -184,11 +218,9 @@ class PlaybackService : MediaSessionService() {
         equalizerManager?.close()
         equalizerManager = null
         EqualizerRegistry.manager = null
-        mediaSession?.run {
-            player.release()
-            release()
-        }
+        mediaSession?.release()
         mediaSession = null
+        observedPlayers.clear()
         super.onDestroy()
     }
 }
