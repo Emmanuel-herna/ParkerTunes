@@ -218,7 +218,7 @@ fun ParkerTunesRoot() {
                     }
                 }
                 composable("nowplaying") {
-                    NowPlayingScreen(controller, playerState) {
+                    NowPlayingScreen(controller, playerObserver, playerState) {
                         nav.popBackStack()
                     }
                 }
@@ -418,10 +418,14 @@ private fun MiniPlayer(
 
 @Composable
 private fun NowPlayingScreen(
-    player: MediaController?, playerState: PlayerUiState, onBack: () -> Unit
+    player: MediaController?, playerObserver: PlayerUiStateObserver?, playerState: PlayerUiState, onBack: () -> Unit
 ) {
-    val duration = playerState.durationMs.coerceAtLeast(0L)
-    val position = playerState.positionMs.coerceAtLeast(0L).coerceAtMost(duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
+    val progressFlow = remember(playerObserver) {
+        playerObserver?.progress ?: kotlinx.coroutines.flow.MutableStateFlow(com.parker.tunes.player.PlayerProgress())
+    }
+    val progress by progressFlow.collectAsState()
+    val duration = progress.durationMs.coerceAtLeast(0L)
+    val position = progress.positionMs.coerceAtLeast(0L).coerceAtMost(duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
     val playing = playerState.isPlaying
     val title = playerState.title
     val artist = playerState.artist
