@@ -27,7 +27,8 @@ data class FavoriteEntity(
     @PrimaryKey val songId: String,
     val addedAt: Long = System.currentTimeMillis(),
     @ColumnInfo(defaultValue = "''") val title: String = "",
-    @ColumnInfo(defaultValue = "''") val artist: String = ""
+    @ColumnInfo(defaultValue = "''") val artist: String = "",
+    val coverUrl: String? = null
 )
 
 @Entity(tableName = "play_history")
@@ -36,7 +37,16 @@ data class PlayHistoryEntity(
     val songId: String,
     val playedAt: Long = System.currentTimeMillis(),
     @ColumnInfo(defaultValue = "''") val title: String = "",
-    @ColumnInfo(defaultValue = "''") val artist: String = ""
+    @ColumnInfo(defaultValue = "''") val artist: String = "",
+    val coverUrl: String? = null
+)
+
+data class PlayCountItem(
+    val songId: String,
+    val title: String,
+    val artist: String,
+    val coverUrl: String?,
+    val playCount: Int
 )
 
 @Dao
@@ -73,11 +83,24 @@ interface LibraryDao {
 
     @Query("SELECT * FROM play_history ORDER BY playedAt DESC LIMIT 100")
     fun history(): Flow<List<PlayHistoryEntity>>
+
+    @Query("SELECT * FROM play_history ORDER BY playedAt DESC LIMIT 20")
+    fun recentlyPlayed(): Flow<List<PlayHistoryEntity>>
+
+    @Query("""
+        SELECT songId, MAX(title) AS title, MAX(artist) AS artist,
+               MAX(coverUrl) AS coverUrl, COUNT(*) AS playCount
+        FROM play_history
+        GROUP BY songId
+        ORDER BY playCount DESC, MAX(playedAt) DESC
+        LIMIT 10
+    """)
+    fun mostPlayed(): Flow<List<PlayCountItem>>
 }
 
 @Database(
     entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class LibraryDatabase : RoomDatabase() {
@@ -97,13 +120,20 @@ abstract class LibraryDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE favorites ADD COLUMN coverUrl TEXT")
+                db.execSQL("ALTER TABLE play_history ADD COLUMN coverUrl TEXT")
+            }
+        }
+
         fun get(context: Context): LibraryDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     LibraryDatabase::class.java,
                     "parker_tunes.db"
-                ).addMigrations(MIGRATION_1_2).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { INSTANCE = it }
             }
     }
 }
