@@ -3,6 +3,8 @@ package com.parker.tunes.data
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
+import com.parker.tunes.model.Artist
+import com.parker.tunes.model.ArtistProfile
 import com.parker.tunes.model.SearchResult
 import com.parker.tunes.model.Song
 import kotlinx.coroutines.Dispatchers
@@ -129,6 +131,12 @@ class AddonMusicApi(
 
     override suspend fun getTrending(): List<Song> =
         youtube.getTrending()
+
+    override suspend fun getArtistProfile(artist: Artist): ArtistProfile =
+        youtube.getArtistProfile(artist)
+
+    override suspend fun getAlbumTracks(albumId: String): List<Song> =
+        youtube.getAlbumTracks(albumId)
 
     override suspend fun getStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
         synchronized(streamCache) { streamCache[songId] }?.let { return@withContext it }
