@@ -43,6 +43,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -893,12 +898,23 @@ private fun NowPlayingScreen(
                 val fetched = runCatching { api.getLyrics(title, artist) }.getOrNull()
                 val lines = fetched?.syncedLyrics?.lines.orEmpty()
                 if (lines.isNotEmpty()) {
-                    val mapped = lines.map { KaraokeLyricsLine(it.timeMs, it.text) }
+                    val mapped = lines.flatMap { source ->
+                        val total = source.timeMs.coerceAtLeast(0L)
+                        val stamp = "[%02d:%02d.%02d]".format(total / 60_000,
+                            (total / 1_000) % 60, (total % 1_000) / 10)
+                        LyricsParser.parse(stamp + source.text)
+                    }
                     lyricRows = VLine.of(mapped)
                     val serialized = mapped.joinToString("\n") { line ->
                         val total = line.timeMs.coerceAtLeast(0L)
-                        "[%02d:%02d.%02d]%s".format(total / 60_000, (total / 1_000) % 60,
-                            (total % 1_000) / 10, line.text)
+                        val stamp = "[%02d:%02d.%02d]".format(total / 60_000,
+                            (total / 1_000) % 60, (total % 1_000) / 10)
+                        val body = if (line.words.isEmpty()) line.text else line.words.joinToString(" ") { word ->
+                            val wordTime = word.startMs.coerceAtLeast(0L)
+                            "<%02d:%02d.%02d>%s".format(wordTime / 60_000,
+                                (wordTime / 1_000) % 60, (wordTime % 1_000) / 10, word.text)
+                        }
+                        stamp + body + (line.background?.let { " (${it.text})" } ?: "")
                     }
                     withContext(Dispatchers.IO) {
                         dao.saveLyrics(LyricsCacheEntity(songId, serialized, fetched?.plainText))
@@ -1058,18 +1074,38 @@ private fun NowPlayingScreen(
                         items(visibleIndices) { index ->
                             val line = lyricRows[index]
                             if (line.text.isNotBlank()) {
+                                val active = index in activeLyricRows
+                                val synced = active && line.isWordSynced
+                                val revealed = line.revealedChars(position).toInt().coerceIn(0, line.text.length)
                                 Text(
-                                    line.text,
+                                    buildAnnotatedString {
+                                        append(line.text)
+                                        if (active) addStyle(SpanStyle(
+                                            shadow = Shadow(MaterialTheme.colorScheme.primary.copy(alpha = .48f),
+                                                Offset.Zero, 12f)
+                                        ), 0, line.text.length)
+                                        if (synced && revealed > 0) addStyle(
+                                            SpanStyle(color = MaterialTheme.colorScheme.primary),
+                                            0, revealed
+                                        )
+                                    },
                                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp))
                                         .clickable { player?.seekTo(line.timeMs) }
                                         .padding(vertical = 3.dp, horizontal = 5.dp),
-                                    color = if (index in activeLyricRows) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = .55f),
-                                    fontSize = if (index in activeLyricRows) 16.sp else 13.sp,
-                                    fontWeight = if (index in activeLyricRows) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (active && !synced) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = if (active) .82f else .55f),
+                                    fontSize = if (active) 16.sp else 13.sp,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                                    fontStyle = if (line.opposite) FontStyle.Italic else FontStyle.Normal,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
+                                line.background?.let { backing ->
+                                    Text(backing.text, color = MaterialTheme.colorScheme.primary.copy(alpha = .72f),
+                                        fontSize = 11.sp, fontStyle = FontStyle.Italic,
+                                        modifier = Modifier.padding(start = 10.dp, bottom = 2.dp),
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
                             }
                         }
                     }
