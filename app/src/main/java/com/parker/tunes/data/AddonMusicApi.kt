@@ -71,8 +71,8 @@ class AddonMusicApi(
                     if (id.isBlank() || title.isBlank()) continue
                     val artist = track.optString("artist").ifBlank { "Unknown artist" }
                     val artwork = track.optString("artworkURL")
-                        .ifBlank { track.optString("albumArtworkURL") }.ifBlank { null }
-                    val directStream = track.optString("streamURL").ifBlank { null }
+                        .ifBlank { track.optString("albumArtworkURL") }.takeIf { it.isNotBlank() }
+                    val directStream = track.optString("streamURL").takeIf { it.isNotBlank() }
                     add(Song(
                         id = addonSongId(addonBase, id, directStream),
                         title = title,
