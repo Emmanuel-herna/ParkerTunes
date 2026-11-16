@@ -15,6 +15,7 @@ import org.schabi.newpipe.extractor.linkhandler.SearchQueryHandler
 import org.schabi.newpipe.extractor.search.SearchExtractor
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
 import org.schabi.newpipe.extractor.stream.AudioStream
+import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.util.LinkedHashMap
 
@@ -22,6 +23,8 @@ interface MusicApi {
     suspend fun search(query: String): SearchResult
     /** Fetches the next song page only when the UI asks for it. */
     suspend fun searchMore(query: String): List<Song> = emptyList()
+    suspend fun getRelatedSongs(songId: String): List<Song>
+    suspend fun getTrending(): List<Song>
     suspend fun getStreamUrl(songId: String): String
     suspend fun getLyrics(songId: String): String?
     suspend fun getCoverArt(songId: String): String?
@@ -46,6 +49,11 @@ class NewPipeMusicApi : MusicApi {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, SearchSession>?): Boolean =
             size > 10
     }
+    private val relatedCache = object : LinkedHashMap<String, List<Song>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
+            size > 12
+    }
+    private var trendingCache: List<Song>? = null
 
     override suspend fun search(query: String): SearchResult = withContext(Dispatchers.IO) {
         val cleanedQuery = query.trim()
@@ -146,6 +154,49 @@ class NewPipeMusicApi : MusicApi {
             subscriberCount = item.subscriberCount.coerceAtLeast(0L),
             description = item.description.orEmpty()
         )
+    }
+
+    override suspend fun getRelatedSongs(songId: String): List<Song> = withContext(Dispatchers.IO) {
+        val key = songId.trim()
+        if (key.isBlank()) return@withContext emptyList()
+        synchronized(cacheLock) { relatedCache[key] }?.let { return@withContext it }
+
+        try {
+            NewPipeRuntime.ensureInitialized()
+            val videoId = extractVideoId(key) ?: key
+            val url = if (key.startsWith("http://", true) || key.startsWith("https://", true)) {
+                key
+            } else {
+                "https://www.youtube.com/watch?v=$videoId"
+            }
+            val extractor = ServiceList.YouTube.getStreamExtractor(url)
+            val info = StreamInfo.getInfo(extractor)
+            val related = info.relatedItems
+                .filterIsInstance<StreamInfoItem>()
+                .mapNotNull(::toSong)
+                .filterNot { it.id == videoId }
+                .distinctBy { it.id }
+                .take(20)
+            synchronized(cacheLock) { relatedCache[key] = related }
+            related
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    override suspend fun getTrending(): List<Song> = withContext(Dispatchers.IO) {
+        synchronized(cacheLock) { trendingCache }?.let { return@withContext it }
+        val songs = runCatching { search("Top Hits 2026").songs }
+            .getOrDefault(emptyList())
+            .ifEmpty {
+                runCatching { search("Popular music").songs }.getOrDefault(emptyList())
+            }
+            .distinctBy { it.id }
+            .take(20)
+        synchronized(cacheLock) { trendingCache = songs }
+        songs
     }
 
     override suspend fun getStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
