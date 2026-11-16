@@ -274,12 +274,12 @@ fun ParkerTunesRoot() {
                         }
                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Row(Modifier.weight(1f).height(58.dp).clip(RoundedCornerShape(30.dp))
-                                .background(Color(0xFF1A1A1A)).padding(horizontal = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
+                            Row(Modifier.weight(1f).height(72.dp).clip(RoundedCornerShape(36.dp))
+                                .background(Color(0xFF1A1A1A)).padding(horizontal = 10.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally)) {
                                 listOf("Home", "Explore", "Library").forEach { item ->
                                     val active = selectedTab == item
-                                    Row(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(24.dp))
+                                    Row(Modifier.weight(1f).widthIn(min = 24.dp).fillMaxHeight().clip(RoundedCornerShape(24.dp))
                                         .clickable {
                                             selectedTab = item
                                             nav.navigate(when (item) { "Home" -> "home"; "Explore" -> "search"; else -> "library" }) {
@@ -289,8 +289,8 @@ fun ParkerTunesRoot() {
                                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                                         Icon(when (item) { "Home" -> Icons.Default.Home; "Explore" -> Icons.Default.GridView
                                             else -> Icons.Default.LibraryBooks }, item,
-                                            tint = if (active) Color.White else Color(0xFFA7A7A7), modifier = Modifier.size(22.dp))
-                                        if (active) Text(item, color = Color.White, fontSize = 12.sp,
+                                            tint = if (active) Color.White else Color(0xFFA7A7A7), modifier = Modifier.size(26.dp))
+                                        if (active) Text(item, color = Color.White, fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
                                     }
                                 }
