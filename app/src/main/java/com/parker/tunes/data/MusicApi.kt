@@ -70,6 +70,7 @@ class NewPipeMusicApi : MusicApi {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, SearchSession>?): Boolean =
             size > 10
     }
+    private val artistNameCache = LinkedHashMap<String, String>()
     private val relatedCache = object : LinkedHashMap<String, List<Song>>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
             size > 12
@@ -236,6 +237,10 @@ class NewPipeMusicApi : MusicApi {
         }.getOrDefault(emptyList())
     }
 
+    /**
+     * Artist radio is substantially more reliable than YouTube's related-stream sidebar,
+     * which often returns only a couple of unrelated items for YouTube Music tracks.
+     */
     override suspend fun getRelatedSongs(songId: String): List<Song> = withContext(Dispatchers.IO) {
         val key = songId.trim()
         if (key.isBlank()) return@withContext emptyList()
@@ -244,27 +249,52 @@ class NewPipeMusicApi : MusicApi {
         try {
             NewPipeRuntime.ensureInitialized()
             val videoId = extractVideoId(key) ?: key
-            val url = if (key.startsWith("http://", true) || key.startsWith("https://", true)) {
-                key
-            } else {
-                "https://www.youtube.com/watch?v=$videoId"
-            }
-            val extractor = ServiceList.YouTube.getStreamExtractor(url) as YoutubeStreamExtractor
-            val info = StreamInfo.getInfo(extractor)
-            val related = info.relatedItems
-                .filterIsInstance<StreamInfoItem>()
-                .mapNotNull(::toSong)
+            val artist = synchronized(cacheLock) { artistNameCache[videoId] }
+                ?: runCatching {
+                    val url = if (key.startsWith("http://", true) || key.startsWith("https://", true)) key
+                        else "https://www.youtube.com/watch?v=$videoId"
+                    val extractor = ServiceList.YouTube.getStreamExtractor(url) as YoutubeStreamExtractor
+                    StreamInfo.getInfo(extractor).uploaderName?.trim().orEmpty()
+                }.getOrDefault("")
+            if (artist.isBlank()) return@withContext emptyList()
+            synchronized(cacheLock) { artistNameCache[videoId] = artist }
+
+            val primary = searchMusicSongs("$artist mix", 30)
                 .filterNot { it.id == videoId }
-                .distinctBy { it.id }
-                .take(20)
-            synchronized(cacheLock) { relatedCache[key] = related }
-            related
+            val combined = if (primary.size < 10) {
+                (primary + searchMusicSongs("songs like $artist", 30))
+            } else primary
+            combined.distinctBy { it.id }.take(30).also { result ->
+                synchronized(cacheLock) { relatedCache[key] = result }
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
             emptyList()
         }
     }
+
+    /** One page of the dedicated YouTube Music song filter, not general video search. */
+    private fun searchMusicSongs(query: String, limit: Int): List<Song> = runCatching {
+        val handler = YoutubeSearchQueryHandlerFactory.getInstance().fromQuery(
+            query, listOf(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS), ""
+        )
+        val extractor = YoutubeMusicSearchExtractor(ServiceList.YouTube, handler)
+        extractor.fetchPage()
+        extractor.initialPage.items
+            .filterIsInstance<StreamInfoItem>()
+            .filter { item ->
+                val title = item.name.orEmpty()
+                val url = item.url.orEmpty()
+                item.duration > 0L &&
+                    !url.contains("/shorts/", ignoreCase = true) &&
+                    !title.contains("advertisement", ignoreCase = true) &&
+                    !title.contains("sponsored", ignoreCase = true)
+            }
+            .mapNotNull(::toSong)
+            .distinctBy { it.id }
+            .take(limit)
+    }.getOrDefault(emptyList())
 
     override suspend fun getMoodSongs(moodQuery: String): List<Song> = withContext(Dispatchers.IO) {
         val mood = moodQuery.trim()
@@ -289,13 +319,11 @@ class NewPipeMusicApi : MusicApi {
 
     override suspend fun getTrending(): List<Song> = withContext(Dispatchers.IO) {
         synchronized(cacheLock) { trendingCache }?.let { return@withContext it }
-        val songs = runCatching { search("Top Hits 2026").songs }
-            .getOrDefault(emptyList())
-            .ifEmpty {
-                runCatching { search("Popular music").songs }.getOrDefault(emptyList())
-            }
+        NewPipeRuntime.ensureInitialized()
+        val songs = searchMusicSongs("Top Hits 2026", 30)
+            .ifEmpty { searchMusicSongs("Popular songs 2026", 30) }
             .distinctBy { it.id }
-            .take(20)
+            .take(30)
         synchronized(cacheLock) { trendingCache = songs }
         songs
     }
