@@ -129,6 +129,9 @@ class AddonMusicApi(
     override suspend fun getRelatedSongs(songId: String): List<Song> =
         youtube.getRelatedSongs(songId)
 
+    override suspend fun getMoodSongs(moodQuery: String): List<Song> =
+        youtube.getMoodSongs(moodQuery)
+
     override suspend fun getTrending(): List<Song> =
         youtube.getTrending()
 
