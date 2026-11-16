@@ -85,7 +85,7 @@ fun SpotifyHomeScreen(
         contentPadding = PaddingValues(top = 10.dp, bottom = 120.dp)
     ) {
         item(key = "top_bar") {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.size(width = 27.dp, height = 25.dp), horizontalArrangement = Arrangement.spacedBy(2.dp),
