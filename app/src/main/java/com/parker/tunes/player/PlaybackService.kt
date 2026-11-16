@@ -6,10 +6,19 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.parker.tunes.ParkerTunesApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private var equalizerManager: EqualizerManager? = null
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var autoplayResolving = false
 
     override fun onCreate() {
         super.onCreate()
@@ -37,6 +46,7 @@ class PlaybackService : MediaSessionService() {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY) effects.attach(player.audioSessionId)
                 WidgetProvider.update(this@PlaybackService, player)
+                if (playbackState == Player.STATE_ENDED) maybeAppendRelated(player)
             }
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
                 WidgetProvider.update(this@PlaybackService, player)
