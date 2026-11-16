@@ -284,7 +284,7 @@ fun ParkerTunesRoot() {
                     exit = fadeOut() + slideOutVertically { it / 3 }
                 ) {
                     Column(Modifier.fillMaxWidth().background(Color.Black).padding(bottom = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         AnimatedVisibility(visible = playerState.hasItem, enter = fadeIn(), exit = fadeOut()) {
                             MiniPlayer(title = currentTitle, artist = currentArtist, coverUrl = playerState.artworkUri,
                                 playing = isPlaying, onClick = { nav.navigate("nowplaying") },
@@ -314,9 +314,9 @@ fun ParkerTunesRoot() {
                                     }
                                 }
                             }
-                            Box(Modifier.size(58.dp).clip(CircleShape).background(Color(0xFF242424))
+                            Box(Modifier.size(72.dp).clip(CircleShape).background(Color(0xFF242424))
                                 .clickable {
-                                    selectedTab = "Explore"
+                                    selectedTab = "Search"
                                     nav.navigate("search") { launchSingleTop = true }
                                 }, contentAlignment = Alignment.Center) {
                                 Icon(Icons.Default.Search, "Search", tint = Color.White, modifier = Modifier.size(25.dp))
@@ -332,7 +332,7 @@ fun ParkerTunesRoot() {
                 modifier = Modifier.padding(padding)
             ) {
                 composable("home") {
-                    SpotifyHomeScreen(dao = dao, api = api, player = controller, onPlay = playSong, onSettings = { nav.navigate("settings") }, onSearch = { selectedTab = "Explore"; nav.navigate("explore") })
+                    SpotifyHomeScreen(dao = dao, api = api, player = controller, onPlay = playSong, onSettings = { nav.navigate("settings") }, onSearch = { selectedTab = "Search"; nav.navigate("search") })
                 }
                 composable("explore") {
                     ExploreScreen(onMood = { mood -> nav.navigate("mood/" + Uri.encode(mood)) })
