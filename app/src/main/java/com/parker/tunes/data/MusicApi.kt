@@ -359,7 +359,7 @@ class NewPipeMusicApi : MusicApi {
                 val lrc = item.optString("syncedLyrics").takeIf { it.isNotBlank() }
                 val plain = item.optString("plainLyrics").takeIf { it.isNotBlank() }
                 val lines = lrc?.lineSequence()?.mapNotNull { raw ->
-                    val match = Regex("\\\\[(\\\\d{2}):(\\\\d{2})\\\\.(\\\\d{2,3})]\\\\s*(.*)").matchEntire(raw.trim())
+                    val match = Regex("""\[(\d{2}):(\d{2})\.(\d{2,3})]\s*(.*)""").matchEntire(raw.trim())
                         ?: return@mapNotNull null
                     val ms = (match.groupValues[1].toLong() * 60 + match.groupValues[2].toLong()) * 1000 +
                         match.groupValues[3].padEnd(3, '0').take(3).toLong()
