@@ -47,7 +47,8 @@ data class RecentSearchEntity(
     val searchedAt: Long = System.currentTimeMillis(),
     val title: String = "",
     val artist: String = "",
-    val coverUrl: String? = null
+    val coverUrl: String? = null,
+    val songId: String? = null
 )
 
 data class PlayCountItem(
@@ -59,7 +60,16 @@ data class PlayCountItem(
 )
 
 @Dao
-interface LibraryDao {\n    @Query("SELECT * FROM recent_searches ORDER BY searchedAt DESC LIMIT 20")\n    fun recentSearches(): Flow<List<RecentSearchEntity>>\n\n    @Insert(onConflict = OnConflictStrategy.REPLACE)\n    suspend fun saveRecentSearch(item: RecentSearchEntity)\n\n    @Query("DELETE FROM recent_searches")\n    suspend fun clearRecentSearches()\n
+interface LibraryDao {
+    @Query("SELECT * FROM recent_searches ORDER BY searchedAt DESC LIMIT 20")
+    fun recentSearches(): Flow<List<RecentSearchEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveRecentSearch(item: RecentSearchEntity)
+
+    @Query("DELETE FROM recent_searches")
+    suspend fun clearRecentSearches()
+
     @Query("SELECT * FROM playlists ORDER BY createdAt DESC")
     fun playlists(): Flow<List<PlaylistEntity>>
 
@@ -139,7 +149,13 @@ abstract class LibraryDatabase : RoomDatabase() {
             }
         }
 
-        private val MIGRATION_3_4 = object : Migration(3, 4) {\n            override fun migrate(db: SupportSQLiteDatabase) {\n                db.execSQL("CREATE TABLE IF NOT EXISTS recent_searches (query TEXT NOT NULL, searchedAt INTEGER NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, coverUrl TEXT, songId TEXT, PRIMARY KEY(query))")\n            }\n        }\n\n        fun get(context: Context): LibraryDatabase =
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS recent_searches (query TEXT NOT NULL, searchedAt INTEGER NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, coverUrl TEXT, songId TEXT, PRIMARY KEY(query))")
+            }
+        }
+
+        fun get(context: Context): LibraryDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
