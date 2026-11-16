@@ -27,6 +27,11 @@ class AddonMusicApi(
     @Volatile
     private var manifestCache: CachedManifest? = null
 
+    private val streamCache = object : LinkedHashMap<String, String>(48, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean =
+            size > 100
+    }
+
     private val searchCache = object : LinkedHashMap<String, List<Song>>(24, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
             size > 20
@@ -115,18 +120,25 @@ class AddonMusicApi(
     }
 
     override suspend fun getStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
+        synchronized(streamCache) { streamCache[songId] }?.let { return@withContext it }
         val parsed = parseAddonSongId(songId)
-        if (parsed == null) return@withContext youtube.getStreamUrl(songId)
-        val (base, trackId, directStream) = parsed
-        if (!directStream.isNullOrBlank()) return@withContext directStream
-
-        val url = Uri.parse(endpoint(base, "stream", trackId)).buildUpon()
-            .appendQueryParameter("quality", qualityFor(base)).build().toString()
-        getJson(url).optString("url").also {
-            require(it.startsWith("https://", true)) {
-                "The addon did not return a playable stream URL."
+        val resolved = if (parsed == null) {
+            youtube.getStreamUrl(songId)
+        } else {
+            val (base, trackId, directStream) = parsed
+            if (!directStream.isNullOrBlank()) directStream else {
+                val url = Uri.parse(endpoint(base, "stream", trackId)).buildUpon()
+                    .appendQueryParameter("quality", qualityFor(base)).build().toString()
+                getJson(url).optString("url").also {
+                    require(it.startsWith("https://", true)) {
+                        "The addon did not return a playable stream URL."
+                    }
+                }
             }
         }
+        require(resolved.startsWith("http", true)) { "Could not resolve an audio stream for this song." }
+        synchronized(streamCache) { streamCache[songId] = resolved }
+        resolved
     }
 
     override suspend fun getLyrics(songId: String): String? =
