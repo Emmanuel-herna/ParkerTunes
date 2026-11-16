@@ -41,6 +41,15 @@ data class PlayHistoryEntity(
     val coverUrl: String? = null
 )
 
+@Entity(tableName = "recent_searches")
+data class RecentSearchEntity(
+    @PrimaryKey val query: String,
+    val searchedAt: Long = System.currentTimeMillis(),
+    val title: String = "",
+    val artist: String = "",
+    val coverUrl: String? = null
+)
+
 data class PlayCountItem(
     val songId: String,
     val title: String,
@@ -50,7 +59,7 @@ data class PlayCountItem(
 )
 
 @Dao
-interface LibraryDao {
+interface LibraryDao {\n    @Query("SELECT * FROM recent_searches ORDER BY searchedAt DESC LIMIT 20")\n    fun recentSearches(): Flow<List<RecentSearchEntity>>\n\n    @Insert(onConflict = OnConflictStrategy.REPLACE)\n    suspend fun saveRecentSearch(item: RecentSearchEntity)\n\n    @Query("DELETE FROM recent_searches")\n    suspend fun clearRecentSearches()\n
     @Query("SELECT * FROM playlists ORDER BY createdAt DESC")
     fun playlists(): Flow<List<PlaylistEntity>>
 
@@ -102,8 +111,8 @@ interface LibraryDao {
 }
 
 @Database(
-    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class],
-    version = 3,
+    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class],
+    version = 4,
     exportSchema = false
 )
 abstract class LibraryDatabase : RoomDatabase() {
@@ -130,13 +139,13 @@ abstract class LibraryDatabase : RoomDatabase() {
             }
         }
 
-        fun get(context: Context): LibraryDatabase =
+        private val MIGRATION_3_4 = object : Migration(3, 4) {\n            override fun migrate(db: SupportSQLiteDatabase) {\n                db.execSQL("CREATE TABLE IF NOT EXISTS recent_searches (query TEXT NOT NULL, searchedAt INTEGER NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, coverUrl TEXT, PRIMARY KEY(query))")\n            }\n        }\n\n        fun get(context: Context): LibraryDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     LibraryDatabase::class.java,
                     "parker_tunes.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { INSTANCE = it }
             }
     }
 }
