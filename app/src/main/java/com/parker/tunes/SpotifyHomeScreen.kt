@@ -53,6 +53,8 @@ fun SpotifyHomeScreen(
     var recommendationsLoading by remember(api) { mutableStateOf(false) }
     val latestTrack = recent.firstOrNull()
     val recommendationKey = latestTrack?.songId?.let { "related:$it" } ?: "trending"
+    val recommendationSubtitle = latestTrack?.artist?.takeIf { it.isNotBlank() }
+        ?.let { "Because you listened to $it" } ?: "Trending now"
 
     LaunchedEffect(dao) {
         withContext(Dispatchers.IO) { dao.recentlyPlayed().first() }
@@ -103,35 +105,10 @@ fun SpotifyHomeScreen(
             }
         }
 
-        if (recent.isNotEmpty()) {
-            item(key = "recent_section") {
-                Column {
-                    SectionHeading("Recently played")
-                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(recent.take(20), key = { "recent_card_" + it.id }) { track ->
-                            val song = Song(track.songId, track.title.ifBlank { track.songId }, track.artist, track.coverUrl)
-                            Column(Modifier.width(200.dp).clickable { onPlay(song) }, verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                                Box(Modifier.size(width = 200.dp, height = 176.dp).clip(RoundedCornerShape(12.dp))
-                                    .background(Color(0xFF202020)), contentAlignment = Alignment.Center) {
-                                    if (track.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = SpotifyGray, modifier = Modifier.size(42.dp))
-                                    else AsyncImage(model = track.coverUrl, contentDescription = "Track cover",
-                                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                                }
-                                Text(song.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(song.artist.ifBlank { "Unknown artist" }, color = SpotifyGray, fontSize = 13.sp,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         if (historyReady) {
             item(key = "recommendations_section") {
                 Column {
-                    SectionHeading("Made for you")
+                    SectionHeading("Made for you", recommendationSubtitle)
                     if (recommendationsLoading) {
                         RecommendationShimmer()
                     } else if (recommendations.isNotEmpty()) {
@@ -141,11 +118,11 @@ fun SpotifyHomeScreen(
                         ) {
                             items(recommendations, key = { "recommendation_" + it.id }) { song ->
                                 Column(
-                                    Modifier.width(184.dp).clickable { onPlay(song) },
+                                    Modifier.width(200.dp).clickable { onPlay(song) },
                                     verticalArrangement = Arrangement.spacedBy(7.dp)
                                 ) {
                                     Box(
-                                        Modifier.size(184.dp).clip(RoundedCornerShape(12.dp))
+                                        Modifier.size(width = 200.dp, height = 180.dp).clip(RoundedCornerShape(12.dp))
                                             .background(Color(0xFF202020)),
                                         contentAlignment = Alignment.Center
                                     ) {
@@ -167,6 +144,31 @@ fun SpotifyHomeScreen(
                                     Text(song.artist.ifBlank { "Unknown artist" }, color = SpotifyGray,
                                         fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (recent.isNotEmpty()) {
+            item(key = "recent_section") {
+                Column {
+                    SectionHeading("Recently played")
+                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(recent.take(20), key = { "recent_card_" + it.id }) { track ->
+                            val song = Song(track.songId, track.title.ifBlank { track.songId }, track.artist, track.coverUrl)
+                            Column(Modifier.width(200.dp).clickable { onPlay(song) }, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Box(Modifier.size(width = 200.dp, height = 176.dp).clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF202020)), contentAlignment = Alignment.Center) {
+                                    if (track.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = SpotifyGray, modifier = Modifier.size(42.dp))
+                                    else AsyncImage(model = track.coverUrl, contentDescription = "Track cover",
+                                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                }
+                                Text(song.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(song.artist.ifBlank { "Unknown artist" }, color = SpotifyGray, fontSize = 13.sp,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
@@ -227,7 +229,7 @@ fun SpotifyHomeScreen(
             }
         }
 
-        if (recent.isEmpty() && mostPlayed.isEmpty() && favorites.isEmpty()) {
+        if (recent.isEmpty() && mostPlayed.isEmpty() && favorites.isEmpty() && recommendations.isEmpty() && !recommendationsLoading) {
             item(key = "empty_cta") {
                 Column(Modifier.fillParentMaxSize().padding(horizontal = 28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -262,9 +264,9 @@ private fun RecommendationShimmer() {
         horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         items(3) {
-            Column(Modifier.width(184.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.width(200.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(
-                    Modifier.size(184.dp).clip(RoundedCornerShape(12.dp))
+                    Modifier.size(width = 200.dp, height = 180.dp).clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFF303030).copy(alpha = alpha))
                 )
                 Box(
@@ -296,7 +298,10 @@ private object HomeRecommendationCache {
 }
 
 @Composable
-private fun SectionHeading(title: String) {
-    Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp))
+private fun SectionHeading(title: String, subtitle: String? = null) {
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        if (subtitle != null) Text(subtitle, color = SpotifyGray, fontSize = 12.sp)
+    }
 }
