@@ -4,6 +4,9 @@ import android.app.Application
 import com.parker.tunes.data.AddonMusicApi
 import com.parker.tunes.data.LibraryDatabase
 import com.parker.tunes.data.MusicApi
+import coil.Coil
+import coil.ImageLoader
+import coil.disk.DiskCache
 
 class ParkerTunesApp : Application() {
     lateinit var musicApi: MusicApi
@@ -12,6 +15,16 @@ class ParkerTunesApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        Coil.setImageLoader(
+            ImageLoader.Builder(this)
+                .diskCache {
+                    DiskCache.Builder()
+                        .directory(cacheDir.resolve("parker_tunes_image_cache"))
+                        .maxSizeBytes(256L * 1024L * 1024L)
+                        .build()
+                }
+                .build()
+        )
         musicApi = AddonMusicApi(this)
     }
 }
