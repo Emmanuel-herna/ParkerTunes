@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private var equalizerManager: EqualizerManager? = null
+    private var crossfadeController: CrossfadeController? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var autoplayResolving = false
 
@@ -35,6 +36,7 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
 
+        crossfadeController = CrossfadeController(player, getSharedPreferences("parker_tunes_settings", MODE_PRIVATE))
         val effects = EqualizerManager(this)
         equalizerManager = effects
         EqualizerRegistry.manager = effects
@@ -117,6 +119,8 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         serviceScope.cancel()
+        crossfadeController?.release()
+        crossfadeController = null
         equalizerManager?.close()
         equalizerManager = null
         EqualizerRegistry.manager = null
