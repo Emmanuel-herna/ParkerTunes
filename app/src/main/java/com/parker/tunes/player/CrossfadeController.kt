@@ -3,6 +3,7 @@ package com.parker.tunes.player
 import android.os.SystemClock
 import android.content.SharedPreferences
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,7 +18,7 @@ import kotlinx.coroutines.launch
  * envelope without creating a second audio pipeline.
  */
 class CrossfadeController(
-    private val player: Player,
+    private val player: ExoPlayer,
     private val preferences: SharedPreferences
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
