@@ -36,7 +36,7 @@ class AddonClient(private val http: OkHttpClient = OkHttpClient.Builder()
         if (response == null) {
             // Some compatible servers expose /search without a manifest.
             val probe = runCatching { execute("$base/search?q=parker-tunes-health&limit=1") }.getOrNull()
-            if (probe?.code in 200..299) return@withContext SourceHealth.Ok("Compatible addon")
+            if (probe != null && probe.code in 200..299) return@withContext SourceHealth.Ok("Compatible addon")
             return@withContext SourceHealth.Unreachable("Could not reach addon")
         }
         when {
@@ -83,7 +83,8 @@ class AddonClient(private val http: OkHttpClient = OkHttpClient.Builder()
                     artist = row.optString("artist").ifBlank { "Unknown artist" },
                     coverUrl = row.optString("thumbnailUrl").ifBlank { row.optString("albumArtworkURL") }.ifBlank { null },
                     durationSec = row.optDouble("durationSec", row.optDouble("duration", 0.0)).toLong().coerceAtLeast(0),
-                    album = row.optString("albumName").ifBlank { null }
+                    album = row.optString("albumName").ifBlank { null },
+                    sourceQuality = row.optString("audioQuality").ifBlank { row.optJSONArray("audioModes")?.let { modes -> (0 until modes.length()).joinToString(" · ") { modes.optString(it) } } }
                 ))
             }
         }
@@ -113,7 +114,7 @@ class AddonClient(private val http: OkHttpClient = OkHttpClient.Builder()
         }
         if (response == null || response.code !in 200..299) return@withContext null
         val json = runCatching { JSONObject(response.body.orEmpty()) }.getOrNull() ?: return@withContext null
-        if (json.has("encrypted") && json.optBoolean("encrypted", true)) return@withContext null
+        if (!json.has("encrypted") || json.optBoolean("encrypted", true)) return@withContext null
         val url = json.optString("url")
         if (!isAbsoluteHttp(url)) return@withContext null
         val qualityText = json.optString("quality")
