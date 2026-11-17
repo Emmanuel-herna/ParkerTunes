@@ -82,6 +82,15 @@ class HomeViewModel(private val api: MusicApi) {
         }
     }
 
+    // Kept for the restored legacy SpotifyHomeScreen; the active Home screen
+    // uses the richer full-history entry point above.
+    fun onTrackChanged(songId: String?, artist: String, recentSongIds: Set<String>) {
+        val seed = if (!songId.isNullOrBlank() && artist.isNotBlank()) {
+            listOf(Song(songId, songId, artist, null))
+        } else emptyList()
+        onListeningHistory(seed)
+    }
+
     fun loadMore() {
         if (artistQueue.isEmpty() || loadMoreJob?.isActive == true) return
         loadMoreJob = scope.launch {
