@@ -118,11 +118,12 @@ class YtMusicHomeApi(
                 val ratio = itemRenderer.optString("thumbnailRatio")
                 if (ratio == "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_16_9") wideCount++
                 parsed += ShelfItem(itemTitle, subtitle, thumbnail, browseId, params, videoId,
-                    isVideo = videoId != null && browseId == null)
+                    isVideo = (videoId != null && browseId == null) ||
+                        ratio == "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_16_9")
             }
             val layout = when {
                 parsed.isNotEmpty() && wideCount == parsed.size -> ShelfLayout.VIDEO
-                parsed.any { it.isVideo } -> ShelfLayout.TRACKS
+                parsed.any { it.isVideo } -> ShelfLayout.SQUARE
                 else -> ShelfLayout.SQUARE
             }
             shelves += HomeShelf(title, strapline, layout, parsed)
