@@ -38,6 +38,8 @@ interface MusicApi {
     /** Fetches the next song page only when the UI asks for it. */
     suspend fun searchMore(query: String): List<Song> = emptyList()
     suspend fun getRelatedSongs(songId: String): List<Song>
+    suspend fun getRelatedSongs(songId: String, title: String, artist: String): List<Song> =
+        getRelatedSongs(songId)
     suspend fun getMoodSongs(moodQuery: String): List<Song>
     suspend fun getTrending(): List<Song>
     suspend fun getArtistProfile(artist: Artist): ArtistProfile
@@ -70,7 +72,6 @@ class NewPipeMusicApi : MusicApi {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, SearchSession>?): Boolean =
             size > 10
     }
-    private val artistNameCache = LinkedHashMap<String, String>()
     private val relatedCache = object : LinkedHashMap<String, List<Song>>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
             size > 12
@@ -238,41 +239,70 @@ class NewPipeMusicApi : MusicApi {
     }
 
     /**
-     * Artist radio is substantially more reliable than YouTube's related-stream sidebar,
-     * which often returns only a couple of unrelated items for YouTube Music tracks.
+     * Recommendations are searched and ranked through YouTube Music only.
+     * The selected track's title and artist are supplied by the app; regular
+     * YouTube is not queried to infer the artist.
      */
-    override suspend fun getRelatedSongs(songId: String): List<Song> = withContext(Dispatchers.IO) {
-        val key = songId.trim()
-        if (key.isBlank()) return@withContext emptyList()
-        synchronized(cacheLock) { relatedCache[key] }?.let { return@withContext it }
+    override suspend fun getRelatedSongs(songId: String): List<Song> =
+        getRelatedSongs(songId, "", "")
 
-        try {
-            NewPipeRuntime.ensureInitialized()
-            val videoId = extractVideoId(key) ?: key
-            val artist = synchronized(cacheLock) { artistNameCache[videoId] }
-                ?: runCatching {
-                    val url = if (key.startsWith("http://", true) || key.startsWith("https://", true)) key
-                        else "https://www.youtube.com/watch?v=$videoId"
-                    val extractor = ServiceList.YouTube.getStreamExtractor(url) as YoutubeStreamExtractor
-                    StreamInfo.getInfo(extractor).uploaderName?.trim().orEmpty()
-                }.getOrDefault("")
-            if (artist.isBlank()) return@withContext emptyList()
-            synchronized(cacheLock) { artistNameCache[videoId] = artist }
-
-            val primary = searchMusicSongs("$artist mix", 30)
-                .filterNot { it.id == videoId }
-            val combined = if (primary.size < 10) {
-                (primary + searchMusicSongs("songs like $artist", 30))
-            } else primary
-            combined.distinctBy { it.id }.take(30).also { result ->
-                synchronized(cacheLock) { relatedCache[key] = result }
+    override suspend fun getRelatedSongs(songId: String, title: String, artist: String): List<Song> =
+        withContext(Dispatchers.IO) {
+            val videoId = extractVideoId(songId) ?: songId.trim()
+            val cleanTitle = title.trim()
+            val cleanArtist = artist.trim()
+            if (videoId.isBlank() || cleanTitle.isBlank() || cleanArtist.isBlank()) {
+                return@withContext emptyList()
             }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            emptyList()
+            val cacheKey = "$videoId|$cleanTitle|$cleanArtist".lowercase()
+            synchronized(cacheLock) { relatedCache[cacheKey] }?.let { return@withContext it }
+
+            try {
+                NewPipeRuntime.ensureInitialized()
+                val queries = listOf(
+                    "\"$cleanTitle\" $cleanArtist",
+                    "$cleanArtist top songs",
+                    "songs like $cleanTitle by $cleanArtist"
+                )
+                val titleTokens = cleanTitle.lowercase()
+                    .split(Regex("[^a-z0-9]+")).filter { it.length > 2 }.toSet()
+                val candidates = queries.flatMap { query -> searchMusicSongs(query, 30) }
+                    .asSequence()
+                    .filter { it.id != videoId && it.durationSec in 45L..600L }
+                    .filterNot { song ->
+                        val t = song.title.lowercase()
+                        listOf("1 hour", "1-hour", "2 hour", "2-hour", "dj mix",
+                            "full album", "nonstop", "live stream", "playlist",
+                            "karaoke", "8d audio").any(t::contains)
+                    }
+                    .distinctBy { it.id }
+                    .map { song ->
+                        val resultArtist = song.artist.trim().lowercase()
+                        val targetArtist = cleanArtist.lowercase()
+                        val artistMatch = resultArtist == targetArtist ||
+                            resultArtist.contains(targetArtist) ||
+                            targetArtist.contains(resultArtist)
+                        val resultTokens = song.title.lowercase()
+                            .split(Regex("[^a-z0-9]+")).toSet()
+                        val titleOverlap = titleTokens.intersect(resultTokens).size
+                        song to ((if (artistMatch) 4 else 0) + titleOverlap)
+                    }
+                    .filter { (song, score) ->
+                        score >= 2 && song.artist.isNotBlank() &&
+                            !song.artist.equals("unknown artist", ignoreCase = true)
+                    }
+                    .sortedByDescending { it.second }
+                    .map { it.first }
+                    .take(30)
+                    .toList()
+                synchronized(cacheLock) { relatedCache[cacheKey] = candidates }
+                candidates
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emptyList()
+            }
         }
-    }
 
     /** One page of the dedicated YouTube Music song filter, not general video search. */
     private fun searchMusicSongs(query: String, limit: Int): List<Song> = runCatching {
