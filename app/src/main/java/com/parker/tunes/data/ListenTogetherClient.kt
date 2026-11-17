@@ -20,7 +20,7 @@ data class JamTrack(val videoId:String,val title:String,val artist:String,val th
 data class JamMember(val deviceId:String,val displayName:String,val host:Boolean,val connected:Boolean)
 data class JamPlayback(val seq:Long,val track:JamTrack?,val positionMs:Long,val anchorMs:Long,val isPlaying:Boolean,val startedByName:String?)
 data class JamSnapshot(val code:String,val members:List<JamMember>,val hostOnlyControl:Boolean,val playback:JamPlayback?,val queue:List<JamTrack>,val queueIndex:Int)
-data class JamUiState(val serverUrl:String="https://",val displayName:String="",val code:String="",val token:String="",val connected:Boolean=false,val loading:Boolean=false,val error:String?=null,val party:JamSnapshot?=null)
+data class JamUiState(val serverUrl:String="https://",val displayName:String="",val code:String="",val token:String="",val isHost:Boolean=false,val connected:Boolean=false,val loading:Boolean=false,val error:String?=null,val party:JamSnapshot?=null)
 
 class ListenTogetherClient(context:Context) {
     private val prefs=context.getSharedPreferences("listen_together",Context.MODE_PRIVATE)
@@ -53,7 +53,7 @@ class ListenTogetherClient(context:Context) {
             }
             val code=json.optString("code"); val token=json.optString("token")
             prefs.edit().putString("party_code",code).putString("party_token",token).apply()
-            _state.value=_state.value.copy(code=code,token=token,loading=false)
+            _state.value=_state.value.copy(code=code,token=token,isHost=json.optJSONObject("you")?.optBoolean("host") ?: false,loading=false)
             parseParty(json.optJSONObject("party") ?: JSONObject())
             connect()
         } catch(e:Exception) { _state.value=_state.value.copy(loading=false,error=e.message?: "Couldn't connect to the party") }
@@ -76,7 +76,7 @@ class ListenTogetherClient(context:Context) {
     }
     private fun handleFrame(j:JSONObject) {
         when(j.optString("type")) {
-            "welcome" -> { parseParty(j.optJSONObject("party")?:JSONObject()); send(JSONObject().put("type","sync")) }
+            "welcome" -> { _state.value=_state.value.copy(isHost=j.optJSONObject("you")?.optBoolean("host") ?: _state.value.isHost); parseParty(j.optJSONObject("party")?:JSONObject()); send(JSONObject().put("type","sync")) }
             "pong" -> { val sent=j.optLong("clientMs"); val received=System.currentTimeMillis(); val sample=j.optLong("serverMs")-(sent+received)/2; clockOffsetMs=sample }
             "state" -> { val p=j.optJSONObject("playback")?:return; val seq=p.optLong("seq"); if(seq<=lastAppliedSeq)return; lastAppliedSeq=seq; val old=_state.value.party; _state.value=_state.value.copy(party=old?.copy(playback=JamPlayback(seq,parseTrack(p.optJSONObject("track")),p.optLong("positionMs"),p.optLong("anchorMs"),p.optBoolean("isPlaying"),p.optString("startedByName").takeIf{it.isNotBlank()}))) }
             "queue" -> { val q=j.optJSONObject("queue")?:return; val old=_state.value.party?:return; _state.value=_state.value.copy(party=old.copy(queue=parseTracks(q.optJSONArray("items")),queueIndex=q.optInt("index"))) }
@@ -96,6 +96,6 @@ class ListenTogetherClient(context:Context) {
     private fun ping(){send(JSONObject().put("type","ping").put("clientMs",System.currentTimeMillis()))}
     fun estimatedPosition(p:JamPlayback):Long { val now=System.currentTimeMillis()+clockOffsetMs; return if(p.isPlaying) p.positionMs+(now-p.anchorMs).coerceAtLeast(0L) else p.positionMs }
     fun leave(){ val s=_state.value; if(s.token.isNotBlank()&&s.code.isNotBlank()) { val req=Request.Builder().url("${s.serverUrl}/api/parties/${s.code}/leave").header("Authorization","Bearer ${s.token}").post(ByteArray(0).toRequestBody()).build(); http.newCall(req).enqueue(object:Callback{override fun onFailure(call:Call,e:java.io.IOException){};override fun onResponse(call:Call,response:Response){response.close()}}) }; socket?.close(1000,"left"); leaveLocal() }
-    private fun leaveLocal(){socket?.close(1000,"left");socket=null;prefs.edit().remove("party_code").remove("party_token").apply();_state.value=_state.value.copy(code="",token="",connected=false,party=null)}
+    private fun leaveLocal(){socket?.close(1000,"left");socket=null;prefs.edit().remove("party_code").remove("party_token").apply();_state.value=_state.value.copy(code="",token="",isHost=false,connected=false,party=null)}
     fun close(){socket?.close(1000,"screen closed");socket=null}
 }
