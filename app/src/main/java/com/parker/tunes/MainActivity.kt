@@ -491,9 +491,11 @@ fun ParkerTunesRoot() {
             ) {
                 composable("home") {
                     HomeScreen(
-                        dao = dao, player = controller, onPlay = playSong,
+                        dao = dao, api = api, player = controller, onPlay = playSong,
                         onQueue = { song, playNext -> queueSong(song, playNext) },
                         onSettings = { nav.navigate("settings") },
+                        onSearch = { nav.navigate("search") { launchSingleTop = true } },
+                        onExplore = { nav.navigate("explore") { launchSingleTop = true } },
                         homeApi = app.homeApi,
                         onOpenPlaylist = { item, shelf ->
                             val browseId = item.browseId.orEmpty()
