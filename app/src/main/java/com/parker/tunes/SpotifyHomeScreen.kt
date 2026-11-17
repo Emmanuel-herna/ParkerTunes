@@ -94,6 +94,7 @@ fun SpotifyHomeScreen(
             homeChips = page.chips
             homeContinuation = page.continuation
             withContext(Dispatchers.IO) {
+                dao.clearHomeShelfCache()
                 dao.saveHomeShelfCache(HomeShelfCacheEntity(0, encodeShelves(page.shelves)))
                 dao.pruneHomeShelfCache(System.currentTimeMillis() - 30L * 60L * 1000L)
             }
