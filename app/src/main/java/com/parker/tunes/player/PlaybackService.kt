@@ -15,6 +15,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.parker.tunes.ParkerTunesApp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -200,26 +201,37 @@ class PlaybackService : MediaSessionService() {
                 val app = application as ParkerTunesApp
                 // Keep the original related list as a safety fallback. If filtering or
                 // the artist-search fallback fails, autoplay still behaves as before.
-                val related = withContext(Dispatchers.IO) { app.musicApi.getRelatedSongs(songId) }
-                val filteredRelated = runCatching {
-                    related.filterNot { isLikelyMix(it.title, it.durationSec) }
-                }.getOrDefault(related)
+                val related = try {
+                    withContext(Dispatchers.IO) { app.musicApi.getRelatedSongs(songId) }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    emptyList()
+                }
 
-                val artistName = current.mediaMetadata.artist?.toString()?.trim().orEmpty()
-                val candidates = if (filteredRelated.size < 5 && artistName.isNotBlank()) {
-                    try {
+                // Default to the old unfiltered list. Only replace it after the
+                // filter/search path completes successfully.
+                var candidates = related
+                try {
+                    val filteredRelated = related.filterNot {
+                        isLikelyMix(it.title, it.durationSec)
+                    }
+                    val artistName = current.mediaMetadata.artist?.toString()?.trim().orEmpty()
+                    candidates = if (filteredRelated.size < 5 && artistName.isNotBlank()) {
                         val fallback = withContext(Dispatchers.IO) {
                             app.musicApi.search("$artistName songs").songs.take(15)
                         }
                         (filteredRelated + fallback.filterNot {
                             isLikelyMix(it.title, it.durationSec)
                         }).distinctBy { it.id }
-                    } catch (_: Exception) {
-                        // Preserve the previous unfiltered behavior if fallback search fails.
-                        related
+                    } else {
+                        filteredRelated
                     }
-                } else {
-                    filteredRelated
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // Any filter/fallback problem keeps the original related results.
+                    candidates = related
                 }
 
                 val queuedIds = (0 until player.mediaItemCount).mapNotNull { index ->
