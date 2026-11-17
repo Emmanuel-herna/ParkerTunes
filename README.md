@@ -28,6 +28,11 @@ The demo `MusicApi` intentionally returns no search results and does not provide
 
 Only play audio you have permission to access. Do not scrape services or bypass access controls.
 
+## Spotify metadata (optional)
+ParkerTunes can use Spotify catalogue search metadata and artwork as an optional search fallback. Audio playback remains on the existing YouTube Music/NewPipe provider. Configure the Spotify Client ID and Client Secret in **Settings → Spotify metadata**. Credentials are stored locally in DataStore for this personal-use build; secrets embedded in an Android app can be extracted, so move them to a backend before distributing the app publicly. Empty credentials silently disable the Spotify fallback.
+
+Spotify attribution: Search metadata & artwork © Spotify. Spotify is a trademark of Spotify AB. ParkerTunes is not affiliated with Spotify. Spotify-sourced search rows include a link back to the matching Spotify track. Spotify metadata and artwork must be used in accordance with the [Spotify Developer Policy](https://developer.spotify.com/policy) and [Branding Guidelines](https://developer.spotify.com/documentation/design).
+
 ## Cloud build (no PC required)
 A GitHub Actions workflow is included at `.github/workflows/android-build.yml`. It builds a debug APK whenever code is pushed to `main`, and can also be started manually from the repository's Actions tab using **Android build** → **Run workflow**.
 
