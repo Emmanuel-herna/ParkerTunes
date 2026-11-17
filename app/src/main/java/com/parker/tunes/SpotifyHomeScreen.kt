@@ -227,20 +227,6 @@ fun SpotifyHomeScreen(
         }
 
 
-        if (homeChips.isNotEmpty()) {
-            item(key = "home_chips") {
-                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(homeChips, key = { it.name }) { chip ->
-                        Surface(color = Color(0xFF292333), shape = RoundedCornerShape(22.dp)) {
-                            Text(chip.name, color = Color.White, fontSize = 13.sp,
-                                modifier = Modifier.padding(horizontal = 15.dp, vertical = 9.dp))
-                        }
-                    }
-                }
-            }
-        }
-
         if (homeShelves.isNotEmpty()) {
             items(homeShelves.filter { it.items.size >= 2 }, key = { "yt_home_" + it.title + "_" + it.items.firstOrNull()?.browseId }) { shelf ->
                 Column {
