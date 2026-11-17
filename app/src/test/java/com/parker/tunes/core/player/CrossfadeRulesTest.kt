@@ -27,6 +27,13 @@ class CrossfadeRulesTest {
         assertTrue(CrossfadeRules.applies(4, current, next, false))
     }
 
+    @Test fun overlapLeavesEnoughTimeOutsideTheFade() {
+        assertFalse(CrossfadeRules.applies(4, current.copy(durationMs = 11_999L), next, false))
+        assertFalse(CrossfadeRules.applies(4, current, next.copy(durationMs = 11_999L), false))
+        assertTrue(CrossfadeRules.applies(4, current.copy(durationMs = 12_000L), next, false))
+        assertTrue(CrossfadeRules.applies(4, current, next.copy(durationMs = 12_000L), false))
+    }
+
     @Test fun equalPowerCurvesMaintainConstantPower() {
         for (step in 0..100) {
             val p = step / 100f
