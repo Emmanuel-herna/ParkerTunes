@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"context"
+
+	"google.golang.org/api/idtoken"
 	"crypto/rand"
 	"encoding/hex"
 	"log"
@@ -65,20 +68,53 @@ type Party struct {
 	Created time.Time `json:"-"`
 	EmptySince time.Time `json:"-"`
 }
-type Server struct { mu sync.Mutex; parties map[string]*Party; upgrader websocket.Upgrader }
-type Identity struct { UserID string `json:"userId"`; DeviceID string `json:"deviceId"`; DisplayName string `json:"displayName"`; AvatarURL string `json:"avatarUrl"` }
+type Server struct { mu sync.Mutex; parties map[string]*Party; upgrader websocket.Upgrader; verifyGoogle func(context.Context,string)(*idtoken.Payload,error) }
+type Identity struct { IDToken string `json:"idToken"`; UserID string `json:"-"`; DeviceID string `json:"deviceId"`; DisplayName string `json:"displayName"`; AvatarURL string `json:"-"` }
 type envelope struct { Type string `json:"type"`; ClientMS int64 `json:"clientMs,omitempty"`; Action string `json:"action,omitempty"`; PositionMS int64 `json:"positionMs,omitempty"`; IsPlaying bool `json:"isPlaying,omitempty"`; Track *Track `json:"track,omitempty"`; Queue []Track `json:"queue,omitempty"`; QueueIndex int `json:"queueIndex,omitempty"`; Tracks []Track `json:"tracks,omitempty"`; VideoID string `json:"videoId,omitempty"`; FromIndex int `json:"fromIndex,omitempty"`; ToIndex int `json:"toIndex,omitempty"`; PlayNext bool `json:"playNext,omitempty"`; Enabled bool `json:"enabled,omitempty"` }
 func nowMS() int64 { return time.Now().UnixMilli() }
 func token() string { b:=make([]byte,32); if _,err:=rand.Read(b); err!=nil { panic(err) }; return hex.EncodeToString(b) }
 func code() string { const alphabet="ABCDEFGHJKMNPQRSTUVWXYZ23456789"; b:=make([]byte,6); if _,err:=rand.Read(b); err!=nil { panic(err) }; for i:=range b { b[i]=alphabet[int(b[i])%len(alphabet)] }; return string(b) }
 func normalize(s string) string { s=strings.ToUpper(strings.TrimSpace(s)); s=strings.ReplaceAll(s," ",""); s=strings.NewReplacer("O","0","I","1","L","1").Replace(s); return s }
-func validIdentity(i Identity) bool { return strings.TrimSpace(i.UserID)!="" && strings.TrimSpace(i.DeviceID)!="" && strings.TrimSpace(i.DisplayName)!="" }
+func (s *Server) readIdentity(w http.ResponseWriter, r *http.Request) (Identity, bool) {
+	var input Identity
+	if json.NewDecoder(http.MaxBytesReader(w,r.Body,8192)).Decode(&input)!=nil || strings.TrimSpace(input.IDToken)=="" || strings.TrimSpace(input.DeviceID)=="" {
+		s.write(w,http.StatusUnauthorized,map[string]string{"error":"google_sign_in_required"})
+		return Identity{},false
+	}
+	verify:=s.verifyGoogle
+	if verify==nil {
+		audience:=strings.TrimSpace(os.Getenv("GOOGLE_WEB_CLIENT_ID"))
+		if audience=="" {
+			s.write(w,http.StatusServiceUnavailable,map[string]string{"error":"google_auth_not_configured"})
+			return Identity{},false
+		}
+		verify=func(ctx context.Context,token string)(*idtoken.Payload,error){ return idtoken.Validate(ctx,token,audience) }
+	}
+	payload,err:=verify(r.Context(),input.IDToken)
+	if err!=nil || payload==nil || strings.TrimSpace(payload.Subject)=="" {
+		s.write(w,http.StatusUnauthorized,map[string]string{"error":"invalid_google_id_token"})
+		return Identity{},false
+	}
+	email,_:=payload.Claims["email"].(string)
+	verified,_:=payload.Claims["email_verified"].(bool)
+	if email=="" || !verified {
+		s.write(w,http.StatusUnauthorized,map[string]string{"error":"verified_google_email_required"})
+		return Identity{},false
+	}
+	name,_:=payload.Claims["name"].(string)
+	if strings.TrimSpace(name)=="" { name=strings.TrimSpace(strings.Split(email,"@")[0]) }
+	picture,_:=payload.Claims["picture"].(string)
+	input.UserID=payload.Subject
+	input.DisplayName=name
+	input.AvatarURL=picture
+	return input,true
+}
 func (s *Server) write(w http.ResponseWriter, status int, v any) { w.Header().Set("Content-Type","application/json"); w.WriteHeader(status); _=json.NewEncoder(w).Encode(v) }
 func (s *Server) party(code string) *Party { s.mu.Lock(); defer s.mu.Unlock(); return s.parties[normalize(code)] }
 func (p *Party) snapshot() map[string]any { p.mu.Lock(); defer p.mu.Unlock(); return p.snapshotLocked() }
 func (p *Party) snapshotLocked() map[string]any { members:=make([]map[string]any,0,len(p.Members)); for _,m:=range p.Members { members=append(members,map[string]any{"userId":m.UserID,"deviceId":m.DeviceID,"displayName":m.DisplayName,"avatarUrl":m.AvatarURL,"host":m.Host,"connected":m.Connected}) }; return map[string]any{"code":p.Code,"members":members,"maxMembers":maxMembers,"hostOnlyControl":p.HostOnlyControl,"playback":p.Playback,"queue":p.Queue} }
-func (s *Server) create(w http.ResponseWriter,r *http.Request) { var i Identity; if json.NewDecoder(http.MaxBytesReader(w,r.Body,4096)).Decode(&i)!=nil || !validIdentity(i) { s.write(w,422,map[string]string{"error":"identity_required"}); return }; s.mu.Lock(); defer s.mu.Unlock(); if len(s.parties)>=50 { s.write(w,503,map[string]string{"error":"party_limit"}); return }; c:=code(); for s.parties[c]!=nil { c=code() }; m:=&Member{UserID:i.UserID,DeviceID:i.DeviceID,DisplayName:i.DisplayName,AvatarURL:i.AvatarURL,Token:token(),Host:true,LastSeen:time.Now()}; p:=&Party{Code:c,Members:map[string]*Member{i.DeviceID:m},Created:time.Now(),Queue:Queue{Items:[]Track{}}}; p.Playback.AnchorMS=nowMS(); s.parties[c]=p; s.write(w,201,map[string]any{"code":c,"token":m.Token,"you":map[string]any{"userId":m.UserID,"deviceId":m.DeviceID,"displayName":m.DisplayName,"host":true},"party":p.snapshot()}) }
-func (s *Server) join(w http.ResponseWriter,r *http.Request,c string) { var i Identity; if json.NewDecoder(http.MaxBytesReader(w,r.Body,4096)).Decode(&i)!=nil || !validIdentity(i) { s.write(w,422,map[string]string{"error":"identity_required"}); return }; p:=s.party(c); if p==nil { s.write(w,404,map[string]string{"error":"not_found"}); return }; p.mu.Lock(); defer p.mu.Unlock(); if existing:=p.Members[i.DeviceID]; existing!=nil { existing.Token=token(); existing.DisplayName=i.DisplayName; existing.AvatarURL=i.AvatarURL; existing.UserID=i.UserID; m:=existing; s.write(w,200,map[string]any{"code":p.Code,"token":m.Token,"you":map[string]any{"deviceId":m.DeviceID,"displayName":m.DisplayName,"host":m.Host},"party":p.snapshotLocked()}); return }; if len(p.Members)>=maxMembers { s.write(w,409,map[string]string{"error":"full"}); return }; m:=&Member{UserID:i.UserID,DeviceID:i.DeviceID,DisplayName:i.DisplayName,AvatarURL:i.AvatarURL,Token:token(),LastSeen:time.Now()}; p.Members[i.DeviceID]=m; s.broadcastLocked(p,map[string]any{"type":"members","members":p.snapshotLocked()["members"],"maxMembers":maxMembers,"hostOnlyControl":p.HostOnlyControl,"serverMs":nowMS()}); s.write(w,200,map[string]any{"code":p.Code,"token":m.Token,"you":map[string]any{"deviceId":m.DeviceID,"displayName":m.DisplayName,"host":false},"party":p.snapshotLocked()}) }
+func (s *Server) create(w http.ResponseWriter,r *http.Request) { i,ok:=s.readIdentity(w,r); if !ok { return }; s.mu.Lock(); defer s.mu.Unlock(); if len(s.parties)>=50 { s.write(w,503,map[string]string{"error":"party_limit"}); return }; c:=code(); for s.parties[c]!=nil { c=code() }; m:=&Member{UserID:i.UserID,DeviceID:i.DeviceID,DisplayName:i.DisplayName,AvatarURL:i.AvatarURL,Token:token(),Host:true,LastSeen:time.Now()}; p:=&Party{Code:c,Members:map[string]*Member{i.DeviceID:m},Created:time.Now(),Queue:Queue{Items:[]Track{}}}; p.Playback.AnchorMS=nowMS(); s.parties[c]=p; s.write(w,201,map[string]any{"code":c,"token":m.Token,"you":map[string]any{"userId":m.UserID,"deviceId":m.DeviceID,"displayName":m.DisplayName,"host":true},"party":p.snapshot()}) }
+func (s *Server) join(w http.ResponseWriter,r *http.Request,c string) { i,ok:=s.readIdentity(w,r); if !ok { return }; p:=s.party(c); if p==nil { s.write(w,404,map[string]string{"error":"not_found"}); return }; p.mu.Lock(); defer p.mu.Unlock(); if existing:=p.Members[i.DeviceID]; existing!=nil { existing.Token=token(); existing.DisplayName=i.DisplayName; existing.AvatarURL=i.AvatarURL; existing.UserID=i.UserID; m:=existing; s.write(w,200,map[string]any{"code":p.Code,"token":m.Token,"you":map[string]any{"deviceId":m.DeviceID,"displayName":m.DisplayName,"host":m.Host},"party":p.snapshotLocked()}); return }; if len(p.Members)>=maxMembers { s.write(w,409,map[string]string{"error":"full"}); return }; m:=&Member{UserID:i.UserID,DeviceID:i.DeviceID,DisplayName:i.DisplayName,AvatarURL:i.AvatarURL,Token:token(),LastSeen:time.Now()}; p.Members[i.DeviceID]=m; s.broadcastLocked(p,map[string]any{"type":"members","members":p.snapshotLocked()["members"],"maxMembers":maxMembers,"hostOnlyControl":p.HostOnlyControl,"serverMs":nowMS()}); s.write(w,200,map[string]any{"code":p.Code,"token":m.Token,"you":map[string]any{"deviceId":m.DeviceID,"displayName":m.DisplayName,"host":false},"party":p.snapshotLocked()}) }
 func (s *Server) authenticate(r *http.Request,p *Party) (*Member,bool) { auth:=strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"),"Bearer ")); p.mu.Lock(); defer p.mu.Unlock(); for _,m:=range p.Members { if auth!="" && m.Token==auth { return m,true } }; return nil,false }
 func (s *Server) serve(w http.ResponseWriter,r *http.Request) { if strings.HasPrefix(r.URL.Path,"/ws/parties/") { c:=normalize(strings.TrimPrefix(r.URL.Path,"/ws/parties/")); p:=s.party(c); if p==nil { http.NotFound(w,r); return }; s.socket(w,r,p); return }; if r.URL.Path=="/healthz" { s.write(w,200,map[string]string{"status":"ok"}); return }; if r.URL.Path=="/api/time" { s.write(w,200,map[string]int64{"serverMs":nowMS()}); return }; if r.URL.Path=="/api/parties" && r.Method=="POST" { s.create(w,r); return }; if strings.HasPrefix(r.URL.Path,"/api/parties/") { parts:=strings.Split(strings.Trim(r.URL.Path,"/"),"/"); if len(parts)>=3 { c:=normalize(parts[2]); p:=s.party(c); if len(parts)==4 && parts[3]=="join" && r.Method=="POST" { s.join(w,r,c); return }; if p==nil { s.write(w,404,map[string]string{"error":"not_found"}); return }; if r.Method=="GET" { if _,ok:=s.authenticate(r,p); !ok { s.write(w,401,map[string]string{"error":"unauthorized"}); return }; s.write(w,200,p.snapshot()); return }; if len(parts)==4 && parts[3]=="leave" && r.Method=="POST" { m,ok:=s.authenticate(r,p); if !ok { s.write(w,401,map[string]string{"error":"unauthorized"}); return }; p.mu.Lock(); delete(p.Members,m.DeviceID); if m.conn!=nil { _=m.conn.Close() }; if len(p.Members)>0 { for _,next:=range p.Members { next.Host=true; break } }; p.mu.Unlock(); s.write(w,200,map[string]bool{"ok":true}); return }; if len(parts)==4 && parts[3]=="ws" { s.socket(w,r,p); return } } }; http.NotFound(w,r) }
 func (s *Server) broadcastLocked(p *Party,v any) { b,e:=json.Marshal(v); if e!=nil{return}; for _,m:=range p.Members { if m.conn!=nil { select { case m.send<-b: default: } } } }
