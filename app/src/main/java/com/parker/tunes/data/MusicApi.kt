@@ -288,8 +288,6 @@ class NewPipeMusicApi : MusicApi {
                 val searched = queries.flatMap { query -> searchMusicSongs(query, 30) }
                     .filter(::usable)
                     .distinctBy { it.id }
-                val titleTokens = cleanTitle.lowercase()
-                    .split(Regex("[^a-z0-9]+")).filter { it.length > 2 }.toSet()
                 val ranked = searched.map { song ->
                     val resultTokens = song.title.lowercase()
                         .split(Regex("[^a-z0-9]+")).toSet()
