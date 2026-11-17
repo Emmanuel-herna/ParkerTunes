@@ -15,6 +15,9 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -56,7 +59,6 @@ import com.parker.tunes.data.MusicApi
 import com.parker.tunes.data.AddonMusicApi
 import com.parker.tunes.data.sources.AddonEntity
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.first
 import com.parker.tunes.data.RecentSearchEntity
 import com.parker.tunes.data.DownloadEntity
 import com.parker.tunes.data.SongDownloadManager
@@ -145,6 +147,9 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val spotifyProvider = remember { SpotifyMetadataProvider() }
+    val spotifyEnabled by settingsRepository.spotifyMetadataEnabled.collectAsState(initial = true)
+    val spotifyClientId by settingsRepository.spotifyClientId.collectAsState(initial = "")
+    val spotifyClientSecret by settingsRepository.spotifyClientSecret.collectAsState(initial = "")
     var query by remember { mutableStateOf("") }
     var activeSource by remember { mutableStateOf("YouTube") }
     val addonApi = api as? AddonMusicApi
@@ -169,7 +174,7 @@ fun SearchScreen(
         }
     }
 
-    LaunchedEffect(query, api, activeSource, addonSources, settingsRepository) {
+    LaunchedEffect(query, api, activeSource, addonSources, spotifyEnabled, spotifyClientId, spotifyClientSecret) {
         val clean = query.trim()
         if (clean.isBlank()) {
             results = SearchResult()
@@ -184,9 +189,8 @@ fun SearchScreen(
             val found = withContext(Dispatchers.IO) {
                 if (activeSource == "YouTube") {
                     val youtubeResults = api.search(clean)
-                    val spotifyEnabled = settingsRepository.spotifyMetadataEnabled.first()
-                    val clientId = settingsRepository.spotifyClientId.first()
-                    val clientSecret = settingsRepository.spotifyClientSecret.first()
+                    val clientId = spotifyClientId
+                    val clientSecret = spotifyClientSecret
                     if (!spotifyEnabled || clientId.isBlank() || clientSecret.isBlank()) {
                         youtubeResults
                     } else {
