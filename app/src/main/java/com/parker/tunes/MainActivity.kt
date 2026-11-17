@@ -918,6 +918,17 @@ private fun MiniPlayer(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)
             .clip(RoundedCornerShape(24.dp))
             .background(Color(0xF01D1D1D))
+            .pointerInput(onClick) {
+                var verticalDrag = 0f
+                detectVerticalDragGestures(
+                    onVerticalDrag = { _, dragAmount -> verticalDrag += dragAmount },
+                    onDragEnd = {
+                        if (verticalDrag < -48f) onClick()
+                        verticalDrag = 0f
+                    },
+                    onDragCancel = { verticalDrag = 0f }
+                )
+            }
             .clickable(onClick = onClick)
             .animateContentSize(animationSpec = tween(220))
             .padding(horizontal = 12.dp, vertical = 8.dp),
