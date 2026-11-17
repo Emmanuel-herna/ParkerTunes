@@ -268,12 +268,10 @@ class NewPipeMusicApi : MusicApi {
                     .split(Regex("[^a-z0-9]+")).filter { it.length > 2 }.toSet()
                 fun usable(song: Song): Boolean {
                     val t = song.title.lowercase()
-                    return song.id != videoId && song.durationSec in 45L..600L &&
-                        song.artist.isNotBlank() &&
-                        !song.artist.equals("unknown artist", ignoreCase = true) &&
+                    return song.id != videoId && song.durationSec in 45L..900L &&
                         listOf("1 hour", "1-hour", "2 hour", "2-hour", "dj mix",
                             "full album", "nonstop", "live stream", "playlist",
-                            "karaoke", "8d audio", "reaction", "slowed", "sped up")
+                            "karaoke", "8d audio", "reaction", "sped up")
                             .none(t::contains)
                 }
                 fun artistMatches(song: Song): Boolean {
@@ -300,7 +298,13 @@ class NewPipeMusicApi : MusicApi {
                     .sortedByDescending { it.second }.map { it.first }
                 val candidates = if (strictMatches.isNotEmpty()) strictMatches else {
                     val artistFallback = searchMusicSongs("$cleanArtist songs", 30)
-                        .filter(::usable).distinctBy { it.id }
+                        .filter(::usable)
+                        .map { song ->
+                            if (song.artist.isBlank() ||
+                                song.artist.equals("unknown artist", ignoreCase = true)
+                            ) song.copy(artist = cleanArtist) else song
+                        }
+                        .distinctBy { it.id }
                     (artistFallback + ranked.filter { it.second > 0 }.map { it.first })
                         .distinctBy { it.id }.take(30)
                 }.take(30)
