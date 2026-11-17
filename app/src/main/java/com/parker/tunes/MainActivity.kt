@@ -81,7 +81,8 @@ import com.parker.tunes.data.LyricsCacheEntity
 import com.parker.tunes.data.AddonMusicApi
 import com.parker.tunes.model.Artist
 import com.parker.tunes.model.Album
-import com.parker.tunes.model.Song\nimport com.parker.tunes.data.home.HomeShelf
+import com.parker.tunes.model.Song
+import com.parker.tunes.data.home.HomeShelf
 import com.parker.tunes.player.PlaybackService
 import com.parker.tunes.player.PlayerUiState
 import com.parker.tunes.player.PlayerUiStateObserver
@@ -145,7 +146,8 @@ fun ParkerTunesRoot() {
     val currentRoute = backStackEntry?.destination?.route
     var query by remember { mutableStateOf("") }
     var selectedArtist by remember { mutableStateOf<Artist?>(null) }
-    var selectedAlbum by remember { mutableStateOf<Album?>(null) }\n    var selectedHomeShelf by remember { mutableStateOf<HomeShelf?>(null) }
+    var selectedAlbum by remember { mutableStateOf<Album?>(null) }
+    var selectedHomeShelf by remember { mutableStateOf<HomeShelf?>(null) }
     var selectedTab by remember { mutableStateOf("Home") }
     val settingsPrefs = remember { context.getSharedPreferences("parker_tunes_settings", android.content.Context.MODE_PRIVATE) }
     val settingsRepository = remember(context) { com.parker.tunes.data.SettingsRepository(context) }
@@ -944,7 +946,8 @@ private fun NowPlayingScreen(
                         LyricsParser.parse(stamp + source.text)
                     }
                     lyricRows = VLine.of(mapped)
-                    val serialized = mapped.joinToString("\n") { line ->
+                    val serialized = mapped.joinToString("
+") { line ->
                         val total = line.timeMs.coerceAtLeast(0L)
                         val stamp = "[%02d:%02d.%02d]".format(total / 60_000,
                             (total / 1_000) % 60, (total % 1_000) / 10)
