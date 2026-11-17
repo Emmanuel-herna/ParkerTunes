@@ -320,17 +320,90 @@ fun SpotifyHomeScreen(
 
 @Composable
 private fun RecommendationRow(songs: List<Song>, loading: Boolean, onPlay: (Song) -> Unit) {
-    LazyRow(
-        contentPadding = PaddingValues(start = 16.dp, end = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    // This composable is inside the Home screen's parent LazyColumn.
+    // Use a vertical Column here so the whole Home feed remains one scrollable list.
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        items(songs.take(30), key = { "recommendation_" + it.id }) { song ->
-            RecommendationCard(song = song, onClick = { onPlay(song) }, width = 180.dp)
+        songs.take(30).forEach { song ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(68.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onPlay(song) }
+                    .padding(horizontal = 2.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF202020)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (song.coverUrl.isNullOrBlank()) {
+                        Icon(Icons.Default.MusicNote, null, tint = SpotifyGray)
+                    } else {
+                        AsyncImage(
+                            model = song.coverUrl,
+                            contentDescription = "${song.title} cover",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f).padding(start = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        song.title,
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        song.artist.ifBlank { "Unknown artist" },
+                        color = SpotifyGray,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = "More options",
+                    tint = SpotifyGray,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
         }
+
         val placeholders = (10 - songs.size).coerceAtLeast(0)
-        if (loading || placeholders > 0) {
-            items(if (loading && songs.isEmpty()) 10 else placeholders) { index ->
-                RecommendationPlaceholder(keyIndex = index)
+        if (loading || (songs.isEmpty() && placeholders > 0)) {
+            repeat(if (loading && songs.isEmpty()) 10 else placeholders) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(68.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier.size(54.dp).clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF303030))
+                    )
+                    Column(
+                        Modifier.weight(1f).padding(start = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Box(Modifier.fillMaxWidth(0.68f).height(13.dp)
+                            .clip(RoundedCornerShape(4.dp)).background(Color(0xFF303030)))
+                        Box(Modifier.fillMaxWidth(0.42f).height(10.dp)
+                            .clip(RoundedCornerShape(4.dp)).background(Color(0xFF303030)))
+                    }
+                }
             }
         }
     }
