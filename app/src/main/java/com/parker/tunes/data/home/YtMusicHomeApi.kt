@@ -143,7 +143,7 @@ class YtMusicHomeApi(
             }
         }
         val continuation = root.findContinuation()
-        return YtMusicHomePage(shelves.withoutVideos(), chips, continuation)
+        return YtMusicHomePage(shelves, chips, continuation)
     }
 }
 
