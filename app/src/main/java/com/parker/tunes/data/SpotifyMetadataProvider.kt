@@ -1,5 +1,6 @@
 package com.parker.tunes.data
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
@@ -94,7 +95,10 @@ class SpotifyMetadataProvider {
                     }
                 }
             }
-        }.getOrDefault(emptyList())
+        }.getOrElse { failure ->
+            if (failure is CancellationException) throw failure
+            emptyList()
+        }
     }
 
     suspend fun getTrack(
@@ -131,7 +135,10 @@ class SpotifyMetadataProvider {
                     item.optJSONObject("external_urls")?.optString("spotify").orEmpty()
                 )
             }
-        }.getOrNull()
+        }.getOrElse { failure ->
+            if (failure is CancellationException) throw failure
+            null
+        }
     }
 
     private fun accessToken(clientId: String, clientSecret: String): String {
