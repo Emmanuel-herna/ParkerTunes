@@ -118,7 +118,7 @@ fun HomeScreen(
         snapshotFlow {
             val info = recommendationListState.layoutInfo
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-            info.totalItemsCount > 0 && last >= info.totalItemsCount - 3
+            info.totalItemsCount > 1 && last >= info.totalItemsCount - 1
         }.distinctUntilChanged().collect { nearEnd ->
             if (nearEnd) recommendationViewModel.loadMore()
         }
@@ -433,17 +433,122 @@ private fun RecommendationShelf(
             modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
     }
-    LazyRow(state = listState, contentPadding = PaddingValues(horizontal = 18.dp),
-        horizontalArrangement = Arrangement.spacedBy(13.dp)) {
-        items(songs, key = { "recommendation_" + it.id }) { song ->
-            HomeSongCard(song, onClick = { onPlay(song) }, width = 126.dp)
+
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val pageWidth = maxWidth - 36.dp
+        val cardGap = 10.dp
+        val cardWidth = (pageWidth - cardGap * 2) / 3
+        val pageCount = if (songs.isEmpty()) 1 else (songs.size + 8) / 9
+        val activePage by remember(listState, pageCount) {
+            derivedStateOf { listState.firstVisibleItemIndex.coerceIn(0, pageCount - 1) }
         }
-        if (loading && songs.isEmpty()) items(5) { HomeCardSkeleton() }
-        if (loadingMore && songs.isNotEmpty()) item(key = "recommendation_loading_more") {
-            Box(Modifier.width(126.dp).height(150.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+
+        LazyRow(
+            state = listState,
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 18.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(pageCount, key = { "recommendation_page_$it" }) { page ->
+                Column(
+                    Modifier.width(pageWidth),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    repeat(3) { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(cardGap)) {
+                            repeat(3) { column ->
+                                val index = page * 9 + row * 3 + column
+                                if (index < songs.size) {
+                                    RecommendationGridTile(
+                                        song = songs[index],
+                                        width = cardWidth,
+                                        onClick = { onPlay(songs[index]) }
+                                    )
+                                } else if (loading && songs.isEmpty()) {
+                                    Box(
+                                        Modifier.width(cardWidth).aspectRatio(1f)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    )
+                                } else {
+                                    Spacer(Modifier.width(cardWidth).aspectRatio(1f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (loadingMore) {
+                item(key = "recommendation_loading_more") {
+                    Box(Modifier.width(44.dp).height(pageWidth), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    }
+                }
             }
         }
+
+        if (pageCount > 1) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 10.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(pageCount) { page ->
+                    Box(
+                        Modifier.padding(horizontal = 3.dp).size(if (page == activePage) 7.dp else 6.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (page == activePage) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f)
+                            )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecommendationGridTile(song: Song, width: Dp, onClick: () -> Unit) {
+    Box(
+        Modifier.width(width).aspectRatio(1f)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick)
+    ) {
+        if (!song.coverUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = song.coverUrl,
+                contentDescription = "${song.title} cover",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Icon(
+                Icons.Default.MusicNote,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.Center).size(34.dp)
+            )
+        }
+        Box(
+            Modifier.fillMaxWidth().height(48.dp).align(Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.Transparent, Color.Black.copy(alpha = 0.82f))
+                    )
+                )
+        )
+        Text(
+            song.title,
+            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 7.dp),
+            color = Color.White,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
