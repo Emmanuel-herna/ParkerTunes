@@ -318,9 +318,6 @@ fun HomeScreen(
                 }
                 is UiState.Success -> {
                     if (state.data.isNotEmpty()) {
-                        item(key = "youtube_music_heading") {
-                            HomeSectionHeading("Picked from YouTube Music")
-                        }
                         items(state.data, key = { shelf ->
                             "shelf_" + shelf.title + "_" +
                                 (shelf.items.firstOrNull()?.videoId ?: shelf.items.firstOrNull()?.browseId.orEmpty())
