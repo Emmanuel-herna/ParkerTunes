@@ -28,6 +28,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -65,10 +66,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
@@ -914,19 +911,61 @@ private fun MiniPlayer(
     title: String, artist: String, coverUrl: String?, playing: Boolean,
     onClick: () -> Unit, onPlayPause: () -> Unit, onNext: () -> Unit
 ) {
+    val miniDrag = remember { Animatable(0f) }
+    val miniDragScope = rememberCoroutineScope()
+    val density = androidx.compose.ui.platform.LocalDensity.current
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)
+            .graphicsLayer {
+                translationY = miniDrag.value
+                alpha = 1f - ((-miniDrag.value) / 150f).coerceIn(0f, 0.22f)
+                scaleX = 1f - ((-miniDrag.value) / 150f).coerceIn(0f, 0.22f) * 0.025f
+                scaleY = scaleX
+            }
             .clip(RoundedCornerShape(24.dp))
             .background(Color(0xF01D1D1D))
-            .pointerInput(onClick) {
+            .pointerInput(onClick, density) {
                 var verticalDrag = 0f
+                val threshold = with(density) { 48.dp.toPx() }
+                val exitDistance = size.height.toFloat().coerceAtLeast(threshold * 2)
                 detectVerticalDragGestures(
-                    onVerticalDrag = { _, dragAmount -> verticalDrag += dragAmount },
-                    onDragEnd = {
-                        if (verticalDrag < -48f) onClick()
-                        verticalDrag = 0f
+                    onVerticalDrag = { change, dragAmount ->
+                        if (dragAmount < 0f || verticalDrag < 0f) {
+                            verticalDrag = (verticalDrag + dragAmount).coerceAtMost(0f)
+                            change.consume()
+                            miniDragScope.launch { miniDrag.snapTo(verticalDrag) }
+                        }
                     },
-                    onDragCancel = { verticalDrag = 0f }
+                    onDragEnd = {
+                        val shouldExpand = verticalDrag < -threshold
+                        verticalDrag = 0f
+                        miniDragScope.launch {
+                            if (shouldExpand) {
+                                miniDrag.animateTo(
+                                    -exitDistance,
+                                    tween(190, easing = FastOutSlowInEasing)
+                                )
+                                onClick()
+                                miniDrag.snapTo(0f)
+                            } else {
+                                miniDrag.animateTo(
+                                    0f,
+                                    spring(dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMediumLow)
+                                )
+                            }
+                        }
+                    },
+                    onDragCancel = {
+                        verticalDrag = 0f
+                        miniDragScope.launch {
+                            miniDrag.animateTo(
+                                0f,
+                                spring(dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow)
+                            )
+                        }
+                    }
                 )
             }
             .clickable(onClick = onClick)
@@ -1094,43 +1133,7 @@ private fun NowPlayingScreen(
     val scrollState = rememberScrollState()
     val dragAnimation = remember { Animatable(0f) }
     val dragScope = rememberCoroutineScope()
-    var totalDrag by remember { mutableFloatStateOf(0f) }
     val density = androidx.compose.ui.platform.LocalDensity.current
-    val dismissConnection = remember(scrollState, onBack, density) {
-        object : NestedScrollConnection {
-            override fun onPreScroll(
-                available: androidx.compose.ui.geometry.Offset,
-                source: NestedScrollSource
-            ): androidx.compose.ui.geometry.Offset {
-                if (scrollState.value == 0 && available.y > 0f) {
-                    totalDrag += available.y
-                    dragScope.launch { dragAnimation.snapTo(totalDrag) }
-                    return androidx.compose.ui.geometry.Offset(0f, available.y)
-                }
-                return androidx.compose.ui.geometry.Offset.Zero
-            }
-
-            override suspend fun onPostFling(
-                consumed: Velocity,
-                available: Velocity
-            ): Velocity {
-                if (totalDrag > with(density) { 135.dp.toPx() }) {
-                    totalDrag = 0f
-                    onBack()
-                } else {
-                    totalDrag = 0f
-                    dragAnimation.animateTo(
-                        0f,
-                        spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    )
-                }
-                return Velocity.Zero
-            }
-        }
-    }
     val dragOffset = dragAnimation.value
     val progressValue = if (seeking) seekValue
         else position.toFloat().coerceIn(0f, duration.toFloat().coerceAtLeast(1f))
@@ -1138,9 +1141,62 @@ private fun NowPlayingScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .graphicsLayer { translationY = dragOffset }
+            .graphicsLayer {
+                translationY = dragOffset
+                val progress = (dragOffset / size.height.coerceAtLeast(1f)).coerceIn(0f, 1f)
+                alpha = 1f - progress * 0.22f
+                scaleX = 1f - progress * 0.035f
+                scaleY = scaleX
+            }
             .background(Color(0xFF08080B))
-            .nestedScroll(dismissConnection)
+            .pointerInput(onBack, scrollState, density) {
+                var totalDrag = 0f
+                val dismissThreshold = with(density) { 120.dp.toPx() }
+                val exitDistance = size.height.toFloat().coerceAtLeast(dismissThreshold * 2)
+                detectVerticalDragGestures(
+                    onVerticalDrag = { change, dragAmount ->
+                        if ((scrollState.value == 0 && dragAmount > 0f) ||
+                            (totalDrag > 0f && dragAmount != 0f)) {
+                            totalDrag = (totalDrag + dragAmount).coerceAtLeast(0f)
+                            change.consume()
+                            dragScope.launch { dragAnimation.snapTo(totalDrag) }
+                        }
+                    },
+                    onDragEnd = {
+                        val shouldDismiss = totalDrag > dismissThreshold
+                        totalDrag = 0f
+                        dragScope.launch {
+                            if (shouldDismiss) {
+                                dragAnimation.animateTo(
+                                    exitDistance,
+                                    tween(240, easing = FastOutSlowInEasing)
+                                )
+                                onBack()
+                            } else {
+                                dragAnimation.animateTo(
+                                    0f,
+                                    spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    )
+                                )
+                            }
+                        }
+                    },
+                    onDragCancel = {
+                        totalDrag = 0f
+                        dragScope.launch {
+                            dragAnimation.animateTo(
+                                0f,
+                                spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            )
+                        }
+                    }
+                )
+            }
             .verticalScroll(scrollState)
             .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1371,7 +1427,7 @@ private fun NowPlayingScreen(
                     currentTimeMs = position,
                     isPlaying = playing,
                     onSeek = { timestamp -> player?.seekTo(timestamp) },
-                    modifier = Modifier.fillMaxWidth().height(210.dp)
+                    modifier = Modifier.fillMaxWidth().height(280.dp)
                 )
             }
         }
