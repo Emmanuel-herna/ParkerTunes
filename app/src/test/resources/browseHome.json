@@ -1,0 +1,35 @@
+{
+  "contents": {
+    "singleColumnBrowseResultsRenderer": {
+      "tabs": [{
+        "tabRenderer": {
+          "content": {
+            "sectionListRenderer": {
+              "contents": [{
+                "musicCarouselShelfRenderer": {
+                  "header": {"musicCarouselShelfBasicHeaderRenderer": {
+                    "title": {"runs": [{"text": "Made for you"}]},
+                    "strapline": {"runs": [{"text": "Your daily mix"}]}
+                  }},
+                  "contents": [{
+                    "musicTwoRowItemRenderer": {
+                      "title": {"runs": [{"text": "Example Song"}]},
+                      "subtitle": {"runs": [{"text": "Example Artist"}]},
+                      "thumbnailRenderer": {"musicThumbnailRenderer": {"thumbnail": {"thumbnails": [
+                        {"url": "https://example.com/cover.jpg"}
+                      ]}}},
+                      "navigationEndpoint": {"browseEndpoint": {"browseId": "MPREexample"}}
+                    }
+                  }]
+                }
+              }]
+            }
+          }
+        }
+      }]
+    }
+  },
+  "header": {"chipCloudRenderer": {"chips": [
+    {"chipCloudChipRenderer": {"text": "Focus"}}
+  ]}}
+}
