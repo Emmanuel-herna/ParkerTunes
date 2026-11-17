@@ -1100,16 +1100,6 @@ private fun AmLyricsWebView(
                         ) { result -> Log.d("ParkerLyricsWeb", "Track delivery: $result") }
                     }
 
-                    override fun onReceivedError(
-                        view: WebView,
-                        request: WebResourceRequest,
-                        error: android.webkit.WebResourceError
-                    ) {
-                        super.onReceivedError(view, request, error)
-                        if (request.isForMainFrame || request.url.toString().contains("/assets/lyrics/")) {
-                            Log.e("ParkerLyricsWeb", "Load error ${error.errorCode}: ${error.description} | ${request.url}")
-                        }
-                    }
                 }
                 loadUrl("https://appassets.androidplatform.net/assets/lyrics/index.html")
             }
