@@ -66,6 +66,10 @@
       };
 
       function createLyrics(track, key) {
+        console.info('ParkerTunes lyrics: creating am-lyrics', {
+          title: track.title || '', artist: track.artist || '',
+          query: track.query || ''
+        });
         const element = document.createElement('am-lyrics');
 
         // Set all search metadata before connecting the element. Its
@@ -99,6 +103,10 @@
       }
 
       function applyTrack(track) {
+        console.info('ParkerTunes lyrics: setParkerTrack received', {
+          id: track.id || '', title: track.title || '', artist: track.artist || '',
+          durationMs: track.durationMs || 0
+        });
         if (!componentReady) {
           pendingTrack = track;
           return;
@@ -135,6 +143,7 @@
       });
 
       customElements.whenDefined('am-lyrics').then(() => {
+        console.info('ParkerTunes lyrics: custom element am-lyrics is defined');
         componentReady = true;
         if (pendingTrack) {
           const track = pendingTrack;
@@ -148,10 +157,11 @@
   </script>
 
   <script type="module" src="./am-lyrics.js"
-    onerror="document.getElementById('lyrics-status').textContent='Lyrics component failed to load. Please check your connection and reopen the player.'"></script>
+    onerror="console.error('ParkerTunes lyrics: failed to load am-lyrics.js'); document.getElementById('lyrics-status').textContent='Lyrics component failed to load. Please check your connection and reopen the player.'"></script>
   <script>
     setTimeout(() => {
       if (!customElements.get('am-lyrics')) {
+        console.error('ParkerTunes lyrics: am-lyrics was not registered within 8 seconds');
         const status = document.getElementById('lyrics-status');
         if (status) {
           status.textContent = 'Lyrics component did not load. Please reopen the player.';
