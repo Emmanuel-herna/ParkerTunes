@@ -15,11 +15,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "1091691285089-c2finnl7vnsbg6ju4hgqk046kt67t24v.apps.googleusercontent.com",
+          "client_id": "1091691285089-5jfah0g0rd5dadbfu8kd056rhrk4qehj.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.parker.tunes",
-            "certificate_hash": "a2b58ffa00d7347ee7b42eced004a6641014983a"
+            "certificate_hash": "f6fe399849016599042b9788297fd33eb6696add"
           }
         },
         {
@@ -37,7 +37,7 @@
           "other_platform_oauth_client": [
             {
               "client_id": "1091691285089-4q7opnscm9epp87lo3knvaut97gjhfpm.apps.googleusercontent.com",
-              "client_type": 3
+            "client_type": 3
             }
           ]
         }
