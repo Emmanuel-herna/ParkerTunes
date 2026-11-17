@@ -1245,6 +1245,8 @@ fun LibraryScreen(
         .collectAsState(initial = emptyList())
     val history by remember(dao) { dao.history().flowOn(Dispatchers.IO) }
         .collectAsState(initial = emptyList())
+    val mostPlayed by remember(dao) { dao.mostPlayed().flowOn(Dispatchers.IO) }
+        .collectAsState(initial = emptyList())
     val downloads by remember(dao) { dao.downloads().flowOn(Dispatchers.IO) }
         .collectAsState(initial = emptyList())
     var showDeleteAllDownloads by remember { mutableStateOf(false) }
@@ -1279,8 +1281,8 @@ fun LibraryScreen(
             }
         } else {
             ScreenTitle("Keep it close", "Your library", "Everything you want to come back to.")
-            TabRow(selectedTabIndex = listOf("Playlists", "Favorites", "History", "Downloads", "Addons").indexOf(tab)) {
-                listOf("Playlists", "Favorites", "History", "Downloads", "Addons").forEach { label ->
+            ScrollableTabRow(selectedTabIndex = listOf("Playlists", "Favorites", "Most Played", "History", "Downloads", "Addons").indexOf(tab)) {
+                listOf("Playlists", "Favorites", "Most Played", "History", "Downloads", "Addons").forEach { label ->
                     Tab(selected = tab == label, onClick = { tab = label }, text = { Text(label, fontSize = 12.sp) })
                 }
             }
@@ -1316,6 +1318,34 @@ fun LibraryScreen(
                 } else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(favorites, key = { it.songId }) {
                         LibrarySongRow(it.title.ifBlank { it.songId }, it.artist, Icons.Default.Favorite)
+                    }
+                }
+                "Most Played" -> if (mostPlayed.isEmpty()) {
+                    EmptyState(Icons.Default.BarChart, "Nothing played enough yet", "Your most-played songs will appear here as you listen.")
+                } else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(mostPlayed, key = { it.songId }) { track ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .clickable {
+                                    onPlay(Song(track.songId, track.title.ifBlank { track.songId }, track.artist, track.coverUrl))
+                                }.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(Modifier.size(52.dp).clip(RoundedCornerShape(9.dp)).background(Panel),
+                                contentAlignment = Alignment.Center) {
+                                if (track.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.primary)
+                                else AsyncImage(model = track.coverUrl, contentDescription = "Most played cover",
+                                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                            }
+                            Column(Modifier.weight(1f).padding(start = 11.dp)) {
+                                Text(track.title.ifBlank { track.songId }, color = MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(track.artist.ifBlank { "Unknown artist" }, color = Muted, fontSize = 12.sp,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            Text("${track.playCount} plays", color = Muted, fontSize = 11.sp)
+                        }
                     }
                 }
                 "History" -> if (history.isEmpty()) {
