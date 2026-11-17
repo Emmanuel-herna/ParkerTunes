@@ -1223,7 +1223,6 @@ private fun NowPlayingScreen(
                 Text("LYRICS", color = MaterialTheme.colorScheme.primary,
                     fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
                 Spacer(Modifier.weight(1f))
-                Text("AM LYRICS", color = Muted, fontSize = 9.sp, letterSpacing = 1.sp)
             }
             if (title.isNotBlank()) {
                 AmLyricsWebView(
