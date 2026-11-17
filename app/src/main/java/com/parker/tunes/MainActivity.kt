@@ -1296,6 +1296,26 @@ private fun NowPlayingScreen(
             Icon(Icons.Default.ChevronRight, contentDescription = "Open audio settings",
                 tint = muted)
         }
+
+        if (title.isNotBlank()) {
+            Box(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color(0xFF111015))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                AmLyricsWebView(
+                    trackId = player?.currentMediaItem?.mediaId.orEmpty(),
+                    title = title,
+                    artist = artist,
+                    durationMs = duration,
+                    currentTimeMs = position,
+                    isPlaying = playing,
+                    onSeek = { timestamp -> player?.seekTo(timestamp) },
+                    modifier = Modifier.fillMaxWidth().height(210.dp)
+                )
+            }
+        }
     }
 }
 
