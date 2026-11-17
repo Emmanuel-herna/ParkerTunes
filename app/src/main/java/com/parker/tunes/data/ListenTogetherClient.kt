@@ -26,6 +26,9 @@ class ListenTogetherClient(context:Context) {
     val state=_state.asStateFlow()
     private var clockOffsetMs=0L
     private var lastAppliedSeq=-1L
+    @Volatile private var suppressLocalUntilMs=0L
+    fun beginRemoteApply(){ suppressLocalUntilMs=System.currentTimeMillis()+1800L }
+    fun canBroadcastLocal():Boolean = System.currentTimeMillis()>suppressLocalUntilMs
     fun saveSettings(url:String,name:String) { val clean=url.trim().trimEnd('/'); val safeName=name.trim(); prefs.edit().putString("server_url",clean).putString("display_name",safeName).apply(); _state.value=_state.value.copy(serverUrl=clean,displayName=safeName,error=null) }
     private fun identity()=JSONObject().put("userId",userId).put("deviceId",deviceId).put("displayName",_state.value.displayName)
     private fun base()=_state.value.serverUrl.trimEnd('/').also { require(it.startsWith("https://")||it.startsWith("http://")) { "Enter your HTTPS server address." } }
