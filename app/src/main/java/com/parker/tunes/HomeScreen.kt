@@ -109,11 +109,19 @@ fun HomeScreen(
             val history = withContext(Dispatchers.IO) { dao.historySnapshot() }
             // Use the visible recent-play rows as a safety net if the snapshot
             // races the Room Flow's first emission on a fresh install.
-            val combinedHistory = (history + recent).distinctBy { it.id }
+            val historySongs = history.map { entry ->
+                Song(entry.songId, entry.title.ifBlank { entry.songId }, entry.artist, entry.coverUrl)
+            }
+            val recentSongs = recent.map { entry ->
+                Song(entry.songId, entry.title.ifBlank { entry.songId }, entry.artist, entry.coverUrl)
+            }
+            val favoriteSongs = favorites.map { entry ->
+                Song(entry.songId, entry.title.ifBlank { entry.songId }, entry.artist, entry.coverUrl)
+            }
+            // Preserve play frequency while also allowing favourites to seed radio
+            // when a listener has saved music but little recorded history.
             recommendationViewModel.onListeningHistory(
-                combinedHistory.map { entry ->
-                    Song(entry.songId, entry.title.ifBlank { entry.songId }, entry.artist, entry.coverUrl)
-                }
+                (historySongs + recentSongs + favoriteSongs).distinctBy { it.id }
             )
         }
     }
