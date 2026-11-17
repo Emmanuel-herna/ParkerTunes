@@ -76,6 +76,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 
 private val SearchBlack = Color(0xFF000000)
@@ -213,16 +214,22 @@ fun SearchScreen(
                                     spotifyUrl = track.spotifyUrl
                                 )
                             } else if (spotifyOnly.size < 5) {
-                                val resolved = runCatching {
-                                    val ytCandidates = api.search("${track.name} $artistText").songs
-                                    ytCandidates.firstOrNull { candidate ->
-                                        !isLikelyMix(candidate.title, candidate.durationSec) &&
-                                            normalizeTrackMetadata(candidate.title, candidate.artist) == key
-                                    } ?: ytCandidates.firstOrNull { candidate ->
-                                        !isLikelyMix(candidate.title, candidate.durationSec) &&
-                                            candidate.durationSec in 30L..720L
+                                val resolved = try {
+                                    withTimeout(5_000L) {
+                                        val ytCandidates = api.search("${track.name} $artistText").songs
+                                        ytCandidates.firstOrNull { candidate ->
+                                            !isLikelyMix(candidate.title, candidate.durationSec) &&
+                                                normalizeTrackMetadata(candidate.title, candidate.artist) == key
+                                        } ?: ytCandidates.firstOrNull { candidate ->
+                                            !isLikelyMix(candidate.title, candidate.durationSec) &&
+                                                candidate.durationSec in 30L..720L
+                                        }
                                     }
-                                }.getOrNull()
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    null
+                                }
                                 if (resolved != null && youtubeSongs.none { it.id == resolved.id } &&
                                     spotifyOnly.none { it.id == resolved.id }
                                 ) {
