@@ -65,6 +65,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
@@ -1076,14 +1080,57 @@ private fun NowPlayingScreen(
     val repeat = playerState.repeatMode
     val accent = Color(0xFFB69CFF)
     val muted = Color(0xFF96939F)
+    val scrollState = rememberScrollState()
+    val dragAnimation = remember { Animatable(0f) }
+    val dragScope = rememberCoroutineScope()
+    var totalDrag by remember { mutableFloatStateOf(0f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val dismissConnection = remember(scrollState, onBack, density) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(
+                available: androidx.compose.ui.geometry.Offset,
+                source: NestedScrollSource
+            ): androidx.compose.ui.geometry.Offset {
+                if (scrollState.value == 0 && available.y > 0f) {
+                    totalDrag += available.y
+                    dragScope.launch { dragAnimation.snapTo(totalDrag) }
+                    return androidx.compose.ui.geometry.Offset(0f, available.y)
+                }
+                return androidx.compose.ui.geometry.Offset.Zero
+            }
+
+            override suspend fun onPostFling(
+                consumed: Velocity,
+                available: Velocity
+            ): Velocity {
+                if (totalDrag > with(density) { 135.dp.toPx() }) {
+                    totalDrag = 0f
+                    onBack()
+                } else {
+                    totalDrag = 0f
+                    dragAnimation.animateTo(
+                        0f,
+                        spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    )
+                }
+                return Velocity.Zero
+            }
+        }
+    }
+    val dragOffset = dragAnimation.value
     val progressValue = if (seeking) seekValue
         else position.toFloat().coerceIn(0f, duration.toFloat().coerceAtLeast(1f))
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .graphicsLayer { translationY = dragOffset }
             .background(Color(0xFF08080B))
-            .verticalScroll(rememberScrollState())
+            .nestedScroll(dismissConnection)
+            .verticalScroll(scrollState)
             .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(22.dp)
