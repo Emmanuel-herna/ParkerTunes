@@ -62,7 +62,6 @@ fun SpotifyHomeScreen(
     onOpenPlaylist: (ShelfItem, HomeShelf) -> Unit
 ) {
     val recent by remember(dao) { dao.recentlyPlayed().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
-    val mostPlayed by remember(dao) { dao.mostPlayed().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
     val favorites by remember(dao) { dao.favorites().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
     var historyReady by remember(dao) { mutableStateOf(false) }
     var recommendations by remember(api) { mutableStateOf(emptyList<Song>()) }
@@ -257,35 +256,6 @@ fun SpotifyHomeScreen(
                 }
             }
         }
-        if (mostPlayed.isNotEmpty()) {
-            item(key = "most_played_section") {
-                Column {
-                    SectionHeading("Most played")
-                    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        mostPlayed.take(10).forEach { track ->
-                            val song = Song(track.songId, track.title.ifBlank { track.songId }, track.artist, track.coverUrl)
-                            Row(Modifier.fillMaxWidth().height(62.dp).clip(RoundedCornerShape(10.dp)).clickable { onPlay(song) },
-                                verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF202020)),
-                                    contentAlignment = Alignment.Center) {
-                                    if (track.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = SpotifyGray)
-                                    else AsyncImage(model = track.coverUrl, contentDescription = "Track cover",
-                                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                                }
-                                Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    Text(song.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(song.artist.ifBlank { "Unknown artist" }, color = SpotifyGray, fontSize = 13.sp,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                                Text(track.playCount.toString() + " plays", color = SpotifyGray, fontSize = 11.sp)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         if (favorites.isNotEmpty()) {
             item(key = "favorites_section") {
                 Column {
@@ -300,7 +270,7 @@ fun SpotifyHomeScreen(
             }
         }
 
-        if (recent.isEmpty() && mostPlayed.isEmpty() && favorites.isEmpty() && recommendations.isEmpty() && !recommendationsLoading) {
+        if (recent.isEmpty() && favorites.isEmpty() && recommendations.isEmpty() && !recommendationsLoading) {
             item(key = "empty_cta") {
                 Column(Modifier.fillParentMaxSize().padding(horizontal = 28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
