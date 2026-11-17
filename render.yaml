@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: parkertunes-listen-together
+    runtime: go
+    rootDir: backend
+    buildCommand: go mod tidy && go build -o server .
+    startCommand: ./server
+    healthCheckPath: /healthz
+    plan: free
