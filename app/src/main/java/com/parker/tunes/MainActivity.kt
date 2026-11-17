@@ -10,6 +10,8 @@ import android.os.Handler
 import android.os.Looper
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import android.webkit.WebChromeClient
+import android.util.Log
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.compose.ui.viewinterop.AndroidView
@@ -1057,6 +1059,7 @@ private fun AmLyricsWebView(
                 .build()
 
             WebView(context).apply {
+                if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
@@ -1068,20 +1071,44 @@ private fun AmLyricsWebView(
                 settings.setSupportMultipleWindows(false)
                 settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 addJavascriptInterface(bridge, "ParkerLyricsBridge")
+                webChromeClient = object : WebChromeClient() {
+                    override fun onConsoleMessage(message: android.webkit.ConsoleMessage): Boolean {
+                        Log.d("ParkerLyricsWeb", "JS ${message.messageLevel()}: ${message.message()} (${message.sourceId()}:${message.lineNumber()})")
+                        return true
+                    }
+                }
                 webViewClient = object : WebViewClientCompat() {
                     override fun shouldInterceptRequest(
                         view: WebView,
                         request: WebResourceRequest
                     ): WebResourceResponse? {
-                        return assetLoader.shouldInterceptRequest(request.url)
+                        val response = assetLoader.shouldInterceptRequest(request.url)
+                        if (request.url.toString().contains("/assets/lyrics/")) {
+                            Log.d("ParkerLyricsWeb", "Asset request: ${request.url} | ${if (response != null) "served by asset loader" else "not handled by asset loader"}")
+                        }
+                        return response
                     }
 
                     override fun onPageFinished(view: WebView, url: String?) {
                         super.onPageFinished(view, url)
+                        Log.d("ParkerLyricsWeb", "Page finished: $url")
                         view.evaluateJavascript(
-                            "window.setParkerTrack && window.setParkerTrack($latestTrackJson);",
-                            null
-                        )
+                            "({pageReady: !!document.readyState, trackHandler: typeof window.setParkerTrack, componentDefined: !!customElements.get('am-lyrics')})",
+                        ) { result -> Log.d("ParkerLyricsWeb", "Page state: $result") }
+                        view.evaluateJavascript(
+                            "if (window.setParkerTrack) { window.setParkerTrack($latestTrackJson); 'track-delivered'; } else { 'track-handler-missing'; }",
+                        ) { result -> Log.d("ParkerLyricsWeb", "Track delivery: $result") }
+                    }
+
+                    override fun onReceivedError(
+                        view: WebView,
+                        request: WebResourceRequest,
+                        error: android.webkit.WebResourceError
+                    ) {
+                        super.onReceivedError(view, request, error)
+                        if (request.isForMainFrame || request.url.toString().contains("/assets/lyrics/")) {
+                            Log.e("ParkerLyricsWeb", "Load error ${error.errorCode}: ${error.description} | ${request.url}")
+                        }
                     }
                 }
                 loadUrl("https://appassets.androidplatform.net/assets/lyrics/index.html")
@@ -1089,9 +1116,8 @@ private fun AmLyricsWebView(
         },
         update = { webView ->
             webView.evaluateJavascript(
-                "window.setParkerTrack && window.setParkerTrack($trackJson);",
-                null
-            )
+                "if (window.setParkerTrack) { window.setParkerTrack($trackJson); 'track-delivered'; } else { 'track-handler-not-ready'; }",
+            ) { result -> Log.d("ParkerLyricsWeb", "Updated track delivery: $result") }
         }
     )
 }
