@@ -499,7 +499,7 @@ fun ParkerTunesRoot() {
                             val browseId = item.browseId.orEmpty()
                             if (browseId.startsWith("VL") || browseId.startsWith("MPRE")) {
                                 selectedHomeShelf = shelf
-                                nav.navigate("playlist")
+                                nav.navigate("playlist/${Uri.encode(browseId)}?params=${Uri.encode(item.params.orEmpty())}")
                             } else if (item.videoId != null) {
                                 playSong(Song(item.videoId, item.title, item.subtitle.orEmpty(), item.thumbnailUrl))
                             }
@@ -527,7 +527,16 @@ fun ParkerTunesRoot() {
                         AlbumScreen(album = album, api = api, onBack = { nav.popBackStack() }, onPlay = playSong)
                     }
                 }
-                composable("playlist") {
+                composable(
+                    route = "playlist/{browseId}?params={params}",
+                    arguments = listOf(
+                        androidx.navigation.navArgument("browseId") { type = androidx.navigation.NavType.StringType },
+                        androidx.navigation.navArgument("params") {
+                            type = androidx.navigation.NavType.StringType
+                            defaultValue = ""
+                        }
+                    )
+                ) {
                     selectedHomeShelf?.let { shelf ->
                         HomePlaylistScreen(shelf = shelf, onBack = { nav.popBackStack() }, onPlay = playSong)
                     }
