@@ -875,11 +875,20 @@ private fun MiniPlayer(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        var coverFailed by remember(coverUrl) { mutableStateOf(false) }
         Box(Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF303030)),
             contentAlignment = Alignment.Center) {
-            if (coverUrl.isNullOrBlank()) Icon(Icons.Default.Album, null, tint = Color.White)
-            else AsyncImage(model = coverUrl, contentDescription = "Current cover art",
-                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            if (coverUrl.isNullOrBlank() || coverFailed) {
+                Icon(Icons.Default.Album, null, tint = Color.White)
+            } else {
+                AsyncImage(
+                    model = coverUrl,
+                    contentDescription = "Current cover art",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                    onError = { coverFailed = true }
+                )
+            }
         }
         Column(Modifier.weight(1f).padding(start = 10.dp)) {
             Text(title, color = Color.White, fontWeight = FontWeight.Bold,
