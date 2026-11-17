@@ -979,12 +979,14 @@ private fun AmLyricsWebView(
             fun seekTo(timestampMs: Double) {
                 if (!timestampMs.isFinite()) return
                 val requested = timestampMs.toLong().coerceAtLeast(0L)
-                val safeTimestamp = if (latestDuration > 0L) {
-                    requested.coerceAtMost(latestDuration)
-                } else {
-                    requested
+                mainHandler.post {
+                    val safeTimestamp = if (latestDuration > 0L) {
+                        requested.coerceAtMost(latestDuration)
+                    } else {
+                        requested
+                    }
+                    latestOnSeek(safeTimestamp)
                 }
-                mainHandler.post { latestOnSeek(safeTimestamp) }
             }
         }
     }
@@ -1274,9 +1276,6 @@ private fun NowPlayingScreen(
                 }
             }) {
                 Icon(Icons.Default.Repeat, "Repeat", tint = if (repeat > 0) MaterialTheme.colorScheme.primary else Muted)
-            }
-            IconButton(onClick = onOpenEqualizer) {
-                Icon(Icons.Default.GraphicEq, "Open equalizer", tint = MaterialTheme.colorScheme.primary)
             }
         }
     }
