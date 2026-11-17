@@ -47,17 +47,24 @@ jobs:
         if: ${{ steps.build-apk.outcome == 'success' }}
         shell: bash
         run: |
+          set -euo pipefail
           apk="app/build/outputs/apk/debug/app-debug.apk"
+          apksigner="$(find "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 -name apksigner | sort -V | tail -n 1)"
+          if [[ -z "$apksigner" ]]; then
+            echo "Android SDK apksigner was not found." >&2
+            exit 1
+          fi
           echo "Signing certificate for $apk:"
-          cert_output="$(keytool -printcert -jarfile "$apk")"
+          cert_output="$("$apksigner" verify --print-certs "$apk")"
           printf '%s\n' "$cert_output"
-          sha1="$(printf '%s\n' "$cert_output" | awk -F': ' '/SHA1:/{print $2; exit}')"
+          sha1="$(printf '%s\n' "$cert_output" | sed -nE 's/.*certificate SHA-1 digest: ([[:xdigit:]]+).*/\1/p' | head -n 1)"
           if [[ -z "$sha1" ]]; then
             echo "Could not extract the APK signing SHA-1 fingerprint." >&2
             exit 1
           fi
-          echo "SHA-1: $sha1" >> "$GITHUB_STEP_SUMMARY"
-          echo "APK signing SHA-1: $sha1" >> "$GITHUB_STEP_SUMMARY"
+          echo "APK signing SHA-1: $sha1"
+          echo "### Android debug APK signing SHA-1" >> "$GITHUB_STEP_SUMMARY"
+          echo "`$sha1`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Roborazzi screenshot tests
         id: roborazzi
