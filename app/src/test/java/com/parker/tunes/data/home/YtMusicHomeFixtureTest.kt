@@ -2,9 +2,9 @@ package com.parker.tunes.data.home
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Test
+import org.junit.Test\nimport org.junit.runner.RunWith\nimport org.robolectric.RobolectricTestRunner\nimport org.robolectric.annotation.Config
 
-class YtMusicHomeFixtureTest {
+@RunWith(RobolectricTestRunner::class)\n@Config(sdk = [35])\nclass YtMusicHomeFixtureTest {
     @Test fun parsesBrowseHomeFixture() {
         val json = requireNotNull(javaClass.classLoader?.getResourceAsStream("browseHome.json")).bufferedReader().use { it.readText() }
         val page = YtMusicHomeApi().parseResponseForTests(json)
