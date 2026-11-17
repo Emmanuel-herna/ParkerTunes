@@ -112,7 +112,7 @@ fun HomeScreen(
         loadHome(uiState is UiState.Success)
     }
 
-    LaunchedEffect(listState) {
+    LaunchedEffect(listState, continuation, loadingMore, uiState) {
         snapshotFlow {
             val info = listState.layoutInfo
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
