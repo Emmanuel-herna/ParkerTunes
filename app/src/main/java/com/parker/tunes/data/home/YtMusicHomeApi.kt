@@ -12,7 +12,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-enum class ShelfLayout { SQUARE, CIRCLE, TRACKS, VIDEO }
+enum class ShelfLayout { LIST, CARD, VIDEO, SQUARE, CIRCLE, TRACKS }
 
 data class ShelfItem(
     val title: String,
@@ -29,7 +29,9 @@ data class HomeShelf(
     val strapline: String?,
     val layout: ShelfLayout,
     val items: List<ShelfItem>
-)
+) {
+    val subtitle: String? get() = strapline
+}
 
 data class HomeChip(val name: String, val browseId: String? = null, val params: String? = null)
 
@@ -125,8 +127,8 @@ class YtMusicHomeApi(
             }
             val layout = when {
                 parsed.isNotEmpty() && wideCount == parsed.size -> ShelfLayout.VIDEO
-                parsed.any { it.isVideo } -> ShelfLayout.SQUARE
-                else -> ShelfLayout.SQUARE
+                parsed.any { it.isVideo } -> ShelfLayout.CARD
+                else -> ShelfLayout.CARD
             }
             shelves += HomeShelf(title, strapline, layout, parsed)
         }
