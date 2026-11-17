@@ -38,13 +38,32 @@ class CrossfadeController(
     private var preloadedForIndex = -1
     private var fadeStartedAt = 0L
     private var fading = false
+    private var finishingFade = false
 
     private val activeListener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            if (!fading) {
+            if (fading && !finishingFade) {
+                cancelFade()
+            } else if (!fading) {
                 preloadedForIndex = -1
                 preloadNext()
             }
+        }
+
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            // A pause or interruption must not leave the silent helper running.
+            if (fading && !finishingFade && !playWhenReady) cancelFade()
+        }
+
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int
+        ) {
+            // A seek invalidates the helper's preloaded position.
+            if (fading && !finishingFade &&
+                reason != Player.DISCONTINUITY_REASON_AUTO_TRANSITION
+            ) cancelFade()
         }
 
         override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
@@ -114,7 +133,11 @@ class CrossfadeController(
 
     /** Used by the app's skip control: eligible tracks overlap, all other cases hard-cut. */
     fun skipToNext() {
-        if (fading) return
+        if (fading) {
+            cancelFade()
+            active.seekToNextMediaItem()
+            return
+        }
         val fadeMs = preferences.getInt("crossfade_seconds", 0).coerceIn(0, 12) * 1_000L
         val currentDuration = active.duration.takeUnless { it == C.TIME_UNSET || it <= 0L }
         val nextDuration = incoming.duration.takeUnless { it == C.TIME_UNSET || it <= 0L }
@@ -139,6 +162,7 @@ class CrossfadeController(
 
     private fun finishFade() {
         if (!fading) return
+        finishingFade = true
         val old = active
         val new = incoming
         new.volume = 1f
@@ -154,10 +178,25 @@ class CrossfadeController(
         onActivePlayerChanged(active)
 
         fading = false
+        finishingFade = false
         fadeStartedAt = 0L
         preloadedForIndex = -1
         incoming.volume = 0f
         incoming.clearMediaItems()
+        preloadNext()
+    }
+
+    /** Stops the helper when the listener changes playback during an overlap. */
+    private fun cancelFade() {
+        if (!fading || finishingFade) return
+        fading = false
+        fadeStartedAt = 0L
+        active.volume = 1f
+        incoming.volume = 0f
+        incoming.playWhenReady = false
+        incoming.pause()
+        incoming.clearMediaItems()
+        preloadedForIndex = -1
         preloadNext()
     }
 
