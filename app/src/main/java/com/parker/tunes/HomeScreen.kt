@@ -432,7 +432,7 @@ private fun RecommendationShelf(
     listState: androidx.compose.foundation.lazy.LazyListState, onPlay: (Song) -> Unit
 ) {
     if (songs.isEmpty() && !loading) {
-        Text("Listening history found. Finding close matches…",
+        Text(if (loading) "Finding music based on your listening…" else "No close matches yet. Keep listening to build your radio.",
             modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
     }
