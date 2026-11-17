@@ -4,6 +4,8 @@ import android.content.Context
 import android.provider.Settings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -37,10 +39,15 @@ class ListenTogetherClient(context:Context) {
     private suspend fun partyRequest(method:String,url:String,body:JSONObject) {
         _state.value=_state.value.copy(loading=true,error=null)
         try {
-            val req=Request.Builder().url(url).method(method,body.toString().toRequestBody("application/json".toMediaType())).build()
-            val response=http.newCall(req).execute(); val raw=response.body?.string().orEmpty()
-            if(!response.isSuccessful) throw IllegalStateException(JSONObject(raw).optString("error","Request failed (${response.code})"))
-            val json=JSONObject(raw); val code=json.optString("code"); val token=json.optString("token")
+            val json=withContext(Dispatchers.IO) {
+                val req=Request.Builder().url(url).method(method,body.toString().toRequestBody("application/json".toMediaType())).build()
+                http.newCall(req).execute().use { response ->
+                    val raw=response.body?.string().orEmpty()
+                    if(!response.isSuccessful) throw IllegalStateException(JSONObject(raw).optString("error","Request failed (${response.code})"))
+                    JSONObject(raw)
+                }
+            }
+            val code=json.optString("code"); val token=json.optString("token")
             prefs.edit().putString("party_code",code).putString("party_token",token).apply()
             _state.value=_state.value.copy(code=code,token=token,loading=false)
             parseParty(json.optJSONObject("party") ?: JSONObject())
