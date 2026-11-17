@@ -58,6 +58,7 @@
       let activeTrackKey = null;
       let pendingTrack = null;
       let componentReady = false;
+      let diagnosticsTimer = null;
 
       const showStatus = message => {
         if (!status) return;
@@ -100,6 +101,28 @@
         activeTrackKey = key;
         document.body.appendChild(element);
         if (status) status.hidden = true;
+
+        // Keep the lyrics area useful if a provider lookup stalls or returns
+        // no result. This is deliberately inside the lyrics panel only.
+        clearTimeout(diagnosticsTimer);
+        diagnosticsTimer = setTimeout(() => {
+          if (lyrics !== element || (Array.isArray(element.lyrics) && element.lyrics.length > 0)) return;
+          const title = track.title || 'this track';
+          const loading = element.isLoading === true;
+          showStatus(loading
+            ? 'Still searching for lyrics for "' + title + '". Check your internet connection and wait a little longer.'
+            : 'The lyrics component loaded, but no lyrics were returned for "' + title + '".');
+          console.warn('ParkerTunes lyrics diagnostic:', {
+            title,
+            artist: track.artist || '',
+            isLoading: element.isLoading,
+            lyricsPresent: Array.isArray(element.lyrics) && element.lyrics.length > 0,
+            source: element.lyricsSource || null,
+            availableSources: element.availableSources
+              ? element.availableSources.map(source => source.source)
+              : []
+          });
+        }, 20000);
       }
 
       function applyTrack(track) {
@@ -135,10 +158,15 @@
       window.setParkerTrack = applyTrack;
 
       window.addEventListener('error', event => {
-        showStatus('Lyrics could not start. Please try reopening the player.');
+        const detail = event.message ? String(event.message).slice(0, 140) : 'Unknown JavaScript error';
+        showStatus('Lyrics error: ' + detail);
         console.error('ParkerTunes lyrics error:', event.message || event);
       });
       window.addEventListener('unhandledrejection', event => {
+        const detail = event.reason && event.reason.message
+          ? String(event.reason.message).slice(0, 140)
+          : 'A lyrics request failed.';
+        showStatus('Lyrics request error: ' + detail);
         console.error('ParkerTunes lyrics rejected:', event.reason);
       });
 
