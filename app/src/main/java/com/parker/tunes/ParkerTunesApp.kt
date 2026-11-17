@@ -3,7 +3,8 @@ package com.parker.tunes
 import android.app.Application
 import com.parker.tunes.data.AddonMusicApi
 import com.parker.tunes.data.LibraryDatabase
-import com.parker.tunes.data.MusicApi\nimport com.parker.tunes.data.home.YtMusicHomeApi
+import com.parker.tunes.data.MusicApi
+import com.parker.tunes.data.home.YtMusicHomeApi
 import com.parker.tunes.data.SongDownloadManager
 import coil.Coil
 import coil.ImageLoader
@@ -13,7 +14,8 @@ import coil.memory.MemoryCache
 class ParkerTunesApp : Application() {
     lateinit var musicApi: MusicApi
         private set
-    val database by lazy { LibraryDatabase.get(this) }\n    val homeApi by lazy { YtMusicHomeApi() }
+    val database by lazy { LibraryDatabase.get(this) }
+    val homeApi by lazy { YtMusicHomeApi() }
     val downloads by lazy { SongDownloadManager(this, database.libraryDao(), musicApi) }
 
     override fun onCreate() {
