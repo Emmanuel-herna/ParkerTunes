@@ -127,10 +127,6 @@ fun SpotifyHomeScreen(
     }
 
 
-    LaunchedEffect(api) {
-        // The recommendation model owns a screen-lifetime scope and is closed
-        // when this Home destination leaves composition.
-    }
     DisposableEffect(recommendationViewModel) {
         onDispose { recommendationViewModel.close() }
     }
@@ -203,6 +199,7 @@ fun SpotifyHomeScreen(
                     RecommendationRow(
                         songs = recommendations,
                         loading = recommendationsLoading,
+                        loadingMore = recommendationState.loadingMore,
                         listState = recommendationListState,
                         onPlay = onPlay
                     )
@@ -276,6 +273,7 @@ fun SpotifyHomeScreen(
 private fun RecommendationRow(
     songs: List<Song>,
     loading: Boolean,
+    loadingMore: Boolean,
     listState: androidx.compose.foundation.lazy.LazyListState,
     onPlay: (Song) -> Unit
 ) {
@@ -286,14 +284,14 @@ private fun RecommendationRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         items(songs, key = { "made_for_you_" + it.id }) { song ->
-            RecommendationCard(song = song, onClick = { onPlay(song) }, width = 112.dp)
+            RecommendationCard(song = song, onClick = { onPlay(song) }, width = 82.dp)
         }
         if (loading && songs.isEmpty()) {
             items(6) { RecommendationPlaceholder(it) }
         }
-        if (loading && songs.isNotEmpty()) {
+        if (loadingMore && songs.isNotEmpty()) {
             item(key = "recommendations_loading_more") {
-                Box(Modifier.width(112.dp).height(155.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.width(82.dp).height(125.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = SpotifyAccent, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                 }
             }
@@ -331,8 +329,8 @@ private fun RecommendationPlaceholder(keyIndex: Int) {
         animationSpec = infiniteRepeatable(tween(850), RepeatMode.Reverse),
         label = "recommendationShimmerAlpha"
     )
-    Column(Modifier.width(112.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.size(112.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF303030).copy(alpha = alpha)))
+    Column(Modifier.width(82.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.size(82.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF303030).copy(alpha = alpha)))
         Box(Modifier.fillMaxWidth(0.82f).height(14.dp).clip(RoundedCornerShape(5.dp))
             .background(Color(0xFF303030).copy(alpha = alpha)))
         Box(Modifier.fillMaxWidth(0.55f).height(11.dp).clip(RoundedCornerShape(5.dp))
