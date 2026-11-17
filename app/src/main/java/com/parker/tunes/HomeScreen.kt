@@ -33,12 +33,12 @@ import androidx.media3.session.MediaController
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.disk.DiskCache
-import coil.request.CachePolicy
 import com.parker.tunes.data.HomeShelfCacheEntity
 import com.parker.tunes.data.LibraryDao
 import com.parker.tunes.data.home.*
 import com.parker.tunes.model.Song
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,8 +63,7 @@ fun HomeScreen(
         ImageLoader.Builder(context).diskCache {
             DiskCache.Builder().directory(context.cacheDir.resolve("parker-artwork"))
                 .maxSizePercent(0.025).build()
-        }.diskCachePolicy(CachePolicy.ENABLED)
-            .memoryCachePolicy(CachePolicy.ENABLED).build()
+        }.build()
     }
 
     var uiState by remember(homeApi) { mutableStateOf<UiState<List<HomeShelf>>>(UiState.Loading) }
