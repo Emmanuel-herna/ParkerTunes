@@ -34,7 +34,7 @@ class HomeViewModel(private val api: MusicApi) {
     private var loadMoreJob: Job? = null
 
     fun onListeningHistory(history: List<Song>) {
-        val cleaned = history.filter { it.id.isNotBlank() && it.artist.isNotBlank() }
+        val cleaned = history.filter { it.id.isNotBlank() }
         val newIds = cleaned.map { it.id }.toSet()
         val newKey = cleaned.map { it.id }
         if (hasInitializedHistory && newKey == historyKey) return
@@ -45,7 +45,22 @@ class HomeViewModel(private val api: MusicApi) {
         if (cleaned.isEmpty()) {
             activeLoad?.cancel()
             artistQueue.clear()
-            mutableState.update { it.copy(songs = emptyList(), loading = false, loadingMore = false) }
+            // A new listener should still see a useful discovery shelf immediately.
+            // Once play history exists, the personalized artist radio replaces it.
+            mutableState.update { it.copy(loading = true, loadingMore = false) }
+            activeLoad = scope.launch {
+                try {
+                    val discovery = api.getTrending()
+                        .filter(::isUsableRecommendation)
+                        .distinctBy { it.id }
+                        .take(TARGET_INITIAL)
+                    mutableState.update { it.copy(songs = discovery, loading = false) }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    mutableState.update { it.copy(loading = false) }
+                }
+            }
             return
         }
 
@@ -66,12 +81,33 @@ class HomeViewModel(private val api: MusicApi) {
             try {
                 val batches = mutableListOf<Song>()
                 for (seed in artistSeeds.take(INITIAL_ARTISTS)) {
-                    batches += api.getRelatedSongs(seed.id, seed.title, seed.artist)
+                    val related = if (seed.artist.isNotBlank()) {
+                        api.getRelatedSongs(seed.id, seed.title, seed.artist)
+                    } else emptyList()
+                    batches += related.filter(::isUsableRecommendation)
+
+                    // If artist radio is sparse, query YouTube Music using the listener's
+                    // known artist/title metadata before considering general discovery.
+                    if (merge(emptyList(), batches).size < TARGET_INITIAL) {
+                        val artistQuery = seed.artist.ifBlank { seed.title }
+                        if (artistQuery.isNotBlank()) {
+                            batches += api.getMoodSongs("music by $artistQuery")
+                                .filter(::isUsableRecommendation)
+                        }
+                    }
                     if (merge(emptyList(), batches).size >= TARGET_INITIAL) break
                 }
-                // Keep this shelf personal: do not pad it with unrelated global trends.
+
+                var recommendations = merge(emptyList(), batches)
+                // Never leave Made for you blank just because artist-radio search
+                // returned no usable tracks. Global discovery is a last-resort fill.
+                if (recommendations.size < MIN_RECOMMENDATIONS) {
+                    val discovery = api.getTrending()
+                        .filter(::isUsableRecommendation)
+                    recommendations = merge(recommendations, discovery)
+                }
                 mutableState.update {
-                    it.copy(songs = merge(emptyList(), batches), loading = false)
+                    it.copy(songs = recommendations, loading = false)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -114,6 +150,18 @@ class HomeViewModel(private val api: MusicApi) {
         }
     }
 
+    private fun isUsableRecommendation(song: Song): Boolean {
+        if (song.id.isBlank() || song.id in historyIds) return false
+        if (song.durationSec !in 35L..900L) return false
+        val title = song.title.lowercase()
+        val blocked = listOf(
+            "1 hour", "1-hour", "2 hour", "2-hour", "dj mix", "full album",
+            "nonstop", "live stream", "playlist", "karaoke", "8d audio",
+            "reaction", "sped up", "slowed + reverb", "instrumental"
+        )
+        return blocked.none(title::contains)
+    }
+
     private fun merge(existing: List<Song>, incoming: List<Song>): List<Song> {
         val result = LinkedHashMap<String, Song>()
         existing.forEach { result[it.id] = it }
@@ -132,6 +180,7 @@ class HomeViewModel(private val api: MusicApi) {
     private companion object {
         const val INITIAL_ARTISTS = 4
         const val TARGET_INITIAL = 24
+        const val MIN_RECOMMENDATIONS = 9
         const val MAX_RECOMMENDATIONS = 60
     }
 }
