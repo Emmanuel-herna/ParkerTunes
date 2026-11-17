@@ -1,0 +1,19 @@
+{
+  "name": "parkertunes-am-lyrics",
+  "version": "1.9.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c rollup.config.js"
+  },
+  "dependencies": {
+    "lit": "3.3.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "15.3.1",
+    "@rollup/plugin-typescript": "12.3.0",
+    "rollup": "4.57.1",
+    "tslib": "2.8.1",
+    "typescript": "5.8.3"
+  }
+}
