@@ -1,7 +1,6 @@
 package com.parker.tunes.data
 
 import android.content.Context
-import android.provider.Settings
 import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,10 +24,10 @@ data class JamUiState(val serverUrl:String="https://",val displayName:String="",
 class ListenTogetherClient(context:Context) {
     private val prefs=context.getSharedPreferences("listen_together",Context.MODE_PRIVATE)
     private val deviceId=prefs.getString("device_id",null) ?: UUID.randomUUID().toString().also { prefs.edit().putString("device_id",it).apply() }
-    private val userId=prefs.getString("user_id",null) ?: Settings.Secure.getString(context.contentResolver,Settings.Secure.ANDROID_ID).orEmpty().ifBlank { deviceId }
+    @Volatile private var googleIdToken:String?=null
     private val http=OkHttpClient.Builder().connectTimeout(10,TimeUnit.SECONDS).readTimeout(15,TimeUnit.SECONDS).build()
     private var socket:WebSocket?=null
-    private val _state=MutableStateFlow(JamUiState(serverUrl=prefs.getString("server_url","")?:"",displayName=prefs.getString("display_name","")?:"",code=prefs.getString("party_code","")?:"",token=prefs.getString("party_token","")?:""))
+    private val _state=MutableStateFlow(JamUiState(serverUrl=prefs.getString("server_url","")?:"",displayName=prefs.getString("display_name","")?:"",googleName=prefs.getString("google_name","")?:"",googleEmail=prefs.getString("google_email","")?:"",googleAvatarUrl=prefs.getString("google_avatar",null),code=prefs.getString("party_code","")?:"",token=prefs.getString("party_token","")?:""))
     val state=_state.asStateFlow()
     private var clockOffsetMs=0L
     private var lastAppliedSeq=-1L
@@ -36,7 +35,22 @@ class ListenTogetherClient(context:Context) {
     fun beginRemoteApply(){ suppressLocalUntilMs=System.currentTimeMillis()+1800L }
     fun canBroadcastLocal():Boolean = System.currentTimeMillis()>suppressLocalUntilMs
     fun saveSettings(url:String,name:String) { val clean=url.trim().trimEnd('/'); val safeName=name.trim(); prefs.edit().putString("server_url",clean).putString("display_name",safeName).apply(); _state.value=_state.value.copy(serverUrl=clean,displayName=safeName,error=null) }
-    private fun identity()=JSONObject().put("userId",userId).put("deviceId",deviceId).put("displayName",_state.value.displayName)
+    fun setGoogleIdentity(idToken:String,name:String,email:String,avatarUrl:String?) {
+        googleIdToken=idToken
+        val safeName=name.ifBlank { email.substringBefore("@").ifBlank { "ParkerTunes listener" } }
+        prefs.edit().putString("google_name",safeName).putString("google_email",email).putString("google_avatar",avatarUrl).putString("display_name",safeName).apply()
+        _state.value=_state.value.copy(googleName=safeName,googleEmail=email,googleAvatarUrl=avatarUrl,displayName=safeName,error=null)
+    }
+    fun hasGoogleToken():Boolean = !googleIdToken.isNullOrBlank()
+    fun signOutGoogle() {
+        googleIdToken=null
+        prefs.edit().remove("google_name").remove("google_email").remove("google_avatar").apply()
+        _state.value=_state.value.copy(googleName="",googleEmail="",googleAvatarUrl=null,error=null)
+    }
+    private fun identity():JSONObject {
+        val token=googleIdToken ?: throw IllegalStateException("Sign in with Google before creating or joining a party.")
+        return JSONObject().put("idToken",token).put("deviceId",deviceId).put("displayName",_state.value.displayName.ifBlank { _state.value.googleName })
+    }
     private fun base()=_state.value.serverUrl.trimEnd('/').also { require(it.startsWith("https://")||it.startsWith("http://")) { "Enter your HTTPS server address." } }
     suspend fun create()=partyRequest("POST", "${base()}/api/parties", identity())
     suspend fun join(code:String) { val normal=code.trim().uppercase().replace("O","0").replace("I","1").replace("L","1"); partyRequest("POST","${base()}/api/parties/$normal/join",identity()) }
