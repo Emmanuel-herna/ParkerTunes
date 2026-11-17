@@ -99,8 +99,43 @@
 
         lyrics = element;
         activeTrackKey = key;
+        element.style.minHeight = '100%';
         document.body.appendChild(element);
-        if (status) status.hidden = true;
+
+        // Do not hide the fallback message merely because the custom element
+        // was appended. Lit renders asynchronously; a failed/empty shadow DOM
+        // must never leave the native lyrics panel looking like a black void.
+        const verifyRender = async () => {
+          try {
+            if (element.updateComplete) await element.updateComplete;
+          } catch (error) {
+            console.error('ParkerTunes lyrics: component render failed', error);
+          }
+          requestAnimationFrame(() => {
+            const root = element.shadowRoot;
+            const rendered = root && (
+              root.querySelector('.lyrics-container') ||
+              root.querySelector('.skeleton-line') ||
+              root.querySelector('.no-lyrics')
+            );
+            if (rendered) {
+              if (status) status.hidden = true;
+              console.info('ParkerTunes lyrics: component rendered', {
+                shadowChildren: root.children.length,
+                loading: element.isLoading
+              });
+            } else {
+              showStatus('Lyrics view could not render. The component started, but its content is missing.');
+              console.error('ParkerTunes lyrics: no rendered content in component shadow root', {
+                hasShadowRoot: !!root,
+                shadowHtml: root ? root.innerHTML.slice(0, 500) : null,
+                width: element.getBoundingClientRect().width,
+                height: element.getBoundingClientRect().height
+              });
+            }
+          });
+        };
+        verifyRender();
 
         // Keep the lyrics area useful if a provider lookup stalls or returns
         // no result. This is deliberately inside the lyrics panel only.
