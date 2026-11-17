@@ -529,7 +529,7 @@ fun ParkerTunesRoot() {
                     MoodResultsScreen(mood = mood, api = api, onBack = { nav.popBackStack() }, onPlay = playSong)
                 }
                 composable("search") {
-                    SearchScreen(api = api, dao = dao, downloads = app.downloads, onLowStorage = { scope.launch { snackbarHostState.showSnackbar("Low storage · free up at least 200 MB first.") } }, onPlay = playSong, onQueue = queueSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist") })
+                    SearchScreen(api = api, dao = dao, settingsRepository = settingsRepository, downloads = app.downloads, onLowStorage = { scope.launch { snackbarHostState.showSnackbar("Low storage · free up at least 200 MB first.") } }, onPlay = playSong, onQueue = queueSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist") })
                 }
                 composable("artist") {
                     selectedArtist?.let { artist ->
