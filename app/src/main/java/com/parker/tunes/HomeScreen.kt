@@ -366,7 +366,7 @@ private fun HomeArtwork(
     }
 }
 
-private fun String.artworkAt(sizePx: Int): String {
+internal fun String.artworkAt(sizePx: Int): String {
     val base = if (contains("=")) substringBeforeLast("=") else this
     return base + "=w" + sizePx + "-h" + sizePx + "-l90-rj"
 }
