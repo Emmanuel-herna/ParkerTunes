@@ -277,6 +277,33 @@ fun ParkerTunesRoot() {
         }
         val currentArtist = playerState.artist
 
+        DisposableEffect(controller, listenTogether) {
+            val active = controller
+            if (active == null) onDispose { }
+            else {
+                val syncListener = object : Player.Listener {
+                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        if (!listenTogether.canBroadcastLocal()) return
+                        val meta = mediaItem?.mediaMetadata ?: return
+                        val id = mediaItem.mediaId
+                        if (id.isNotBlank() && listenTogether.state.value.connected) {
+                            listenTogether.control("setTrack", positionMs = active.currentPosition.coerceAtLeast(0L),
+                                track = JamTrack(id, meta.title?.toString().orEmpty(), meta.artist?.toString().orEmpty(), meta.artworkUri?.toString(), active.duration.takeIf { it > 0L } ?: 0L),
+                                isPlaying = active.isPlaying)
+                        }
+                    }
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        if (listenTogether.canBroadcastLocal() && listenTogether.state.value.connected) listenTogether.control(if (isPlaying) "play" else "pause", positionMs = active.currentPosition.coerceAtLeast(0L))
+                    }
+                    override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                        if (reason == Player.DISCONTINUITY_REASON_SEEK && listenTogether.canBroadcastLocal() && listenTogether.state.value.connected) listenTogether.control("seek", positionMs = newPosition.positionMs.coerceAtLeast(0L))
+                    }
+                }
+                active.addListener(syncListener)
+                onDispose { active.removeListener(syncListener) }
+            }
+        }
+
         // Persist every newly selected media item from Media3 callbacks. This
         // also covers tracks started from Home, playlists, and system controls.
         DisposableEffect(controller, dao) {
@@ -477,7 +504,7 @@ fun ParkerTunesRoot() {
                                     ) {
                                         Icon(
                                             when (item) { "Home" -> Icons.Default.Home; "Explore" -> Icons.Default.GridView
-                                                else -> Icons.Default.LibraryBooks },
+                                                "Library" -> Icons.Default.LibraryBooks; else -> Icons.Default.Groups },
                                             contentDescription = item,
                                             tint = if (active) Color.White else Color(0xFFA7A7A7),
                                             modifier = Modifier.size(21.dp)
