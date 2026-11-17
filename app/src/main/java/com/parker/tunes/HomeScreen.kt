@@ -93,7 +93,7 @@ fun HomeScreen(
     val favorites by favoritesFlow.collectAsState(initial = emptyList())
     var historyReady by remember(dao) { mutableStateOf(false) }
     val latestTrack = recent.firstOrNull()
-    val recentIds = remember(recent) { recent.map { it.songId }.toSet() }
+    val recentHistoryKey = remember(recent) { recent.map { it.id } }
 
     val recommendationViewModel = remember(api) { HomeViewModel(api) }
     val recommendationState by recommendationViewModel.state.collectAsState()
@@ -104,7 +104,7 @@ fun HomeScreen(
         withContext(Dispatchers.IO) { dao.recentlyPlayed().first() }
         historyReady = true
     }
-    LaunchedEffect(historyReady, recentIds, favorites) {
+    LaunchedEffect(historyReady, recentHistoryKey, favorites) {
         if (historyReady) {
             val history = withContext(Dispatchers.IO) { dao.historySnapshot() }
             // Use the visible recent-play rows as a safety net if the snapshot
