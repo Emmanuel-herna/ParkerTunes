@@ -56,9 +56,13 @@ import com.parker.tunes.data.MusicApi
 import com.parker.tunes.data.AddonMusicApi
 import com.parker.tunes.data.sources.AddonEntity
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import com.parker.tunes.data.RecentSearchEntity
 import com.parker.tunes.data.DownloadEntity
 import com.parker.tunes.data.SongDownloadManager
+import com.parker.tunes.data.SettingsRepository
+import com.parker.tunes.data.SpotifyMetadataProvider
+import com.parker.tunes.player.isLikelyMix
 import com.parker.tunes.data.PlaylistEntity
 import com.parker.tunes.data.PlaylistTrackEntity
 import com.parker.tunes.model.Artist
@@ -122,6 +126,7 @@ private class RecentSearchesFactory(private val dao: LibraryDao) : ViewModelProv
 fun SearchScreen(
     api: MusicApi,
     dao: LibraryDao,
+    settingsRepository: SettingsRepository,
     onPlay: (Song) -> Unit,
     onQueue: (Song, Boolean) -> Unit,
     onSettings: () -> Unit,
@@ -138,6 +143,8 @@ fun SearchScreen(
     val downloadProgress by downloads.progress.collectAsState()
     val playlists by remember(dao) { dao.playlists().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val spotifyProvider = remember { SpotifyMetadataProvider() }
     var query by remember { mutableStateOf("") }
     var activeSource by remember { mutableStateOf("YouTube") }
     val addonApi = api as? AddonMusicApi
@@ -162,7 +169,7 @@ fun SearchScreen(
         }
     }
 
-    LaunchedEffect(query, api, activeSource, addonSources) {
+    LaunchedEffect(query, api, activeSource, addonSources, settingsRepository) {
         val clean = query.trim()
         if (clean.isBlank()) {
             results = SearchResult()
@@ -175,8 +182,59 @@ fun SearchScreen(
         kotlinx.coroutines.delay(300)
         try {
             val found = withContext(Dispatchers.IO) {
-                if (activeSource == "YouTube") api.search(clean)
-                else SearchResult(songs = addonApi?.searchAddon(activeSource, clean).orEmpty())
+                if (activeSource == "YouTube") {
+                    val youtubeResults = api.search(clean)
+                    val spotifyEnabled = settingsRepository.spotifyMetadataEnabled.first()
+                    val clientId = settingsRepository.spotifyClientId.first()
+                    val clientSecret = settingsRepository.spotifyClientSecret.first()
+                    if (!spotifyEnabled || clientId.isBlank() || clientSecret.isBlank()) {
+                        youtubeResults
+                    } else {
+                        // Spotify is an optional metadata fallback. Any failure leaves the
+                        // original YouTube Music response untouched.
+                        val spotifyTracks = spotifyProvider.searchTracks(
+                            query = clean, limit = 10, clientId = clientId, clientSecret = clientSecret
+                        )
+                        val youtubeSongs = youtubeResults.songs.toMutableList()
+                        val spotifyOnly = mutableListOf<com.parker.tunes.model.Song>()
+                        spotifyTracks.forEach { track ->
+                            val artistText = track.artists.joinToString(", ")
+                            val key = normalizeTrackMetadata(track.name, artistText)
+                            val existingIndex = youtubeSongs.indexOfFirst { song ->
+                                normalizeTrackMetadata(song.title, song.artist) == key
+                            }
+                            if (existingIndex >= 0) {
+                                youtubeSongs[existingIndex] = youtubeSongs[existingIndex].copy(
+                                    coverUrl = track.artworkUrl ?: youtubeSongs[existingIndex].coverUrl,
+                                    spotifyUrl = track.spotifyUrl
+                                )
+                            } else if (spotifyOnly.size < 5) {
+                                val resolved = runCatching {
+                                    api.search("${track.name} $artistText").songs.firstOrNull { candidate ->
+                                        !isLikelyMix(candidate.title, candidate.durationSec) &&
+                                            normalizeTrackMetadata(candidate.title, candidate.artist) == key
+                                    } ?: api.search("${track.name} $artistText").songs.firstOrNull { candidate ->
+                                        !isLikelyMix(candidate.title, candidate.durationSec) &&
+                                            candidate.durationSec in 30L..720L
+                                    }
+                                }.getOrNull()
+                                if (resolved != null && youtubeSongs.none { it.id == resolved.id } &&
+                                    spotifyOnly.none { it.id == resolved.id }
+                                ) {
+                                    spotifyOnly += resolved.copy(
+                                        title = track.name,
+                                        artist = artistText.ifBlank { resolved.artist },
+                                        coverUrl = track.artworkUrl ?: resolved.coverUrl,
+                                        durationSec = if (track.durationMs > 0L) track.durationMs / 1000L else resolved.durationSec,
+                                        album = track.albumName,
+                                        spotifyUrl = track.spotifyUrl
+                                    )
+                                }
+                            }
+                        }
+                        youtubeResults.copy(songs = (youtubeSongs + spotifyOnly).distinctBy { it.id })
+                    }
+                } else SearchResult(songs = addonApi?.searchAddon(activeSource, clean).orEmpty())
             }
             results = found
             if (found.songs.isNotEmpty() || found.artists.isNotEmpty()) recentVm.recordQuery(clean, if (found.songs.isNotEmpty()) "Song" else "Artist")
@@ -397,6 +455,16 @@ fun SearchScreen(
     }
 }
 
+
+private fun normalizeTrackMetadata(title: String, artist: String): String {
+    fun clean(value: String): String = value.lowercase()
+        .replace(Regex("\\s*[\\[(](official( music)? video|lyrics?|audio|visuali[sz]er)[^\\])]*[\\])]\\s*$"), " ")
+        .replace(Regex("\\s*[-–—|:]\\s*(official( music)? video|lyrics?|audio)$"), " ")
+        .replace(Regex("[^a-z0-9]+"), " ")
+        .trim().replace(Regex("\\s+"), " ")
+    return "${clean(title)}|${clean(artist)}"
+}
+
 @Composable
 private fun SearchResultRow(
     song: Song,
@@ -442,10 +510,24 @@ private fun SearchResultRow(
         Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(song.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                if (song.id.startsWith("src:")) listOfNotNull(song.artist, song.sourceQuality).joinToString(" · ") else song.artist,
-                color = SearchMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (song.id.startsWith("src:")) listOfNotNull(song.artist, song.sourceQuality).joinToString(" · ") else song.artist,
+                    color = SearchMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (!song.spotifyUrl.isNullOrBlank()) {
+                    Text(
+                        "Spotify ↗",
+                        color = Color(0xFF1DB954),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 7.dp).clickable {
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(song.spotifyUrl))) }
+                        }
+                    )
+                }
+            }
         }
         Box {
             IconButton(onClick = { menuExpanded = true }) {
