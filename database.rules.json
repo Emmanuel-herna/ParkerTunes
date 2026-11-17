@@ -12,9 +12,9 @@
     "members": {
       "$code": {
         ".read": "auth != null && root.child('rooms').child($code).exists()",
-        ".write": "auth != null && (newData.child(auth.uid).exists() || data.child(auth.uid).exists()) && newData.numChildren() <= 5",
         "$uid": {
-          ".validate": "$uid === auth.uid || newData.val() === data.val()"
+          ".write": "auth != null && auth.uid === $uid && (data.exists() || root.child('members').child($code).numChildren() < 5)",
+          ".validate": "newData.hasChildren(['uid', 'displayName', 'joinedAt', 'connected']) && newData.child('uid').val() === auth.uid && newData.child('displayName').isString() && newData.child('displayName').val().length <= 40 && newData.child('joinedAt').isNumber() && newData.child('connected').isBoolean()"
         }
       }
     },
