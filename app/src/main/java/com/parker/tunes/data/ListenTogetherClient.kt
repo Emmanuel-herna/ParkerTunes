@@ -1,6 +1,8 @@
 package com.parker.tunes.data
 
 import android.content.Context
+import androidx.credentials.ClearCredentialStateRequest
+import androidx.credentials.CredentialManager
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.database.*
@@ -17,6 +19,7 @@ data class JamSnapshot(val code:String,val members:List<JamMember>,val hostOnlyC
 data class JamUiState(val displayName:String="",val googleName:String="",val googleEmail:String="",val googleAvatarUrl:String?=null,val userUid:String="",val code:String="",val token:String="",val isHost:Boolean=false,val connected:Boolean=false,val loading:Boolean=false,val error:String?=null,val party:JamSnapshot?=null)
 
 class ListenTogetherClient(context:Context) {
+    private val appContext=context.applicationContext
     companion object {
         private const val URL="https://parkerjnr-5a13a-default-rtdb.firebaseio.com"
         private const val CODE_CHARS="ABCDEFGHJKMNPQRSTUVWXYZ23456789"
@@ -53,7 +56,8 @@ class ListenTogetherClient(context:Context) {
         _state.value=_state.value.copy(userUid=user.uid,googleName=safe,googleEmail=email,googleAvatarUrl=avatar,displayName=safe,error=null)
     }
 
-    fun signOutGoogle() {
+    suspend fun signOutGoogle() {
+        runCatching { CredentialManager.create(appContext).clearCredentialState(ClearCredentialStateRequest()) }
         leave()
         auth.signOut()
         prefs.edit().remove("google_name").remove("google_email").remove("google_avatar").apply()
