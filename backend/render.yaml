@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: parkertunes-listen-together
+    runtime: go
+    rootDir: backend
+    buildCommand: go build -o server .
+    startCommand: ./server
+    healthCheckPath: /healthz
+    plan: free
+    envVars:
+      - key: JAM_MAX_MEMBERS
+        value: "5"
+      - key: JAM_STATE_HEARTBEAT_MS
+        value: "5000"
+      - key: JAM_PLAY_LEAD_MS
+        value: "350"
