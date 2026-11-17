@@ -266,35 +266,46 @@ class NewPipeMusicApi : MusicApi {
                 )
                 val titleTokens = cleanTitle.lowercase()
                     .split(Regex("[^a-z0-9]+")).filter { it.length > 2 }.toSet()
-                val candidates = queries.flatMap { query -> searchMusicSongs(query, 30) }
-                    .asSequence()
-                    .filter { it.id != videoId && it.durationSec in 45L..600L }
-                    .filterNot { song ->
-                        val t = song.title.lowercase()
+                fun usable(song: Song): Boolean {
+                    val t = song.title.lowercase()
+                    return song.id != videoId && song.durationSec in 45L..600L &&
+                        song.artist.isNotBlank() &&
+                        !song.artist.equals("unknown artist", ignoreCase = true) &&
                         listOf("1 hour", "1-hour", "2 hour", "2-hour", "dj mix",
                             "full album", "nonstop", "live stream", "playlist",
-                            "karaoke", "8d audio").any(t::contains)
-                    }
+                            "karaoke", "8d audio", "reaction", "slowed", "sped up")
+                            .none(t::contains)
+                }
+                fun artistMatches(song: Song): Boolean {
+                    val resultArtist = song.artist.lowercase()
+                        .replace(Regex("\\s*[-|]\\s*(topic|vevo)$"), "").trim()
+                    val targetArtist = cleanArtist.lowercase()
+                        .replace(Regex("\\s*[-|]\\s*(topic|vevo)$"), "").trim()
+                    return resultArtist == targetArtist ||
+                        resultArtist.contains(targetArtist) || targetArtist.contains(resultArtist)
+                }
+
+                val searched = queries.flatMap { query -> searchMusicSongs(query, 30) }
+                    .filter(::usable)
                     .distinctBy { it.id }
-                    .map { song ->
-                        val resultArtist = song.artist.trim().lowercase()
-                        val targetArtist = cleanArtist.lowercase()
-                        val artistMatch = resultArtist == targetArtist ||
-                            resultArtist.contains(targetArtist) ||
-                            targetArtist.contains(resultArtist)
-                        val resultTokens = song.title.lowercase()
-                            .split(Regex("[^a-z0-9]+")).toSet()
-                        val titleOverlap = titleTokens.intersect(resultTokens).size
-                        song to ((if (artistMatch) 4 else 0) + titleOverlap)
-                    }
-                    .filter { (song, score) ->
-                        score >= 2 && song.artist.isNotBlank() &&
-                            !song.artist.equals("unknown artist", ignoreCase = true)
-                    }
-                    .sortedByDescending { it.second }
-                    .map { it.first }
-                    .take(30)
-                    .toList()
+                val titleTokens = cleanTitle.lowercase()
+                    .split(Regex("[^a-z0-9]+")).filter { it.length > 2 }.toSet()
+                val ranked = searched.map { song ->
+                    val resultTokens = song.title.lowercase()
+                        .split(Regex("[^a-z0-9]+")).toSet()
+                    val titleOverlap = titleTokens.intersect(resultTokens).size
+                    song to ((if (artistMatches(song)) 5 else 0) + titleOverlap)
+                }
+                // Prefer exact-artist radio. If YouTube Music omits the uploader
+                // match, retain credible song results rather than returning a blank shelf.
+                val strictMatches = ranked.filter { it.second >= 5 }
+                    .sortedByDescending { it.second }.map { it.first }
+                val candidates = if (strictMatches.isNotEmpty()) strictMatches else {
+                    val artistFallback = searchMusicSongs("$cleanArtist songs", 30)
+                        .filter(::usable).distinctBy { it.id }
+                    (artistFallback + ranked.filter { it.second > 0 }.map { it.first })
+                        .distinctBy { it.id }.take(30)
+                }.take(30)
                 synchronized(cacheLock) { relatedCache[cacheKey] = candidates }
                 candidates
             } catch (cancelled: CancellationException) {
