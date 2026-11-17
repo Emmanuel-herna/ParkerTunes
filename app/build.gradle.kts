@@ -10,6 +10,9 @@ plugins {
     id("io.github.takahirom.roborazzi")
 }
 
+val ciKeystorePath = System.getenv("PARKERTUNES_KEYSTORE_PATH")
+val ciKeystorePassword = System.getenv("PARKERTUNES_KEYSTORE_PASSWORD")
+
 android {
     namespace = "com.parker.tunes"
     compileSdk = 35
@@ -20,6 +23,16 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+    }
+    signingConfigs {
+        if (!ciKeystorePath.isNullOrBlank()) {
+            create("ciDebug") {
+                storeFile = file(ciKeystorePath)
+                storePassword = ciKeystorePassword
+                keyAlias = "parkertunes-ci"
+                keyPassword = ciKeystorePassword
+            }
+        }
     }
     buildFeatures {
         compose = true
@@ -34,6 +47,9 @@ android {
     testOptions { unitTests.isIncludeAndroidResources = true }
     buildTypes {
         getByName("debug") {
+            if (!ciKeystorePath.isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("ciDebug")
+            }
             firebaseAppDistribution {
                 artifactType = "APK"
                 groups = "testers"
