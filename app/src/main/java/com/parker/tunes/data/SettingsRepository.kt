@@ -47,6 +47,9 @@ class SettingsRepository(context: Context) {
     val listenBrainzEnabled: Flow<Boolean> = bool(Keys.listenBrainzEnabled)
     val lastFmApiKey: Flow<String> = string(Keys.lastFmKey, "")
     val listenBrainzToken: Flow<String> = string(Keys.listenBrainzToken, "")
+    val spotifyMetadataEnabled: Flow<Boolean> = bool(Keys.spotifyMetadataEnabled, true)
+    val spotifyClientId: Flow<String> = string(Keys.spotifyClientId, "")
+    val spotifyClientSecret: Flow<String> = string(Keys.spotifyClientSecret, "")
 
     suspend fun setAutomix(v:Boolean)=put(Keys.automix,v)
     suspend fun setCrossfadeSeconds(v:Int)=put(Keys.crossfade,v.coerceIn(0,12))
@@ -76,6 +79,9 @@ class SettingsRepository(context: Context) {
     suspend fun setListenBrainzEnabled(v:Boolean)=put(Keys.listenBrainzEnabled,v)
     suspend fun setLastFmApiKey(v:String)=put(Keys.lastFmKey,v)
     suspend fun setListenBrainzToken(v:String)=put(Keys.listenBrainzToken,v)
+    suspend fun setSpotifyMetadataEnabled(v:Boolean)=put(Keys.spotifyMetadataEnabled,v)
+    suspend fun setSpotifyClientId(v:String)=put(Keys.spotifyClientId,v.trim())
+    suspend fun setSpotifyClientSecret(v:String)=put(Keys.spotifyClientSecret,v.trim())
 
     private suspend fun <T> put(key: Preferences.Key<T>, value: T) { store.edit { it[key] = value } }
 
@@ -108,5 +114,8 @@ class SettingsRepository(context: Context) {
         val listenBrainzEnabled=booleanPreferencesKey("listenbrainz_enabled")
         val lastFmKey=stringPreferencesKey("lastfm_api_key")
         val listenBrainzToken=stringPreferencesKey("listenbrainz_token")
+        val spotifyMetadataEnabled=booleanPreferencesKey("spotify_metadata_enabled")
+        val spotifyClientId=stringPreferencesKey("spotify_client_id")
+        val spotifyClientSecret=stringPreferencesKey("spotify_client_secret")
     }
 }
