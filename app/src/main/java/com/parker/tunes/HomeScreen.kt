@@ -107,8 +107,11 @@ fun HomeScreen(
     LaunchedEffect(historyReady, recentIds) {
         if (historyReady) {
             val history = withContext(Dispatchers.IO) { dao.historySnapshot() }
+            // Use the visible recent-play rows as a safety net if the snapshot
+            // races the Room Flow's first emission on a fresh install.
+            val combinedHistory = (history + recent).distinctBy { it.id }
             recommendationViewModel.onListeningHistory(
-                history.map { entry ->
+                combinedHistory.map { entry ->
                     Song(entry.songId, entry.title.ifBlank { entry.songId }, entry.artist, entry.coverUrl)
                 }
             )
@@ -429,7 +432,7 @@ private fun RecommendationShelf(
     listState: androidx.compose.foundation.lazy.LazyListState, onPlay: (Song) -> Unit
 ) {
     if (songs.isEmpty() && !loading) {
-        Text("Play a few songs to shape your recommendations.",
+        Text("Listening history found. Finding close matches…",
             modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
     }
