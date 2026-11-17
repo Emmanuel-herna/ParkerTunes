@@ -113,7 +113,7 @@ class SpotifyMetadataProvider {
                 val artistsJson = item.optJSONArray("artists")
                 val artists = buildList {
                     if (artistsJson != null) for (i in 0 until artistsJson.length()) {
-                        artistsJson.optJSONObject(i)?.optString("name")?.takeIf { it.isNotBlank() }?.let(::add)
+                        artistsJson.optJSONObject(i)?.optString("name")?.takeIf { it.isNotBlank() }?.let { add(it) }
                     }
                 }
                 val album = item.optJSONObject("album") ?: JSONObject()
@@ -136,9 +136,9 @@ class SpotifyMetadataProvider {
 
     private fun accessToken(clientId: String, clientSecret: String): String {
         val now = System.currentTimeMillis()
-        cachedToken?.takeIf { now < tokenExpiresAt - 60_000L }?.let { return it }
+        cachedToken?.takeIf { cachedClientId == clientId && now < tokenExpiresAt - 60_000L }?.let { return it }
         synchronized(this) {
-            cachedToken?.takeIf { System.currentTimeMillis() < tokenExpiresAt - 60_000L }?.let { return it }
+            cachedToken?.takeIf { cachedClientId == clientId && System.currentTimeMillis() < tokenExpiresAt - 60_000L }?.let { return it }
             val body = FormBody.Builder().add("grant_type", "client_credentials").build()
             val request = Request.Builder().url("https://accounts.spotify.com/api/token")
                 .header("Authorization", Credentials.basic(clientId, clientSecret))
