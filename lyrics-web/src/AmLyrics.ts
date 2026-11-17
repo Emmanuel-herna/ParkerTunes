@@ -3726,8 +3726,7 @@ export class AmLyrics extends LitElement {
         changedProperties.has('songTitle') ||
         changedProperties.has('songArtist') ||
         changedProperties.has('songAlbum') ||
-        changedProperties.has('songDurationMs')) &&
-      !changedProperties.has('currentTime')
+        changedProperties.has('songDurationMs'))
     ) {
       this.fetchLyrics();
     }
