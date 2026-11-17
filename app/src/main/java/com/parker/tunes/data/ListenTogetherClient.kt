@@ -19,7 +19,7 @@ data class JamTrack(val videoId:String,val title:String,val artist:String,val th
 data class JamMember(val deviceId:String,val displayName:String,val host:Boolean,val connected:Boolean)
 data class JamPlayback(val seq:Long,val track:JamTrack?,val positionMs:Long,val anchorMs:Long,val isPlaying:Boolean,val startedByName:String?)
 data class JamSnapshot(val code:String,val members:List<JamMember>,val hostOnlyControl:Boolean,val playback:JamPlayback?,val queue:List<JamTrack>,val queueIndex:Int)
-data class JamUiState(val serverUrl:String="https://",val displayName:String="",val code:String="",val token:String="",val isHost:Boolean=false,val connected:Boolean=false,val loading:Boolean=false,val error:String?=null,val party:JamSnapshot?=null)
+data class JamUiState(val serverUrl:String="https://",val displayName:String="",val googleName:String="",val googleEmail:String="",val googleAvatarUrl:String?=null,val code:String="",val token:String="",val isHost:Boolean=false,val connected:Boolean=false,val loading:Boolean=false,val error:String?=null,val party:JamSnapshot?=null)
 
 class ListenTogetherClient(context:Context) {
     private val prefs=context.getSharedPreferences("listen_together",Context.MODE_PRIVATE)
