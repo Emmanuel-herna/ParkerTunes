@@ -28,5 +28,6 @@ The service listens on port 8000 by default. Health check: `GET /healthz`.
 - Up to five devices per party.
 - Party codes are six characters; member tokens are random bearer credentials.
 - WebSocket authentication uses the `Authorization: Bearer <token>` header.
-- Display names are supplied by each app installation. ParkerTunes currently has no Google sign-in, so the backend cannot verify the identity claim.
+- Creating or joining a party requires Sign in with Google. The backend verifies the Google ID token signature, issuer, expiry and Web OAuth audience, then uses Google’s verified subject and profile claims. The app-supplied user ID and display name are never trusted.
+- The Render Blueprint configures `GOOGLE_WEB_CLIENT_ID` to the Web OAuth client. Keep the Android OAuth client registered for package `com.parker.tunes` and the signing SHA-1 fingerprint printed by the Android CI workflow.
 - The current backend is intentionally single-instance and in-memory. Persistent rooms and horizontal scaling require shared storage/pub-sub.
