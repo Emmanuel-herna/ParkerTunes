@@ -202,7 +202,11 @@ class PlaybackService : MediaSessionService() {
                 // Keep the original related list as a safety fallback. If filtering or
                 // the artist-search fallback fails, autoplay still behaves as before.
                 val related = try {
-                    withContext(Dispatchers.IO) { app.musicApi.getRelatedSongs(songId) }
+                    withContext(Dispatchers.IO) { app.musicApi.getRelatedSongs(
+                            songId,
+                            current.mediaMetadata.title?.toString().orEmpty(),
+                            current.mediaMetadata.artist?.toString().orEmpty()
+                        ) }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
