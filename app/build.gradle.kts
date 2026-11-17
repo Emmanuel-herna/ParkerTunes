@@ -20,13 +20,11 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"512448803456-q5l3pr6h6uovcrhkea9u2qlv86t7hkc1.apps.googleusercontent.com\"")
     }
     buildFeatures {
         compose = true
         buildConfig = true
-    }
-    defaultConfig {
-        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"512448803456-q5l3pr6h6uovcrhkea9u2qlv86t7hkc1.apps.googleusercontent.com\"")
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
