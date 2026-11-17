@@ -15,6 +15,12 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.CustomCredential
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +39,9 @@ import kotlinx.coroutines.withContext
 fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api:MusicApi,onBack:()->Unit) {
     val state by client.state.collectAsState()
     val scope= rememberCoroutineScope()
+    val context=LocalContext.current
+    var signingIn by remember { mutableStateOf(false) }
+    var signInError by remember { mutableStateOf<String?>(null) }
     var name by remember(state.displayName){mutableStateOf(state.displayName)}
     var server by remember(state.serverUrl){mutableStateOf(state.serverUrl)}
     var code by remember(state.code){mutableStateOf(state.code)}
@@ -69,14 +78,48 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api
         Spacer(Modifier.height(18.dp))
         if(state.token.isBlank()) {
             Text("Listen in sync",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold)
-            Text("Create a room or join with a six-character code. Up to five devices can listen together.")
-            Spacer(Modifier.height(16.dp))
+            Text("Sign in with Google to create a room or join a party. Your verified Google account protects party membership.")
+            Spacer(Modifier.height(12.dp))
+            if (!client.hasGoogleToken()) {
+                Button(
+                    onClick={
+                        signInError=null
+                        scope.launch {
+                            signingIn=true
+                            try {
+                                val option=GetSignInWithGoogleOption.Builder(BuildConfig.GOOGLE_WEB_CLIENT_ID).build()
+                                val request=GetCredentialRequest.Builder().addCredentialOption(option).build()
+                                val result=CredentialManager.create(context).getCredential(context,request)
+                                val credential=result.credential
+                                if (credential is CustomCredential && credential.type==GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                                    val google=GoogleIdTokenCredential.createFrom(credential.data)
+                                    client.setGoogleIdentity(google.idToken,google.displayName.orEmpty(),google.id,google.profilePictureUri?.toString())
+                                } else {
+                                    throw IllegalStateException("Google did not return a valid sign-in credential.")
+                                }
+                            } catch (e:Exception) {
+                                signInError=e.message ?: "Google sign-in was cancelled or failed."
+                            } finally { signingIn=false }
+                        }
+                    },
+                    enabled=!signingIn,
+                    modifier=Modifier.fillMaxWidth()
+                ) { Text(if(signingIn) "Signing in…" else "Continue with Google") }
+                signInError?.let { Text(it,color=MaterialTheme.colorScheme.error) }
+            } else {
+                ListItem(
+                    headlineContent={Text(state.googleName.ifBlank { state.displayName })},
+                    supportingContent={Text(state.googleEmail)},
+                    trailingContent={TextButton(onClick={client.signOutGoogle()}){Text("Sign out")}}
+                )
+            }
+            Spacer(Modifier.height(12.dp))
             OutlinedTextField(value=server,onValueChange={server=it},label={Text("Server URL")},placeholder={Text("https://your-service.onrender.com")},singleLine=true,modifier=Modifier.fillMaxWidth())
             OutlinedTextField(value=name,onValueChange={name=it},label={Text("Your display name")},singleLine=true,modifier=Modifier.fillMaxWidth())
             OutlinedTextField(value=code,onValueChange={code=it.uppercase().take(6)},label={Text("Party code")},singleLine=true,modifier=Modifier.fillMaxWidth())
             Spacer(Modifier.height(12.dp))
-            Button(onClick={client.saveSettings(server,name);scope.launch{client.create()}},enabled=!state.loading&&server.isNotBlank()&&name.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text(if(state.loading)"Working…" else "Create party") }
-            Button(onClick={client.saveSettings(server,name);scope.launch{client.join(code)}},enabled=!state.loading&&server.isNotBlank()&&name.isNotBlank()&&code.length==6,modifier=Modifier.fillMaxWidth()) { Text("Join party") }
+            Button(onClick={client.saveSettings(server,name);scope.launch{client.create()}},enabled=!state.loading&&client.hasGoogleToken()&&server.isNotBlank()&&name.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text(if(state.loading)"Working…" else "Create party") }
+            Button(onClick={client.saveSettings(server,name);scope.launch{client.join(code)}},enabled=!state.loading&&client.hasGoogleToken()&&server.isNotBlank()&&name.isNotBlank()&&code.length==6,modifier=Modifier.fillMaxWidth()) { Text("Join party") }
         } else {
             Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Groups,null)
