@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.parker.tunes.data.*
+import com.parker.tunes.data.MusicApi
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -28,7 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,onBack:()->Unit) {
+fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api:MusicApi,onBack:()->Unit) {
     val state by client.state.collectAsState()
     val scope= rememberCoroutineScope()
     var name by remember(state.displayName){mutableStateOf(state.displayName)}
@@ -43,9 +44,14 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,onB
         lastApplied=playback.seq.toString()
         val position=client.estimatedPosition(playback)
         if(active.currentMediaItem?.mediaId!=track.videoId) {
-            val stream=runCatching { withContext(Dispatchers.IO) { (active.applicationLooper.let { null }); "" } }.getOrNull()
-            // The screen never guesses a stream URL; the app's normal resolver remains the audio source.
-            // A remote track is announced here and can be selected from the shared party queue.
+            runCatching {
+                val stream=withContext(Dispatchers.IO) { api.getStreamUrl(track.videoId) }
+                val metadata=MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist)
+                    .setArtworkUri(track.thumbnailUrl?.let(android.net.Uri::parse)).build()
+                active.setMediaItem(MediaItem.Builder().setMediaId(track.videoId).setUri(stream).setMediaMetadata(metadata).build(),position)
+                active.prepare()
+                if(playback.isPlaying) active.play() else active.pause()
+            }
         } else {
             if(kotlin.math.abs(active.currentPosition-position)>1400L) active.seekTo(position)
             if(playback.isPlaying&&!active.isPlaying) active.play()
@@ -67,7 +73,6 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,onB
             OutlinedTextField(value=code,onValueChange={code=it.uppercase().take(6)},label={Text("Party code")},singleLine=true,modifier=Modifier.fillMaxWidth())
             Spacer(Modifier.height(12.dp))
             Button(onClick={client.saveSettings(server,name);scope.launch{client.create()}},enabled=!state.loading&&server.isNotBlank()&&name.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text(if(state.loading)"Working…" else "Create party") }
-            OutlinedButton(onClick={client::joinFromScreen},enabled=false,modifier=Modifier.fillMaxWidth()) { Text("Join party") }
             Button(onClick={client.saveSettings(server,name);scope.launch{client.join(code)}},enabled=!state.loading&&server.isNotBlank()&&name.isNotBlank()&&code.length==6,modifier=Modifier.fillMaxWidth()) { Text("Join party") }
         } else {
             Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
