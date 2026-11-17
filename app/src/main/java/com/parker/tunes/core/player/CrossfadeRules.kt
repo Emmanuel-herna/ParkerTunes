@@ -15,7 +15,7 @@ object CrossfadeRules {
     val choices = listOf(0, 2, 4, 6, 8, 12)
 
     fun applies(crossfadeSec: Int, current: Song, next: Song?, repeatOne: Boolean): Boolean {
-        if (crossfadeSec !in choices || crossfadeSec == 0 || next == null || repeatOne) return false
+        if (crossfadeSec <= 0 || next == null || repeatOne) return false
         val overlapMs = crossfadeSec.toLong() * 1_000L
         // Leave enough of each track outside the overlap to avoid swallowing short songs.
         if ((current.durationMs ?: 0L) < overlapMs * 3L ||
