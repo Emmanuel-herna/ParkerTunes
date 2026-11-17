@@ -16,8 +16,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import androidx.credentials.CustomCredential
-import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,7 +83,11 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api
                         scope.launch {
                             signingIn=true
                             try {
-                                val option=GetSignInWithGoogleOption.Builder(context.getString(R.string.default_web_client_id)).build()
+                                val option=GetGoogleIdOption.Builder()
+                                    .setServerClientId(context.getString(R.string.default_web_client_id))
+                                    .setFilterByAuthorizedAccounts(false)
+                                    .setAutoSelectEnabled(false)
+                                    .build()
                                 val request=GetCredentialRequest.Builder().addCredentialOption(option).build()
                                 val result=CredentialManager.create(context).getCredential(context,request)
                                 val credential=result.credential
@@ -102,7 +106,7 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api
                 ListItem(
                     headlineContent={Text(state.googleName.ifBlank { state.displayName })},
                     supportingContent={Text(state.googleEmail)},
-                    trailingContent={TextButton(onClick={client.signOutGoogle()}){Text("Sign out")}}
+                    trailingContent={TextButton(onClick={scope.launch { client.signOutGoogle() }}){Text("Sign out")}}
                 )
             }
             signInError?.let { Text(it,color=MaterialTheme.colorScheme.error) }
