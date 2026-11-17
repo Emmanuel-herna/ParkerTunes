@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -144,6 +145,7 @@ fun SettingsScreen(
 
         item { SettingsSection("CONNECTIONS") }
         item { SettingRow(Icons.Default.Sync, "Scrobbling", "Last.fm and ListenBrainz", if (lastFm || listenBrainz) "Configured" else "Set up", { sheet = "scrobble" }) }
+        item { SettingRow(Icons.Default.MusicNote, "Spotify metadata", "Search fallback and album artwork", "Configure", { sheet = "spotify" }) }
 
         item { SettingsSection("LIBRARY & STORAGE") }
         item { SettingRow(Icons.Default.Download, "Downloads", "Manage offline library", "Open", onOpenDownloads) }
@@ -156,6 +158,7 @@ fun SettingsScreen(
         item { SettingRow(Icons.Default.Code, "GitHub", "View source code", "Open", { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Emmanuel-herna/ParkerTunes"))) } }) }
         item { SettingRow(Icons.Default.Description, "License", "GPL-3.0", "View", { sheet = "license" }) }
         item { SettingRow(Icons.Default.Share, "Rate & share", "Share ParkerTunes", "Share", { runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "ParkerTunes — https://github.com/Emmanuel-herna/ParkerTunes"), "Share ParkerTunes")) } }) }
+        item { Text("Search metadata & artwork © Spotify. Spotify is a trademark of Spotify AB. ParkerTunes is not affiliated with Spotify.", color = SettingsMuted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 10.dp)) }
         item { SettingRow(Icons.Default.Favorite, "Made by", "ParkerTunes · Built with BitChord as reference", "", {}) }
         item { status?.let { Text(it, color = SettingsMuted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp)) } }
     }
@@ -211,6 +214,43 @@ fun SettingsScreen(
                 }
                 Text("Source priority follows the saved order. Drag reordering is not enabled in this build.", color = SettingsMuted, fontSize = 12.sp, modifier = Modifier.padding(22.dp))
                 TextButton(onClick = { sheet = null }, modifier = Modifier.padding(12.dp)) { Text("Done") }
+            }
+            "spotify" -> {
+                val spotifyEnabled by repository.spotifyMetadataEnabled.collectAsState(initial = true)
+                val savedId by repository.spotifyClientId.collectAsState(initial = "")
+                val savedSecret by repository.spotifyClientSecret.collectAsState(initial = "")
+                var clientId by remember(savedId) { mutableStateOf(savedId) }
+                var clientSecret by remember(savedSecret) { mutableStateOf(savedSecret) }
+                Text("Spotify metadata", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(22.dp))
+                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Use Spotify metadata", color = Color.White)
+                        Text("Search fallback and artwork only. Audio stays on YouTube/NewPipe.", color = SettingsMuted, fontSize = 11.sp)
+                    }
+                    Switch(checked = spotifyEnabled, onCheckedChange = { enabled -> scope.launch { repository.setSpotifyMetadataEnabled(enabled) } })
+                }
+                OutlinedTextField(
+                    value = clientId, onValueChange = { clientId = it },
+                    label = { Text("Spotify Client ID") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+                )
+                OutlinedTextField(
+                    value = clientSecret, onValueChange = { clientSecret = it },
+                    label = { Text("Spotify Client Secret") }, singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+                )
+                Text("Personal-use configuration. A secret stored in an Android app can be extracted; move credentials to a backend before public distribution.", color = SettingsMuted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp))
+                Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = { sheet = null }) { Text("Cancel") }
+                    Button(onClick = {
+                        scope.launch {
+                            repository.setSpotifyClientId(clientId)
+                            repository.setSpotifyClientSecret(clientSecret)
+                        }
+                        sheet = null
+                    }) { Text("Save") }
+                }
             }
             "scrobble" -> {
                 Text("Scrobbling", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(22.dp))
