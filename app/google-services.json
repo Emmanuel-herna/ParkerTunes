@@ -12,7 +12,12 @@
           "package_name": "com.parker.tunes"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1091691285089-4q7opnscm9epp87lo3knvaut97gjhfpm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDvVDvENiStDqmbgWTX4KjZocKaHEgiBGY"
@@ -20,7 +25,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1091691285089-4q7opnscm9epp87lo3knvaut97gjhfpm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
