@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="color-scheme" content="dark">
+  <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: transparent;
+      color: #fff;
+    }
+
+    am-lyrics {
+      display: block;
+      width: 100%;
+      height: 100%;
+      color: #fff;
+      --am-lyrics-highlight-color: #B69CFF;
+      --highlight-color: #B69CFF;
+      --lyplus-font-size-base: 23px;
+      --am-lyrics-line-height: 1.25;
+      --am-lyrics-line-spacing: 16px;
+      --am-lyrics-inline-padding: 14px;
+      --lyrics-scroll-padding-top: 25%;
+    }
+  </style>
+</head>
+<body>
+  <am-lyrics
+    id="parker-am-lyrics"
+    auto-scroll
+    interpolate
+    highlight-color="#B69CFF"
+    font-family="Arial, sans-serif"
+  ></am-lyrics>
+
+  <script>
+    (() => {
+      const lyrics = document.getElementById('parker-am-lyrics');
+      let activeTrackKey = null;
+      let pendingTrack = null;
+
+      function applyTrack(track) {
+        if (!lyrics || !customElements.get('am-lyrics')) {
+          pendingTrack = track;
+          return;
+        }
+
+        const key = [track.id, track.title, track.artist].join('\u0000');
+        if (key !== activeTrackKey) {
+          activeTrackKey = key;
+          lyrics.songTitle = track.title || '';
+          lyrics.songArtist = track.artist || '';
+          lyrics.songAlbum = track.album || '';
+          lyrics.query = track.query || [track.title, track.artist].filter(Boolean).join(' ');
+          lyrics.songDurationMs = track.durationMs > 0 ? track.durationMs : undefined;
+          lyrics.currentTime = 0;
+        }
+
+        lyrics.paused = !track.playing;
+        lyrics.currentTime = Math.max(0, Number(track.positionMs) || 0);
+      }
+
+      window.setParkerTrack = applyTrack;
+
+      customElements.whenDefined('am-lyrics').then(() => {
+        lyrics.addEventListener('line-click', event => {
+          const timestamp = Number(event.detail && event.detail.timestamp);
+          if (
+            Number.isFinite(timestamp) &&
+            timestamp >= 0 &&
+            window.ParkerLyricsBridge
+          ) {
+            window.ParkerLyricsBridge.seekTo(timestamp);
+          }
+        });
+
+        if (pendingTrack) {
+          const track = pendingTrack;
+          pendingTrack = null;
+          applyTrack(track);
+        }
+      });
+    })();
+  </script>
+
+  <script type="module" src="./am-lyrics.js"></script>
+</body>
+</html>
