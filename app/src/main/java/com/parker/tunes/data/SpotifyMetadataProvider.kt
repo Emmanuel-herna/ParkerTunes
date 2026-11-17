@@ -7,7 +7,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.IOException
-import java.util.Base64
+import okhttp3.Credentials
 import java.util.concurrent.TimeUnit
 
 data class SpotifyTrack(
@@ -36,6 +36,7 @@ class SpotifyMetadataProvider {
 
     @Volatile private var cachedToken: String? = null
     @Volatile private var tokenExpiresAt: Long = 0L
+    @Volatile private var cachedClientId: String? = null
 
     suspend fun searchTracks(
         query: String,
@@ -63,7 +64,7 @@ class SpotifyMetadataProvider {
                         val artists = buildList {
                             if (artistsJson != null) for (j in 0 until artistsJson.length()) {
                                 artistsJson.optJSONObject(j)?.optString("name")
-                                    ?.takeIf { it.isNotBlank() }?.let(::add)
+                                    ?.takeIf { it.isNotBlank() }?.let { add(it) }
                             }
                         }
                         val images = album.optJSONArray("images")
@@ -138,10 +139,9 @@ class SpotifyMetadataProvider {
         cachedToken?.takeIf { now < tokenExpiresAt - 60_000L }?.let { return it }
         synchronized(this) {
             cachedToken?.takeIf { System.currentTimeMillis() < tokenExpiresAt - 60_000L }?.let { return it }
-            val credentials = Base64.getEncoder().encodeToString("$clientId:$clientSecret".toByteArray(Charsets.UTF_8))
             val body = FormBody.Builder().add("grant_type", "client_credentials").build()
             val request = Request.Builder().url("https://accounts.spotify.com/api/token")
-                .header("Authorization", "Basic $credentials")
+                .header("Authorization", Credentials.basic(clientId, clientSecret))
                 .post(body).build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw IOException("Spotify token HTTP ${response.code}")
@@ -149,6 +149,7 @@ class SpotifyMetadataProvider {
                 val token = json.optString("access_token")
                 if (token.isBlank()) throw IOException("Spotify token missing")
                 cachedToken = token
+                cachedClientId = clientId
                 tokenExpiresAt = System.currentTimeMillis() + json.optLong("expires_in", 3600L) * 1000L
                 return token
             }
