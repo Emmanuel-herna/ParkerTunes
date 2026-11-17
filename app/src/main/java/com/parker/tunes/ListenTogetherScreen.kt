@@ -4,11 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.SkipNext
@@ -26,10 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.parker.tunes.data.*
-import com.parker.tunes.data.MusicApi
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
-import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -43,10 +39,9 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api
     var signingIn by remember { mutableStateOf(false) }
     var signInError by remember { mutableStateOf<String?>(null) }
     var name by remember(state.displayName){mutableStateOf(state.displayName)}
-    var server by remember(state.serverUrl){mutableStateOf(state.serverUrl)}
     var code by remember(state.code){mutableStateOf(state.code)}
     var lastApplied by remember { mutableStateOf("") }
-    LaunchedEffect(state.token) { if (state.token.isNotBlank() && !state.connected) runCatching { client.connect() } }
+
     LaunchedEffect(state.party?.playback?.seq,state.connected,player) {
         val playback=state.party?.playback ?: return@LaunchedEffect
         val track=playback.track ?: return@LaunchedEffect
@@ -63,49 +58,46 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api
                 active.setMediaItem(MediaItem.Builder().setMediaId(track.videoId).setUri(stream).setMediaMetadata(metadata).build(),position)
                 active.prepare()
                 if(playback.isPlaying) active.play() else active.pause()
-            }
+            }.onFailure { signInError=it.message ?: "Couldn't load the shared track." }
         } else {
             if(kotlin.math.abs(active.currentPosition-position)>1400L) active.seekTo(position)
             if(playback.isPlaying&&!active.isPlaying) active.play()
             if(!playback.isPlaying&&active.isPlaying) active.pause()
         }
     }
+
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp)) {
         Row(verticalAlignment=Alignment.CenterVertically) {
             IconButton(onClick=onBack){Icon(Icons.Default.ArrowBack,"Back")}
             Text("Listen Together",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
         }
         Spacer(Modifier.height(18.dp))
-        if(state.token.isBlank()) {
+        if(state.code.isBlank()) {
             Text("Listen in sync",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold)
-            Text("Sign in with Google to create a room or join a party. Your verified Google account protects party membership.")
+            Text("Sign in with Google, then create a party or join one with a 6-character code.")
             Spacer(Modifier.height(12.dp))
-            if (!client.hasGoogleToken()) {
+            if(state.userUid.isBlank()) {
                 Button(
                     onClick={
                         signInError=null
                         scope.launch {
                             signingIn=true
                             try {
-                                val option=GetSignInWithGoogleOption.Builder(BuildConfig.GOOGLE_WEB_CLIENT_ID).build()
+                                val option=GetSignInWithGoogleOption.Builder(context.getString(R.string.default_web_client_id)).build()
                                 val request=GetCredentialRequest.Builder().addCredentialOption(option).build()
                                 val result=CredentialManager.create(context).getCredential(context,request)
                                 val credential=result.credential
-                                if (credential is CustomCredential && credential.type==GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                                if(credential is CustomCredential && credential.type==GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                                     val google=GoogleIdTokenCredential.createFrom(credential.data)
-                                    client.setGoogleIdentity(google.idToken,google.displayName.orEmpty(),google.id,google.profilePictureUri?.toString())
-                                } else {
-                                    throw IllegalStateException("Google did not return a valid sign-in credential.")
-                                }
-                            } catch (e:Exception) {
-                                signInError=e.message ?: "Google sign-in was cancelled or failed."
-                            } finally { signingIn=false }
+                                    client.signInWithGoogle(google.idToken,google.displayName.orEmpty(),google.id,google.profilePictureUri?.toString())
+                                } else error("Google did not return a valid sign-in credential.")
+                            } catch(e:Exception) { signInError=e.message ?: "Google sign-in failed." }
+                            finally { signingIn=false }
                         }
                     },
                     enabled=!signingIn,
                     modifier=Modifier.fillMaxWidth()
                 ) { Text(if(signingIn) "Signing in…" else "Continue with Google") }
-                signInError?.let { Text(it,color=MaterialTheme.colorScheme.error) }
             } else {
                 ListItem(
                     headlineContent={Text(state.googleName.ifBlank { state.displayName })},
@@ -113,34 +105,37 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api
                     trailingContent={TextButton(onClick={client.signOutGoogle()}){Text("Sign out")}}
                 )
             }
+            signInError?.let { Text(it,color=MaterialTheme.colorScheme.error) }
             Spacer(Modifier.height(12.dp))
-            OutlinedTextField(value=server,onValueChange={server=it},label={Text("Server URL")},placeholder={Text("https://your-service.onrender.com")},singleLine=true,modifier=Modifier.fillMaxWidth())
-            OutlinedTextField(value=name,onValueChange={name=it},label={Text("Your display name")},singleLine=true,modifier=Modifier.fillMaxWidth())
+            OutlinedTextField(value=name,onValueChange={name=it.take(40)},label={Text("Your display name")},singleLine=true,modifier=Modifier.fillMaxWidth())
             OutlinedTextField(value=code,onValueChange={code=it.uppercase().take(6)},label={Text("Party code")},singleLine=true,modifier=Modifier.fillMaxWidth())
             Spacer(Modifier.height(12.dp))
-            Button(onClick={client.saveSettings(server,name);scope.launch{client.create()}},enabled=!state.loading&&client.hasGoogleToken()&&server.isNotBlank()&&name.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text(if(state.loading)"Working…" else "Create party") }
-            Button(onClick={client.saveSettings(server,name);scope.launch{client.join(code)}},enabled=!state.loading&&client.hasGoogleToken()&&server.isNotBlank()&&name.isNotBlank()&&code.length==6,modifier=Modifier.fillMaxWidth()) { Text("Join party") }
+            Button(onClick={client.saveDisplayName(name);scope.launch{client.create()}},enabled=!state.loading&&state.userUid.isNotBlank()&&name.isNotBlank(),modifier=Modifier.fillMaxWidth()) {
+                Text(if(state.loading) "Working…" else "Create party")
+            }
+            OutlinedButton(onClick={client.saveDisplayName(name);scope.launch{client.join(code)}},enabled=!state.loading&&state.userUid.isNotBlank()&&name.isNotBlank()&&code.length==6,modifier=Modifier.fillMaxWidth()) { Text("Join party") }
         } else {
             Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Groups,null)
                 Column(Modifier.weight(1f)) { Text("Party code",style=MaterialTheme.typography.labelMedium); Text(state.code,style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold) }
-                AssistChip(onClick={client.sendSync()},label={Text(if(state.connected)"Connected" else "Reconnecting")})
+                AssistChip(onClick={client.sendSync()},label={Text(if(state.connected) "Connected" else "Connecting…")})
             }
             Text("Share this code with up to four other devices.")
             Spacer(Modifier.height(14.dp))
             state.party?.playback?.let { p ->
                 Text(p.track?.title ?: "Nothing playing",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold)
                 Text(p.track?.artist.orEmpty(),color=MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("Started by ${p.startedByName ?: "a party member"}",style=MaterialTheme.typography.labelSmall)
+                Text("Started by " + (p.startedByName ?: "a party member"),style=MaterialTheme.typography.labelSmall)
                 Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     FilledIconButton(onClick={if(p.isPlaying)client.control("pause",client.estimatedPosition(p)) else client.control("play",client.estimatedPosition(p))}) { Icon(if(p.isPlaying)Icons.Default.Pause else Icons.Default.PlayArrow,null) }
                     FilledIconButton(onClick={client.control("next")}) { Icon(Icons.Default.SkipNext,null) }
                 }
             }
-            Row(verticalAlignment=Alignment.CenterVertically) { Text("Members",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold); Spacer(Modifier.weight(1f)); Text("${state.party?.members?.size ?: 0}/5") }
+            Row(verticalAlignment=Alignment.CenterVertically) { Text("Members",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold); Spacer(Modifier.weight(1f)); Text((state.party?.members?.size ?: 0).toString()+"/5") }
             LazyColumn(Modifier.weight(1f)) {
-                item { Text("Members",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
-                items(state.party?.members.orEmpty()) { member -> ListItem(headlineContent={Text(member.displayName)},supportingContent={Text(if(member.host)"Host" else if(member.connected)"Connected" else "Reconnecting")}) }
+                items(state.party?.members.orEmpty()) { member ->
+                    ListItem(headlineContent={Text(member.displayName)},supportingContent={Text(if(member.host) "Host" else if(member.connected) "Connected" else "Offline")})
+                }
                 item { Text("Shared queue",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold,modifier=Modifier.padding(top=12.dp)) }
                 items(state.party?.let { it.queue.drop((it.queueIndex+1).coerceAtLeast(0)) }.orEmpty()) { queued ->
                     ListItem(headlineContent={Text(queued.title)},supportingContent={Text(queued.artist)},trailingContent={IconButton(onClick={client.control("queueRemove",videoId=queued.videoId)}){Icon(Icons.Default.Close,"Remove from shared queue")}})
