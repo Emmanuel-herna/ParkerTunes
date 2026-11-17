@@ -27,11 +27,21 @@ import coil.compose.AsyncImage
 import com.parker.tunes.data.LibraryDao
 import com.parker.tunes.data.MusicApi
 import com.parker.tunes.data.RecommendationCacheEntity
+import com.parker.tunes.data.HomeShelfCacheEntity
+import com.parker.tunes.data.home.HomeShelf
+import com.parker.tunes.data.home.HomeChip
+import com.parker.tunes.data.home.ShelfItem
+import com.parker.tunes.data.home.ShelfLayout
+import com.parker.tunes.data.home.YtMusicHomeApi
 import com.parker.tunes.model.Song
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -47,7 +57,9 @@ fun SpotifyHomeScreen(
     player: MediaController?,
     onPlay: (Song) -> Unit,
     onSettings: () -> Unit,
-    onSearch: () -> Unit
+    onSearch: () -> Unit,
+    homeApi: YtMusicHomeApi,
+    onOpenPlaylist: (ShelfItem, HomeShelf) -> Unit
 ) {
     val recent by remember(dao) { dao.recentlyPlayed().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
     val mostPlayed by remember(dao) { dao.mostPlayed().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
@@ -55,6 +67,12 @@ fun SpotifyHomeScreen(
     var historyReady by remember(dao) { mutableStateOf(false) }
     var recommendations by remember(api) { mutableStateOf(emptyList<Song>()) }
     var recommendationsLoading by remember(api) { mutableStateOf(true) }
+    var homeShelves by remember(homeApi) { mutableStateOf(emptyList<HomeShelf>()) }
+    var homeChips by remember(homeApi) { mutableStateOf(emptyList<HomeChip>()) }
+    var homeContinuation by remember(homeApi) { mutableStateOf<String?>(null) }
+    var homeLoading by remember(homeApi) { mutableStateOf(true) }
+    var homePageLoading by remember(homeApi) { mutableStateOf(false) }
+    val homeListState = rememberLazyListState()
     val latestTrack = recent.firstOrNull()
     val recommendationKey = latestTrack?.songId?.let { "related:$it" } ?: "trending"
     val recommendationSubtitle = latestTrack?.artist?.takeIf { it.isNotBlank() }
@@ -64,6 +82,48 @@ fun SpotifyHomeScreen(
         withContext(Dispatchers.IO) { dao.recentlyPlayed().first() }
         historyReady = true
     }
+    LaunchedEffect(homeApi, dao) {
+        val cachedPages = withContext(Dispatchers.IO) { dao.homeShelfCache() }
+        if (cachedPages.isNotEmpty()) {
+            homeShelves = cachedPages.sortedBy { it.pageIndex }.flatMap { decodeShelves(it.jsonPayload) }
+                .distinctBy { it.title to it.items.firstOrNull()?.browseId }
+            homeLoading = false
+        }
+        runCatching { homeApi.getHome() }.onSuccess { page ->
+            homeShelves = page.shelves.filter { it.items.size >= 2 }
+            homeChips = page.chips
+            homeContinuation = page.continuation
+            withContext(Dispatchers.IO) {
+                dao.saveHomeShelfCache(HomeShelfCacheEntity(0, encodeShelves(page.shelves)))
+                dao.pruneHomeShelfCache(System.currentTimeMillis() - 30L * 60L * 1000L)
+            }
+        }
+        homeLoading = false
+    }
+
+    LaunchedEffect(homeListState, homeContinuation, homeShelves.size) {
+        snapshotFlow {
+            val info = homeListState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+            last >= info.totalItemsCount - 3
+        }.distinctUntilChanged().collect { nearEnd ->
+            val token = homeContinuation
+            if (nearEnd && token != null && !homePageLoading) {
+                homePageLoading = true
+                runCatching { homeApi.getHome(token) }.onSuccess { page ->
+                    val pageIndex = withContext(Dispatchers.IO) { dao.homeShelfCache().size }
+                    val fresh = page.shelves.filter { it.items.size >= 2 }
+                    homeShelves = (homeShelves + fresh).distinctBy { it.title to it.items.firstOrNull()?.browseId }
+                    homeContinuation = page.continuation
+                    withContext(Dispatchers.IO) {
+                        dao.saveHomeShelfCache(HomeShelfCacheEntity(pageIndex, encodeShelves(page.shelves)))
+                    }
+                }
+                homePageLoading = false
+            }
+        }
+    }
+
 
     LaunchedEffect(api, dao, historyReady, recommendationKey) {
         if (!historyReady) return@LaunchedEffect
@@ -111,6 +171,7 @@ fun SpotifyHomeScreen(
     }
 
     LazyColumn(
+        state = homeListState,
         modifier = Modifier.fillMaxSize().background(SpotifyBlack),
         contentPadding = PaddingValues(top = 10.dp, bottom = 120.dp)
     ) {
@@ -135,6 +196,20 @@ fun SpotifyHomeScreen(
             }
         }
 
+        if (recent.isNotEmpty()) {
+            item(key = "recent_section") {
+                Column {
+                    SectionHeading("Recently played")
+                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(recent.take(20), key = { "recent_card_" + it.id }) { track ->
+                            val song = Song(track.songId, track.title.ifBlank { track.songId }, track.artist, track.coverUrl)
+                            RecommendationCard(song = song, onClick = { onPlay(song) }, width = 180.dp)
+                        }
+                    }
+                }
+            }
+        }
+
         if (historyReady) {
             item(key = "recommendations_section") {
                 Column {
@@ -151,20 +226,50 @@ fun SpotifyHomeScreen(
             }
         }
 
-        if (recent.isNotEmpty()) {
-            item(key = "recent_section") {
-                Column {
-                    SectionHeading("Recently played")
-                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(recent.take(20), key = { "recent_card_" + it.id }) { track ->
-                            val song = Song(track.songId, track.title.ifBlank { track.songId }, track.artist, track.coverUrl)
-                            RecommendationCard(song = song, onClick = { onPlay(song) }, width = 180.dp)
+
+        if (homeChips.isNotEmpty()) {
+            item(key = "home_chips") {
+                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(homeChips, key = { it.name }) { chip ->
+                        Surface(color = Color(0xFF292333), shape = RoundedCornerShape(22.dp)) {
+                            Text(chip.name, color = Color.White, fontSize = 13.sp,
+                                modifier = Modifier.padding(horizontal = 15.dp, vertical = 9.dp))
                         }
                     }
                 }
             }
         }
 
+        if (homeShelves.isNotEmpty()) {
+            items(homeShelves.filter { it.items.size >= 2 }, key = { "yt_home_" + it.title + "_" + it.items.firstOrNull()?.browseId }) { shelf ->
+                Column {
+                    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(shelf.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        shelf.strapline?.let { Text(it, color = SpotifyGray, fontSize = 13.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    }
+                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(shelf.items, key = { "yt_" + (it.browseId ?: it.videoId ?: it.title) }) { item ->
+                            HomeShelfCard(item) { onOpenPlaylist(item, shelf) }
+                        }
+                    }
+                }
+            }
+        } else if (homeLoading) {
+            items(2) { index ->
+                Column {
+                    Box(Modifier.padding(start = 16.dp, top = 22.dp, bottom = 10.dp)
+                        .width(150.dp).height(20.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xFF252525)))
+                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(4) { RecommendationPlaceholder(index * 4 + it) }
+                    }
+                }
+            }
+        }
         if (mostPlayed.isNotEmpty()) {
             item(key = "most_played_section") {
                 Column {
@@ -282,6 +387,56 @@ private fun RecommendationPlaceholder(keyIndex: Int) {
             .background(Color(0xFF303030).copy(alpha = alpha * 0.8f)))
     }
 }
+
+
+@Composable
+private fun HomeShelfCard(item: ShelfItem, onClick: () -> Unit) {
+    Column(Modifier.width(160.dp).clickable(onClick = onClick), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Box(Modifier.size(160.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF202020))) {
+            if (!item.thumbnailUrl.isNullOrBlank()) AsyncImage(
+                model = item.thumbnailUrl, contentDescription = item.title,
+                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
+            ) else Icon(Icons.Default.Album, null, tint = SpotifyGray, modifier = Modifier.align(Alignment.Center))
+        }
+        Text(item.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(item.subtitle.orEmpty(), color = SpotifyGray, fontSize = 13.sp,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+private fun encodeShelves(shelves: List<HomeShelf>): String = JSONArray().apply {
+    shelves.forEach { shelf ->
+        put(JSONObject().apply {
+            put("title", shelf.title); put("strapline", shelf.strapline ?: JSONObject.NULL)
+            put("layout", shelf.layout.name)
+            put("items", JSONArray().apply { shelf.items.forEach { item ->
+                put(JSONObject().apply {
+                    put("title", item.title); put("subtitle", item.subtitle ?: JSONObject.NULL)
+                    put("thumbnailUrl", item.thumbnailUrl ?: JSONObject.NULL)
+                    put("browseId", item.browseId ?: JSONObject.NULL); put("params", item.params ?: JSONObject.NULL)
+                    put("videoId", item.videoId ?: JSONObject.NULL); put("isVideo", item.isVideo)
+                })
+            }})
+        })
+    }
+}.toString()
+
+private fun decodeShelves(json: String): List<HomeShelf> = runCatching {
+    val array = JSONArray(json)
+    (0 until array.length()).mapNotNull { i ->
+        val obj = array.optJSONObject(i) ?: return@mapNotNull null
+        val items = obj.optJSONArray("items") ?: JSONArray()
+        val parsed = (0 until items.length()).mapNotNull { j ->
+            val item = items.optJSONObject(j) ?: return@mapNotNull null
+            fun nullable(key: String) = item.optString(key).takeIf { it.isNotBlank() && it != "null" }
+            ShelfItem(item.optString("title"), nullable("subtitle"), nullable("thumbnailUrl"),
+                nullable("browseId"), nullable("params"), nullable("videoId"), item.optBoolean("isVideo"))
+        }
+        HomeShelf(obj.optString("title"), obj.optString("strapline").takeIf { it.isNotBlank() && it != "null" },
+            runCatching { ShelfLayout.valueOf(obj.optString("layout")) }.getOrDefault(ShelfLayout.SQUARE), parsed)
+    }
+}.getOrDefault(emptyList())
 
 private fun encodeSongs(songs: List<Song>): String = JSONArray().apply {
     songs.forEach { song ->
