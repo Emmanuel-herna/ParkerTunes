@@ -450,7 +450,7 @@ class NewPipeMusicApi : MusicApi {
 
     override suspend fun getCoverArt(songId: String): String? = withContext(Dispatchers.IO) {
         val videoId = extractVideoId(songId) ?: return@withContext null
-        "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+        "https://i.ytimg.com/vi/$videoId/maxresdefault.jpg"
     }
 
     private fun extractVideoId(value: String): String? {
@@ -468,7 +468,7 @@ class NewPipeMusicApi : MusicApi {
     }
 
     private fun youtubeThumbnail(videoId: String): String =
-        "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
+        "https://i.ytimg.com/vi/$videoId/maxresdefault.jpg"
 
     private companion object {
         val VIDEO_ID = Regex("^[A-Za-z0-9_-]{11}$")
