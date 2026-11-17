@@ -40,3 +40,11 @@ When the run finishes successfully, open the workflow run, scroll to **Artifacts
 
 ## Build status
 The cloud workflow has just been added; its first run still needs to complete successfully before the APK can be considered verified. The source has not been tested on a physical device yet.
+
+## Listen Together
+
+ParkerTunes includes a Listen Together screen for shared listening sessions. Open **Together** in the bottom navigation, enter your party server URL and display name, then create a six-character room code. Other devices use the same server URL and code to join.
+
+The Go party service lives in [backend/](backend/). It synchronizes track selection, play/pause, seeking, member presence and the shared queue; each device resolves its own audio stream through ParkerTunes' existing music provider. To deploy the service, follow [backend/README.md](backend/README.md) and use the root [Render Blueprint](render.yaml).
+
+The party server is currently single-instance and in-memory. A server restart or an idle Render free-tier sleep ends active rooms. ParkerTunes does not yet have Google sign-in, so party display names are device-provided and are not verified against Google accounts.
