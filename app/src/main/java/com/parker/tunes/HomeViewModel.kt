@@ -32,6 +32,7 @@ class HomeViewModel(private val api: MusicApi) {
     private val mutableState = MutableStateFlow(HomeRecommendationState())
     val state: StateFlow<HomeRecommendationState> = mutableState.asStateFlow()
 
+    private var hasInitialized = false
     private var lastTrackId: String? = null
     private var lastArtist: String = ""
     private var recentIds: Set<String> = emptySet()
@@ -43,10 +44,13 @@ class HomeViewModel(private val api: MusicApi) {
     fun onTrackChanged(songId: String?, artist: String, recentSongIds: Set<String>) {
         recentIds = recentSongIds
         val normalizedArtist = artist.trim()
-        if (songId == lastTrackId && normalizedArtist.equals(lastArtist, ignoreCase = true)) {
+        if (hasInitialized && songId == lastTrackId &&
+            normalizedArtist.equals(lastArtist, ignoreCase = true)
+        ) {
             return
         }
 
+        hasInitialized = true
         lastTrackId = songId
         lastArtist = normalizedArtist
         val genreQueries = genreQueriesFor(normalizedArtist)
