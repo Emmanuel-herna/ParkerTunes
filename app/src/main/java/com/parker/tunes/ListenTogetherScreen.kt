@@ -42,6 +42,7 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api
         val active=player ?: return@LaunchedEffect
         if(!state.connected || playback.seq.toString()==lastApplied)return@LaunchedEffect
         lastApplied=playback.seq.toString()
+        client.beginRemoteApply()
         val position=client.estimatedPosition(playback)
         if(active.currentMediaItem?.mediaId!=track.videoId) {
             runCatching {
