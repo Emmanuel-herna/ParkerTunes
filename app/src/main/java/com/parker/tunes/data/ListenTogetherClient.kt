@@ -2,11 +2,15 @@ package com.parker.tunes.data
 
 import android.content.Context
 import android.provider.Settings
+import android.os.Handler
+import android.os.Looper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaType
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -63,7 +67,10 @@ class ListenTogetherClient(context:Context) {
         socket=http.newWebSocket(request,object:WebSocketListener(){
             override fun onOpen(webSocket:WebSocket,response:Response) { _state.value=_state.value.copy(connected=true,error=null); ping() }
             override fun onMessage(webSocket:WebSocket,text:String) { runCatching { handleFrame(JSONObject(text)) }.onFailure { _state.value=_state.value.copy(error=it.message) } }
-            override fun onFailure(webSocket:WebSocket,t:Throwable,response:Response?) { _state.value=_state.value.copy(connected=false,error=t.message?: "Connection lost") }
+            override fun onFailure(webSocket:WebSocket,t:Throwable,response:Response?) {
+                _state.value=_state.value.copy(connected=false,error=t.message?: "Connection lost")
+                if (_state.value.token.isNotBlank()) Handler(Looper.getMainLooper()).postDelayed({ if (_state.value.token.isNotBlank()) runCatching { connect() } }, 3000L)
+            }
             override fun onClosed(webSocket:WebSocket,code:Int,reason:String) { _state.value=_state.value.copy(connected=false) }
         })
     }
