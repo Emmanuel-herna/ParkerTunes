@@ -494,7 +494,6 @@ fun ParkerTunesRoot() {
                         dao = dao, player = controller, onPlay = playSong,
                         onQueue = { song, playNext -> queueSong(song, playNext) },
                         onSettings = { nav.navigate("settings") },
-                        onSearch = { selectedTab = "Search"; nav.navigate("search") },
                         homeApi = app.homeApi,
                         onOpenPlaylist = { item, shelf ->
                             val browseId = item.browseId.orEmpty()
