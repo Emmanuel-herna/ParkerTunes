@@ -90,7 +90,9 @@ class YtMusicHomeApi(
         val tabs = root.optJSONObject("contents")?.optJSONObject("singleColumnBrowseResultsRenderer")
             ?.optJSONArray("tabs")
         val tab = tabs?.optJSONObject(0)?.path("tabRenderer", "content")
-        val sections = tab?.optJSONObject("sectionListRenderer")?.optJSONArray("contents") ?: JSONArray()
+        val sections = tab?.optJSONObject("sectionListRenderer")?.optJSONArray("contents")
+            ?: root.path("continuationContents", "sectionListContinuation")?.optJSONArray("contents")
+            ?: JSONArray()
         val shelves = mutableListOf<HomeShelf>()
         for (i in 0 until sections.length()) {
             val section = sections.optJSONObject(i) ?: continue
