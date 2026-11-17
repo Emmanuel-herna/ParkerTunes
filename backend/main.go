@@ -92,9 +92,10 @@ case "pause": if msg.PositionMS>0 {p.Playback.PositionMS=msg.PositionMS} else {p
 case "seek": p.Playback.PositionMS=msg.PositionMS; p.Playback.AnchorMS=now+350
 case "setTrack":
 if msg.Track!=nil {
+	currentMatches:=p.Queue.Index>=0 && p.Queue.Index<len(p.Queue.Items) && p.Queue.Items[p.Queue.Index].VideoID==msg.Track.VideoID
 	found:=-1
 	for i:=p.Queue.Index+1;i<len(p.Queue.Items);i++ { if p.Queue.Items[i].VideoID==msg.Track.VideoID { found=i; break } }
-	if found>=0 { p.Queue.Index=found } else {
+	if currentMatches { } else if found>=0 { p.Queue.Index=found } else {
 		upcoming:=[]Track{}
 		if p.Queue.Index+1<len(p.Queue.Items) { upcoming=append(upcoming,p.Queue.Items[p.Queue.Index+1:]...) }
 		p.Queue.Items=append([]Track{*msg.Track},upcoming...)
