@@ -173,6 +173,9 @@ interface LibraryDao {
     @Query("DELETE FROM home_shelf_cache WHERE fetchedAt < :before")
     suspend fun pruneHomeShelfCache(before: Long)
 
+    @Query("DELETE FROM home_shelf_cache")
+    suspend fun clearHomeShelfCache()
+
     @Query("SELECT * FROM recent_searches ORDER BY searchedAt DESC LIMIT 20")
     fun recentSearches(): Flow<List<RecentSearchEntity>>
 
