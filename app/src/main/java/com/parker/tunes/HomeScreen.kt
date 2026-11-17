@@ -61,7 +61,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,12 +104,13 @@ fun HomeScreen(
         withContext(Dispatchers.IO) { dao.recentlyPlayed().first() }
         historyReady = true
     }
-    LaunchedEffect(historyReady, latestTrack?.songId, recentIds) {
+    LaunchedEffect(historyReady, recentIds) {
         if (historyReady) {
-            recommendationViewModel.onTrackChanged(
-                songId = latestTrack?.songId,
-                artist = latestTrack?.artist.orEmpty(),
-                recentSongIds = recentIds
+            val history = withContext(Dispatchers.IO) { dao.historySnapshot() }
+            recommendationViewModel.onListeningHistory(
+                history.map { entry ->
+                    Song(entry.songId, entry.title.ifBlank { entry.songId }, entry.artist, entry.coverUrl)
+                }
             )
         }
     }
@@ -212,13 +212,6 @@ fun HomeScreen(
         }
     }
 
-    val hour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
-    val greeting = when (hour) {
-        in 5..11 -> "Good morning"
-        in 12..16 -> "Good afternoon"
-        else -> "Good evening"
-    }
-
     PullToRefreshBox(
         isRefreshing = refreshing,
         onRefresh = { scope.launch { loadHome(true) } },
@@ -232,20 +225,13 @@ fun HomeScreen(
         ) {
             item(key = "home_top_bar") {
                 Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(greeting.uppercase(), color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.4.sp)
-                        Text("ParkerTunes", style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.ExtraBold)
-                        Text("Your music, your space.", color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("ParkerTunes", style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.4).sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onSearch) {
                             Icon(Icons.Default.Search, contentDescription = "Search music")
                         }
@@ -266,46 +252,9 @@ fun HomeScreen(
                 }
             }
 
-            item(key = "quick_access") {
-                Column(Modifier.padding(top = 16.dp)) {
-                    HomeSectionHeading("Your shortcuts", "Jump back into your music")
-                    Column(
-                        Modifier.padding(horizontal = 18.dp),
-                        verticalArrangement = Arrangement.spacedBy(9.dp)
-                    ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                            QuickAccessTile(
-                                title = "Recently played", subtitle = "Pick up where you left off",
-                                icon = { Icon(Icons.Default.History, null) },
-                                modifier = Modifier.weight(1f),
-                                onClick = { latestTrack?.let { onPlay(Song(it.songId, it.title, it.artist, it.coverUrl)) } ?: onSearch() }
-                            )
-                            QuickAccessTile(
-                                title = "Your favorites", subtitle = "${favorites.size} saved songs",
-                                icon = { Icon(Icons.Default.Favorite, null) },
-                                modifier = Modifier.weight(1f),
-                                onClick = { favorites.firstOrNull()?.let { onPlay(Song(it.songId, it.title, it.artist, it.coverUrl)) } ?: onSearch() }
-                            )
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                            QuickAccessTile(
-                                title = "Explore music", subtitle = "Find something new",
-                                icon = { Icon(Icons.Default.Explore, null) },
-                                modifier = Modifier.weight(1f), onClick = onExplore
-                            )
-                            QuickAccessTile(
-                                title = "Search songs", subtitle = "Artists, albums and more",
-                                icon = { Icon(Icons.Default.Search, null) },
-                                modifier = Modifier.weight(1f), onClick = onSearch
-                            )
-                        }
-                    }
-                }
-            }
-
             item(key = "made_for_you") {
                 Column(Modifier.padding(top = 18.dp)) {
-                    HomeSectionHeading("Made for you", "Recommendations based on your listening")
+                    HomeSectionHeading("Made for you")
                     RecommendationShelf(
                         songs = recommendationState.songs,
                         loading = recommendationState.loading,
@@ -319,7 +268,7 @@ fun HomeScreen(
             if (recent.isNotEmpty()) {
                 item(key = "recently_played") {
                     Column(Modifier.padding(top = 12.dp)) {
-                        HomeSectionHeading("Recently played", "Your listening, right where you left it")
+                        HomeSectionHeading("Recently played")
                         LazyRow(contentPadding = PaddingValues(horizontal = 18.dp),
                             horizontalArrangement = Arrangement.spacedBy(13.dp)) {
                             items(recent.take(20), key = { "recent_" + it.id }) { track ->
@@ -337,7 +286,7 @@ fun HomeScreen(
             if (favorites.isNotEmpty()) {
                 item(key = "favorites") {
                     Column(Modifier.padding(top = 14.dp)) {
-                        HomeSectionHeading("Your favorites", "The songs you saved")
+                        HomeSectionHeading("Your favorites")
                         LazyRow(contentPadding = PaddingValues(horizontal = 18.dp),
                             horizontalArrangement = Arrangement.spacedBy(13.dp)) {
                             items(favorites.take(20), key = { "favorite_" + it.songId }) { favorite ->
@@ -361,7 +310,7 @@ fun HomeScreen(
                     ) {
                         Text("Discover music", style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold)
-                        Text("Online recommendations couldn't load right now. Your saved music is still here.",
+                        Text("Check your connection and try again.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall)
                         TextButton(onClick = { scope.launch { loadHome(false) } }) { Text("Try again") }
@@ -370,7 +319,7 @@ fun HomeScreen(
                 is UiState.Success -> {
                     if (state.data.isNotEmpty()) {
                         item(key = "youtube_music_heading") {
-                            HomeSectionHeading("Picked from YouTube Music", "Fresh playlists, mixes and collections")
+                            HomeSectionHeading("Picked from YouTube Music")
                         }
                         items(state.data, key = { shelf ->
                             "shelf_" + shelf.title + "_" +
