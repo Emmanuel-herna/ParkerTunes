@@ -20,7 +20,6 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
-        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"512448803456-q5l3pr6h6uovcrhkea9u2qlv86t7hkc1.apps.googleusercontent.com\"")
     }
     buildFeatures {
         compose = true
@@ -45,6 +44,10 @@ android {
 }
 
 dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-database-ktx")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)
     androidTestImplementation(composeBom)
