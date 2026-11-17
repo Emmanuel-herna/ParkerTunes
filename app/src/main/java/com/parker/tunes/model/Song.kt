@@ -8,5 +8,6 @@ data class Song(
     val durationSec: Long = 0L,
     val album: String? = null,
     val trackNumber: Int? = null,
-    val sourceQuality: String? = null
+    val sourceQuality: String? = null,
+    val spotifyUrl: String? = null
 )
