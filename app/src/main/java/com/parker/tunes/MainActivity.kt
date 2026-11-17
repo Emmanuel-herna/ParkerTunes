@@ -66,6 +66,8 @@ import androidx.media3.session.SessionToken
 import androidx.media3.session.SessionCommand
 import androidx.navigation.compose.*
 import com.google.common.util.concurrent.ListenableFuture
+import com.parker.tunes.data.ListenTogetherClient
+import com.parker.tunes.data.JamTrack
 import com.parker.tunes.data.PlayHistoryEntity
 import com.parker.tunes.data.BackupManager
 import com.parker.tunes.data.PlaybackSettingsStore
@@ -130,6 +132,7 @@ fun ParkerTunesRoot() {
     val context = LocalContext.current
     val app = context.applicationContext as ParkerTunesApp
     val api = app.musicApi
+    val listenTogether = remember(context) { ListenTogetherClient(context) }
     val dao = app.database.libraryDao()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -346,6 +349,7 @@ fun ParkerTunesRoot() {
                     .setMediaMetadata(metadata)
                     .build()
                 activeController.setMediaItem(placeholder)
+                if (listenTogether.state.value.connected) listenTogether.control("setTrack", positionMs = 0L, track = JamTrack(song.id, song.title, song.artist, song.coverUrl, song.durationSec * 1000L), isPlaying = true)
                 resolvingSongId = song.id
                 playbackLoadError = null
                 nav.navigate("nowplaying") { launchSingleTop = true }
@@ -415,6 +419,7 @@ fun ParkerTunesRoot() {
                 }.onSuccess { item ->
                     val insertAt = if (playNext) (activeController.currentMediaItemIndex + 1).coerceAtLeast(0) else activeController.mediaItemCount
                     activeController.addMediaItem(insertAt, item)
+                    if (listenTogether.state.value.connected) listenTogether.addToQueue(JamTrack(song.id, song.title, song.artist, song.coverUrl, song.durationSec * 1000L), playNext)
                     scope.launch {
                         val result = snackbarHostState.showSnackbar(
                             message = if (playNext) "Queued to play next: ${song.title}" else "Added to queue: ${song.title}",
@@ -456,14 +461,14 @@ fun ParkerTunesRoot() {
                                     .background(Color(0xFF1A1A1A)).padding(horizontal = 5.dp, vertical = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                listOf("Home", "Explore", "Library").forEach { item ->
+                                listOf("Home", "Explore", "Library", "Together").forEach { item ->
                                     val active = selectedTab == item
                                     Column(
                                         Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(22.dp))
                                             .background(if (active) Color(0xFF34303B) else Color.Transparent)
                                             .clickable {
                                                 selectedTab = item
-                                                nav.navigate(when (item) { "Home" -> "home"; "Explore" -> "explore"; else -> "library" }) {
+                                                nav.navigate(when (item) { "Home" -> "home"; "Explore" -> "explore"; "Library" -> "library"; else -> "together" }) {
                                                     launchSingleTop = true
                                                 }
                                             }.padding(vertical = 5.dp),
@@ -557,6 +562,7 @@ fun ParkerTunesRoot() {
                     }
                 }
                 composable("library") { LibraryScreen(dao, app.downloads, playSong, onOpenAddons = { nav.navigate("addons") }) }
+                composable("together") { ListenTogetherScreen(client = listenTogether, player = controller, api = api, onBack = { nav.popBackStack() }) }
                 composable("addons") { AddonsScreen(app.database.sourceRegistryDao()) { nav.popBackStack() } }
                 composable("stats") { StatsScreen(dao = dao, onBack = { nav.popBackStack() }) }
                 composable("equalizer") {
