@@ -214,10 +214,11 @@ fun SearchScreen(
                                 )
                             } else if (spotifyOnly.size < 5) {
                                 val resolved = runCatching {
-                                    api.search("${track.name} $artistText").songs.firstOrNull { candidate ->
+                                    val ytCandidates = api.search("${track.name} $artistText").songs
+                                    ytCandidates.firstOrNull { candidate ->
                                         !isLikelyMix(candidate.title, candidate.durationSec) &&
                                             normalizeTrackMetadata(candidate.title, candidate.artist) == key
-                                    } ?: api.search("${track.name} $artistText").songs.firstOrNull { candidate ->
+                                    } ?: ytCandidates.firstOrNull { candidate ->
                                         !isLikelyMix(candidate.title, candidate.durationSec) &&
                                             candidate.durationSec in 30L..720L
                                     }
@@ -483,6 +484,7 @@ private fun SearchResultRow(
     onClick: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var menuExpanded by remember(song.id) { mutableStateOf(false) }
     var showPlaylistDialog by remember(song.id) { mutableStateOf(false) }
     Row(
