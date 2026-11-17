@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -94,9 +95,16 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api
                 }
             }
             Row(verticalAlignment=Alignment.CenterVertically) { Text("Members",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold); Spacer(Modifier.weight(1f)); Text("${state.party?.members?.size ?: 0}/5") }
-            LazyColumn(Modifier.weight(1f)) { items(state.party?.members.orEmpty()){ member -> ListItem(headlineContent={Text(member.displayName)},supportingContent={Text(if(member.host)"Host" else if(member.connected)"Connected" else "Reconnecting")}) } }
-            state.party?.let { party ->
-                if(party.members.any{it.host}) Row(verticalAlignment=Alignment.CenterVertically) { Text("Host controls only"); Spacer(Modifier.weight(1f)); Switch(checked=party.hostOnlyControl,onCheckedChange={client.control("setHostOnlyControl",enabled=it)}) }
+            LazyColumn(Modifier.weight(1f)) {
+                item { Text("Members",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
+                items(state.party?.members.orEmpty()) { member -> ListItem(headlineContent={Text(member.displayName)},supportingContent={Text(if(member.host)"Host" else if(member.connected)"Connected" else "Reconnecting")}) }
+                item { Text("Shared queue",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold,modifier=Modifier.padding(top=12.dp)) }
+                items(state.party?.let { it.queue.drop((it.queueIndex+1).coerceAtLeast(0)) }.orEmpty()) { queued ->
+                    ListItem(headlineContent={Text(queued.title)},supportingContent={Text(queued.artist)},trailingContent={IconButton(onClick={client.control("queueRemove",videoId=queued.videoId)}){Icon(Icons.Default.Close,"Remove from shared queue")}})
+                }
+            }
+            if(state.isHost) state.party?.let { party ->
+                Row(verticalAlignment=Alignment.CenterVertically) { Text("Host-only controls"); Spacer(Modifier.weight(1f)); Switch(checked=party.hostOnlyControl,onCheckedChange={client.control("setHostOnlyControl",enabled=it)}) }
             }
             OutlinedButton(onClick=client::leave,modifier=Modifier.fillMaxWidth()) { Text("Leave party") }
         }
