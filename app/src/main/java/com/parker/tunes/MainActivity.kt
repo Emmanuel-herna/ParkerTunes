@@ -81,7 +81,7 @@ import com.parker.tunes.data.LyricsCacheEntity
 import com.parker.tunes.data.AddonMusicApi
 import com.parker.tunes.model.Artist
 import com.parker.tunes.model.Album
-import com.parker.tunes.model.Song
+import com.parker.tunes.model.Song\nimport com.parker.tunes.data.home.HomeShelf
 import com.parker.tunes.player.PlaybackService
 import com.parker.tunes.player.PlayerUiState
 import com.parker.tunes.player.PlayerUiStateObserver
@@ -145,7 +145,7 @@ fun ParkerTunesRoot() {
     val currentRoute = backStackEntry?.destination?.route
     var query by remember { mutableStateOf("") }
     var selectedArtist by remember { mutableStateOf<Artist?>(null) }
-    var selectedAlbum by remember { mutableStateOf<Album?>(null) }
+    var selectedAlbum by remember { mutableStateOf<Album?>(null) }\n    var selectedHomeShelf by remember { mutableStateOf<HomeShelf?>(null) }
     var selectedTab by remember { mutableStateOf("Home") }
     val settingsPrefs = remember { context.getSharedPreferences("parker_tunes_settings", android.content.Context.MODE_PRIVATE) }
     val settingsRepository = remember(context) { com.parker.tunes.data.SettingsRepository(context) }
@@ -488,7 +488,21 @@ fun ParkerTunesRoot() {
                 modifier = Modifier.padding(padding)
             ) {
                 composable("home") {
-                    SpotifyHomeScreen(dao = dao, api = api, player = controller, onPlay = playSong, onSettings = { nav.navigate("settings") }, onSearch = { selectedTab = "Search"; nav.navigate("search") })
+                    SpotifyHomeScreen(
+                        dao = dao, api = api, player = controller, onPlay = playSong,
+                        onSettings = { nav.navigate("settings") },
+                        onSearch = { selectedTab = "Search"; nav.navigate("search") },
+                        homeApi = app.homeApi,
+                        onOpenPlaylist = { item, shelf ->
+                            val browseId = item.browseId.orEmpty()
+                            if (browseId.startsWith("VL") || browseId.startsWith("MPRE")) {
+                                selectedHomeShelf = shelf
+                                nav.navigate("playlist")
+                            } else if (item.videoId != null) {
+                                playSong(Song(item.videoId, item.title, item.subtitle.orEmpty(), item.thumbnailUrl))
+                            }
+                        }
+                    )
                 }
                 composable("explore") {
                     ExploreScreen(onMood = { mood -> nav.navigate("mood/" + Uri.encode(mood)) })
@@ -509,6 +523,11 @@ fun ParkerTunesRoot() {
                 composable("album") {
                     selectedAlbum?.let { album ->
                         AlbumScreen(album = album, api = api, onBack = { nav.popBackStack() }, onPlay = playSong)
+                    }
+                }
+                composable("playlist") {
+                    selectedHomeShelf?.let { shelf ->
+                        HomePlaylistScreen(shelf = shelf, onBack = { nav.popBackStack() }, onPlay = playSong)
                     }
                 }
                 composable("library") { LibraryScreen(dao, app.downloads, playSong, onOpenAddons = { nav.navigate("addons") }) }
@@ -1442,5 +1461,36 @@ private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, ti
         Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(46.dp))
         Text(title, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
         Text(subtitle, color = Muted, fontSize = 13.sp)
+    }
+}
+
+
+@Composable
+private fun HomePlaylistScreen(shelf: HomeShelf, onBack: () -> Unit, onPlay: (Song) -> Unit) {
+    Column(Modifier.fillMaxSize().background(Color.Black).padding(horizontal = 18.dp)) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Color.White) }
+            Text(shelf.title, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        }
+        shelf.strapline?.let { Text(it, color = Color.LightGray, fontSize = 13.sp) }
+        LazyColumn(contentPadding = PaddingValues(vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(shelf.items, key = { it.browseId ?: it.videoId ?: it.title }) { item ->
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                    .clickable {
+                        item.videoId?.let { onPlay(Song(it, item.title, item.subtitle.orEmpty(), item.thumbnailUrl)) }
+                    }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (!item.thumbnailUrl.isNullOrBlank()) {
+                        AsyncImage(model = item.thumbnailUrl, contentDescription = item.title,
+                            modifier = Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                    } else Icon(Icons.Default.MusicNote, null, tint = Color.LightGray, modifier = Modifier.size(54.dp))
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        Text(item.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(item.subtitle.orEmpty(), color = Color.LightGray, fontSize = 12.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
     }
 }
