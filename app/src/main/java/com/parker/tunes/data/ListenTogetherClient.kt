@@ -101,26 +101,13 @@ class ListenTogetherClient(context:Context) {
         } catch(e:Exception) { fail(e.message ?: "Couldn't join the party.") }
     }
 
-    private suspend fun reserve(ref:DatabaseReference,uid:String,name:String):Boolean =
-        suspendCancellableCoroutine { c ->
-            ref.runTransaction(object:Transaction.Handler {
-                override fun doTransaction(data:MutableData):Transaction.Result {
-                    val existing=data.child(uid)
-                    if(existing.value==null && data.children.count()>=5) return Transaction.abort()
-                    existing.child("uid").value=uid
-                    existing.child("displayName").value=name
-                    existing.child("joinedAt").value=System.currentTimeMillis()
-                    existing.child("connected").value=true
-                    return Transaction.success(data)
-                }
-                override fun onComplete(error:DatabaseError?,committed:Boolean,snapshot:DataSnapshot?) {
-                    if(c.isActive) {
-                        if(error!=null) c.resumeWith(Result.failure(error.toException()))
-                        else c.resumeWith(Result.success(committed))
-                    }
-                }
-            },false)
-        }
+    private suspend fun reserve(ref:DatabaseReference,uid:String,name:String):Boolean {
+        val current=ref.get().await()
+        if(!current.child(uid).exists() && current.childrenCount>=5L) return false
+        ref.child(uid).setValue(mapOf("uid" to uid,"displayName" to name,
+            "joinedAt" to System.currentTimeMillis(),"connected" to true)).await()
+        return true
+    }
 
     private fun enterRoom(code:String,uid:String) {
         detach()
@@ -245,7 +232,6 @@ class ListenTogetherClient(context:Context) {
                 db.child("rooms").child(s.code).removeValue()
                 db.child("playback").child(s.code).removeValue()
                 db.child("queues").child(s.code).removeValue()
-                db.child("members").child(s.code).removeValue()
             }
         }
         detach()
