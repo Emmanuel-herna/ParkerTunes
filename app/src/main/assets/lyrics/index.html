@@ -15,6 +15,8 @@
       color: #fff;
     }
 
+    body { position: relative; }
+
     #lyrics-status {
       position: absolute;
       inset: 0;
@@ -30,8 +32,6 @@
     }
 
     #lyrics-status[hidden] { display: none; }
-
-    body { position: relative; }
 
     am-lyrics {
       display: block;
@@ -49,62 +49,39 @@
   </style>
 </head>
 <body>
-  <div id="lyrics-status" role="status">Loading lyrics…</div>
-  <am-lyrics
-    id="parker-am-lyrics"
-    auto-scroll
-    interpolate
-    highlight-color="#B69CFF"
-    font-family="Arial, sans-serif"
-  ></am-lyrics>
+  <div id="lyrics-status" role="status">Waiting for track information…</div>
 
   <script>
     (() => {
-      const lyrics = document.getElementById('parker-am-lyrics');
+      const status = document.getElementById('lyrics-status');
+      let lyrics = null;
       let activeTrackKey = null;
       let pendingTrack = null;
+      let componentReady = false;
 
-      function applyTrack(track) {
-        if (!lyrics || !customElements.get('am-lyrics')) {
-          pendingTrack = track;
-          return;
-        }
-
-        const key = [track.id, track.title, track.artist].join('\u0000');
-        if (key !== activeTrackKey) {
-          activeTrackKey = key;
-          lyrics.songTitle = track.title || '';
-          lyrics.songArtist = track.artist || '';
-          lyrics.songAlbum = track.album || '';
-          lyrics.query = track.query || [track.title, track.artist].filter(Boolean).join(' ');
-          lyrics.songDurationMs = track.durationMs > 0 ? track.durationMs : undefined;
-          lyrics.currentTime = 0;
-        }
-
-        lyrics.paused = !track.playing;
-        lyrics.currentTime = Math.max(0, Number(track.positionMs) || 0);
-      }
-
-      window.setParkerTrack = applyTrack;
-
-      const status = document.getElementById('lyrics-status');
-      let ready = false;
-      const showFailure = message => {
-        if (status && !ready) status.textContent = message;
+      const showStatus = message => {
+        if (!status) return;
+        status.textContent = message;
+        status.hidden = false;
       };
 
-      window.addEventListener('error', event => {
-        showFailure('Lyrics could not start. Please try reopening the player.');
-        console.error('ParkerTunes lyrics error:', event.message || event);
-      });
-      window.addEventListener('unhandledrejection', event => {
-        console.error('ParkerTunes lyrics rejected:', event.reason);
-      });
+      function createLyrics(track, key) {
+        const element = document.createElement('am-lyrics');
 
-      customElements.whenDefined('am-lyrics').then(() => {
-        ready = true;
-        if (status) status.hidden = true;
-        lyrics.addEventListener('line-click', event => {
+        // Set all search metadata before connecting the element. Its
+        // connectedCallback starts the provider lookup immediately.
+        element.songTitle = track.title || '';
+        element.songArtist = track.artist || '';
+        element.songAlbum = track.album || '';
+        element.query = track.query ||
+          [track.title, track.artist].filter(Boolean).join(' ');
+        element.songDurationMs = track.durationMs > 0
+          ? track.durationMs
+          : undefined;
+        element.paused = !track.playing;
+        element.currentTime = Math.max(0, Number(track.positionMs) || 0);
+
+        element.addEventListener('line-click', event => {
           const timestamp = Number(event.detail && event.detail.timestamp);
           if (
             Number.isFinite(timestamp) &&
@@ -115,10 +92,56 @@
           }
         });
 
+        lyrics = element;
+        activeTrackKey = key;
+        document.body.appendChild(element);
+        if (status) status.hidden = true;
+      }
+
+      function applyTrack(track) {
+        if (!componentReady) {
+          pendingTrack = track;
+          return;
+        }
+
+        const title = String(track.title || '').trim();
+        const artist = String(track.artist || '').trim();
+        if (!title && !artist) {
+          showStatus('Play a track to see its lyrics.');
+          return;
+        }
+
+        const key = [track.id, title, artist].join('\u0000');
+        if (!lyrics || key !== activeTrackKey) {
+          if (lyrics) lyrics.remove();
+          lyrics = null;
+          activeTrackKey = null;
+          createLyrics(track, key);
+          return;
+        }
+
+        lyrics.paused = !track.playing;
+        lyrics.currentTime = Math.max(0, Number(track.positionMs) || 0);
+      }
+
+      window.setParkerTrack = applyTrack;
+
+      window.addEventListener('error', event => {
+        showStatus('Lyrics could not start. Please try reopening the player.');
+        console.error('ParkerTunes lyrics error:', event.message || event);
+      });
+      window.addEventListener('unhandledrejection', event => {
+        console.error('ParkerTunes lyrics rejected:', event.reason);
+      });
+
+      customElements.whenDefined('am-lyrics').then(() => {
+        componentReady = true;
         if (pendingTrack) {
           const track = pendingTrack;
           pendingTrack = null;
           applyTrack(track);
+        } else {
+          showStatus('Play a track to see its lyrics.');
         }
       });
     })();
@@ -130,7 +153,10 @@
     setTimeout(() => {
       if (!customElements.get('am-lyrics')) {
         const status = document.getElementById('lyrics-status');
-        if (status) status.textContent = 'Lyrics component did not load. Please reopen the player.';
+        if (status) {
+          status.textContent = 'Lyrics component did not load. Please reopen the player.';
+          status.hidden = false;
+        }
       }
     }, 8000);
   </script>
