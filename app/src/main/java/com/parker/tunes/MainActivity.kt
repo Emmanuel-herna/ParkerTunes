@@ -878,7 +878,7 @@ private fun MiniPlayer(
         Box(Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF303030)),
             contentAlignment = Alignment.Center) {
             if (coverUrl.isNullOrBlank()) Icon(Icons.Default.Album, null, tint = Color.White)
-            else AsyncImage(model = coverUrl.artworkAt(272), contentDescription = "Current cover art",
+            else AsyncImage(model = coverUrl, contentDescription = "Current cover art",
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
         Column(Modifier.weight(1f).padding(start = 10.dp)) {
