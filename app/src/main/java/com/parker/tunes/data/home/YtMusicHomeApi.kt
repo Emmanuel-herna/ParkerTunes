@@ -51,7 +51,7 @@ class YtMusicHomeApi(
 ) {
     suspend fun getHome(continuation: String? = null): YtMusicHomePage = withContext(Dispatchers.IO) {
         var lastError: Exception? = null
-        repeat(3) { attempt ->
+        for (attempt in 0..2) {
             try {
                 val body = if (continuation.isNullOrBlank()) {
                     JSONObject().put("browseId", "FEmusic_home").put("context", context())
@@ -65,7 +65,7 @@ class YtMusicHomeApi(
                     .header("Referer", "https://music.youtube.com/")
                     .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
                     .build()
-                client.newCall(request).execute().use { response ->
+                return@withContext client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) error("YouTube Music browse failed: HTTP ${response.code}")
                     parse(JSONObject(response.body?.string().orEmpty()))
                 }
@@ -84,18 +84,20 @@ class YtMusicHomeApi(
         .put("clientVersion", "1.20241001.01.00")
         .put("hl", "en").put("gl", "US"))
 
-    internal fun parseResponseForTests(json: String): YtMusicHomePage = parse(JSONObject(json))\n\n    private fun parse(root: JSONObject): YtMusicHomePage {
+    internal fun parseResponseForTests(json: String): YtMusicHomePage = parse(JSONObject(json))
+
+    private fun parse(root: JSONObject): YtMusicHomePage {
         val tabs = root.optJSONObject("contents")?.optJSONObject("singleColumnBrowseResultsRenderer")
             ?.optJSONArray("tabs")
         val tab = tabs?.optJSONObject(0)?.path("tabRenderer", "content")
-        val sections = tab?.path("sectionListRenderer", "contents") ?: JSONArray()
+        val sections = tab?.optJSONObject("sectionListRenderer")?.optJSONArray("contents") ?: JSONArray()
         val shelves = mutableListOf<HomeShelf>()
         for (i in 0 until sections.length()) {
             val section = sections.optJSONObject(i) ?: continue
             val renderer = section.optJSONObject("musicCarouselShelfRenderer") ?: continue
             val header = renderer.path("header", "musicCarouselShelfBasicHeaderRenderer")
             val title = header?.textAt("title")?.takeIf { it.isNotBlank() } ?: continue
-            val strapline = header.textAt("strapline")
+            val strapline = header?.textAt("strapline")
             val rawItems = renderer.optJSONArray("contents") ?: JSONArray()
             val parsed = mutableListOf<ShelfItem>()
             var wideCount = 0
