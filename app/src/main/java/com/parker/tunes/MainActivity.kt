@@ -6,6 +6,13 @@ import android.content.ComponentName
 import android.net.Uri
 import android.widget.Toast
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.webkit.JavascriptInterface
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.ui.viewinterop.AndroidView
+import org.json.JSONObject
 import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -938,6 +945,111 @@ private fun MiniPlayer(
 }
 
 @Composable
+private fun AmLyricsWebView(
+    title: String,
+    artist: String,
+    durationMs: Long,
+    currentTimeMs: Long,
+    onSeek: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val latestOnSeek by rememberUpdatedState(onSeek)
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val bridge = remember {
+        object {
+            @JavascriptInterface
+            fun seekTo(timestampMs: Double) {
+                val safeTimestamp = timestampMs.toLong().coerceAtLeast(0L)
+                mainHandler.post { latestOnSeek(safeTimestamp) }
+            }
+        }
+    }
+    AndroidView(
+        modifier = modifier,
+        factory = { context ->
+            WebView(context).apply {
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                isVerticalScrollBarEnabled = false
+                isHorizontalScrollBarEnabled = false
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.allowFileAccess = false
+                settings.allowContentAccess = false
+                addJavascriptInterface(bridge, "ParkerLyricsBridge")
+                webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView, url: String?) {
+                        super.onPageFinished(view, url)
+                        view.evaluateJavascript("window.__parkerLyricsPageLoaded = true;", null)
+                    }
+                }
+                loadDataWithBaseURL(
+                    "https://parker-tunes.local/",
+                    AM_LYRICS_HTML,
+                    "text/html",
+                    "UTF-8",
+                    null
+                )
+            }
+        },
+        update = { webView ->
+            val track = JSONObject()
+                .put("title", title)
+                .put("artist", artist)
+                .put("query", listOf(title, artist).filter { it.isNotBlank() }.joinToString(" "))
+                .put("duration", durationMs.coerceAtLeast(0L))
+                .put("currentTime", currentTimeMs.coerceAtLeast(0L))
+            webView.evaluateJavascript("window.setParkerTrack && window.setParkerTrack($track);", null)
+        }
+    )
+}
+
+private val AM_LYRICS_HTML = """
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<style>
+html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:transparent; color:#fff; }
+am-lyrics { display:block; width:100%; height:100%; color:#fff; --am-lyrics-highlight-color:#B69CFF; --highlight-color:#B69CFF; --am-lyrics-font-size:22px; --am-lyrics-line-height:1.2; --am-lyrics-line-spacing:14px; }
+</style>
+</head>
+<body>
+<am-lyrics autoscroll interpolate highlight-color="#B69CFF" font-family="Arial, sans-serif"></am-lyrics>
+<script type="module">
+window.__parkerPendingTrack = null;
+window.setParkerTrack = (track) => {
+  window.__parkerPendingTrack = track;
+  const el = document.querySelector('am-lyrics');
+  if (!el || !window.__parkerAmLyricsReady) return;
+  el.songTitle = track.title;
+  el.songArtist = track.artist;
+  el.query = track.query;
+  el.songDuration = track.duration;
+  el.currentTime = track.currentTime;
+  el.duration = track.duration > 0 ? track.duration : -1;
+};
+import('https://cdn.jsdelivr.net/npm/@uimaxbai/am-lyrics@1.8.9/dist/src/am-lyrics.min.js')
+  .then(() => {
+    const el = document.querySelector('am-lyrics');
+    window.__parkerAmLyricsReady = true;
+    el.addEventListener('line-click', (event) => {
+      const timestamp = Number(event.detail && event.detail.timestamp);
+      if (Number.isFinite(timestamp) && window.ParkerLyricsBridge) {
+        window.ParkerLyricsBridge.seekTo(timestamp);
+      }
+    });
+    if (window.__parkerPendingTrack) window.setParkerTrack(window.__parkerPendingTrack);
+  })
+  .catch((error) => {
+    document.body.innerHTML = '<div style="font:14px Arial;color:#aaa;padding:12px">Lyrics could not be loaded. Check your internet connection.</div>';
+  });
+</script>
+</body>
+</html>
+""".trimIndent()
+
+@Composable
 private fun NowPlayingScreen(
     player: MediaController?,
     playerObserver: PlayerUiStateObserver?,
@@ -988,56 +1100,6 @@ private fun NowPlayingScreen(
     val shuffle = playerState.shuffleEnabled
     val repeat = playerState.repeatMode
     val songId = player?.currentMediaItem?.mediaId.orEmpty()
-    var lyricRows by remember(songId) { mutableStateOf<List<VLine>>(emptyList()) }
-    var plainLyrics by remember(songId) { mutableStateOf<String?>(null) }
-    var lyricsLoading by remember(songId) { mutableStateOf(false) }
-    LaunchedEffect(songId, title, artist, api, dao) {
-        lyricRows = emptyList()
-        plainLyrics = null
-        if (songId.isNotBlank() && title.isNotBlank() && artist.isNotBlank()) {
-            lyricsLoading = true
-            val cached = withContext(Dispatchers.IO) { dao.lyrics(songId) }
-            val cachedRows = cached?.syncedLyrics?.let(LyricsParser::parse).orEmpty()
-            if (cachedRows.isNotEmpty()) {
-                lyricRows = VLine.of(cachedRows)
-                plainLyrics = cached?.plainLyrics
-            } else {
-                val fetched = runCatching { api.getLyrics(title, artist) }.getOrNull()
-                val lines = fetched?.syncedLyrics?.lines.orEmpty()
-                if (lines.isNotEmpty()) {
-                    val mapped = lines.flatMap { source ->
-                        val total = source.timeMs.coerceAtLeast(0L)
-                        val stamp = "[%02d:%02d.%02d]".format(total / 60_000,
-                            (total / 1_000) % 60, (total % 1_000) / 10)
-                        LyricsParser.parse(stamp + source.text)
-                    }
-                    lyricRows = VLine.of(mapped)
-                    val serialized = mapped.joinToString("\n") { line ->
-                        val total = line.timeMs.coerceAtLeast(0L)
-                        val stamp = "[%02d:%02d.%02d]".format(total / 60_000,
-                            (total / 1_000) % 60, (total % 1_000) / 10)
-                        val body = if (line.words.isEmpty()) line.text else line.words.joinToString(" ") { word ->
-                            val wordTime = word.startMs.coerceAtLeast(0L)
-                            "<%02d:%02d.%02d>%s".format(wordTime / 60_000,
-                                (wordTime / 1_000) % 60, (wordTime % 1_000) / 10, word.text)
-                        }
-                        stamp + body + (line.background?.let { " (${it.text})" } ?: "")
-                    }
-                    withContext(Dispatchers.IO) {
-                        dao.saveLyrics(LyricsCacheEntity(songId, serialized, fetched?.plainText))
-                    }
-                } else {
-                    plainLyrics = fetched?.plainText ?: cached?.plainLyrics
-                    if (fetched != null) withContext(Dispatchers.IO) {
-                        dao.saveLyrics(LyricsCacheEntity(songId, null, fetched.plainText))
-                    }
-                }
-            }
-            lyricsLoading = false
-        }
-    }
-    val activeLyricRows = remember(lyricRows, position) { activeRows(lyricRows, position) }
-
     Column(
         Modifier.fillMaxSize()
             .graphicsLayer { translationY = dragOffset; alpha = 1f - (dragOffset / 1000f).coerceIn(0f, 0.12f) }
@@ -1158,70 +1220,30 @@ private fun NowPlayingScreen(
                 Text(formatTime(duration), color = Muted, fontSize = 11.sp)
             }
         }
-        if (lyricRows.isNotEmpty() || !plainLyrics.isNullOrBlank() || lyricsLoading) {
-            Column(
-                Modifier.fillMaxWidth().heightIn(max = 148.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = .72f))
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("LYRICS", color = MaterialTheme.colorScheme.primary,
-                        fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
-                    Spacer(Modifier.weight(1f))
-                    if (lyricsLoading) CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
-                }
-                if (lyricRows.isNotEmpty()) {
-                    val visibleIndices = (activeLyricRows + (lyricRows.indices.filter {
-                        it !in activeLyricRows && !lyricRows[it].isGap &&
-                            lyricRows[it].timeMs >= position
-                    }.take(2))).distinct().sorted().take(4)
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        items(visibleIndices) { index ->
-                            val line = lyricRows[index]
-                            if (line.text.isNotBlank()) {
-                                val active = index in activeLyricRows
-                                val synced = active && line.isWordSynced
-                                val revealed = line.revealedChars(position).toInt().coerceIn(0, line.text.length)
-                                Text(
-                                    buildAnnotatedString {
-                                        append(line.text)
-                                        if (active) addStyle(SpanStyle(
-                                            shadow = Shadow(MaterialTheme.colorScheme.primary.copy(alpha = .48f),
-                                                Offset.Zero, 12f)
-                                        ), 0, line.text.length)
-                                        if (synced && revealed > 0) addStyle(
-                                            SpanStyle(color = MaterialTheme.colorScheme.primary),
-                                            0, revealed
-                                        )
-                                    },
-                                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp))
-                                        .clickable { player?.seekTo(line.timeMs) }
-                                        .padding(vertical = 3.dp, horizontal = 5.dp),
-                                    color = if (active && !synced) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = if (active) .82f else .55f),
-                                    fontSize = if (active) 16.sp else 13.sp,
-                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                                    fontStyle = if (line.opposite) FontStyle.Italic else FontStyle.Normal,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                line.background?.let { backing ->
-                                    Text(backing.text, color = MaterialTheme.colorScheme.primary.copy(alpha = .72f),
-                                        fontSize = 11.sp, fontStyle = FontStyle.Italic,
-                                        modifier = Modifier.padding(start = 10.dp, bottom = 2.dp),
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                            }
-                        }
-                    }
-                } else if (!plainLyrics.isNullOrBlank()) {
-                    Text(plainLyrics.orEmpty(), color = MaterialTheme.colorScheme.onSurface.copy(alpha = .78f),
-                        fontSize = 12.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
-                } else if (lyricsLoading) {
-                    Text("Finding lyrics…", color = Muted, fontSize = 12.sp)
-                }
+        Column(
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = .72f))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("LYRICS", color = MaterialTheme.colorScheme.primary,
+                    fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
+                Spacer(Modifier.weight(1f))
+                Text("AM LYRICS", color = Muted, fontSize = 9.sp, letterSpacing = 1.sp)
+            }
+            if (title.isNotBlank()) {
+                AmLyricsWebView(
+                    title = title,
+                    artist = artist,
+                    durationMs = duration,
+                    currentTimeMs = position,
+                    onSeek = { timestamp -> player?.seekTo(timestamp) },
+                    modifier = Modifier.fillMaxWidth().height(174.dp)
+                )
+            } else {
+                Text("Play a song to see its lyrics.", color = Muted, fontSize = 12.sp)
             }
         }
 
