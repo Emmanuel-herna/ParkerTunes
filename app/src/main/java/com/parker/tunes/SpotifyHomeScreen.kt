@@ -101,7 +101,7 @@ fun SpotifyHomeScreen(
         homeLoading = false
     }
 
-    LaunchedEffect(homeListState, homeContinuation, homeShelves.size, homePageLoading) {
+    LaunchedEffect(homeListState, homeContinuation, homeShelves.size) {
         snapshotFlow {
             val info = homeListState.layoutInfo
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
