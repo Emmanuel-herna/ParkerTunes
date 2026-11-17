@@ -29,7 +29,7 @@
       "$code": {
         ".read": "auth != null && root.child('members').child($code).child(auth.uid).exists()",
         ".write": "auth != null && root.child('members').child($code).child(auth.uid).exists() && (!root.child('rooms').child($code).child('hostOnlyControl').val() || root.child('rooms').child($code).child('hostUid').val() === auth.uid)",
-        ".validate": "newData.hasChildren(['items', 'index'])"
+        ".validate": "newData.child('index').isNumber()"
       }
     }
   }
