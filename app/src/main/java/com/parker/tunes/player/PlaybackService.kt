@@ -198,11 +198,34 @@ class PlaybackService : MediaSessionService() {
         serviceScope.launch {
             try {
                 val app = application as ParkerTunesApp
+                // Keep the original related list as a safety fallback. If filtering or
+                // the artist-search fallback fails, autoplay still behaves as before.
                 val related = withContext(Dispatchers.IO) { app.musicApi.getRelatedSongs(songId) }
+                val filteredRelated = runCatching {
+                    related.filterNot { isLikelyMix(it.title, it.durationSec) }
+                }.getOrDefault(related)
+
+                val artistName = current.mediaMetadata.artist?.toString()?.trim().orEmpty()
+                val candidates = if (filteredRelated.size < 5 && artistName.isNotBlank()) {
+                    try {
+                        val fallback = withContext(Dispatchers.IO) {
+                            app.musicApi.search("$artistName songs").songs.take(15)
+                        }
+                        (filteredRelated + fallback.filterNot {
+                            isLikelyMix(it.title, it.durationSec)
+                        }).distinctBy { it.id }
+                    } catch (_: Exception) {
+                        // Preserve the previous unfiltered behavior if fallback search fails.
+                        related
+                    }
+                } else {
+                    filteredRelated
+                }
+
                 val queuedIds = (0 until player.mediaItemCount).mapNotNull { index ->
                     runCatching { player.getMediaItemAt(index).mediaId }.getOrNull()
                 }.toSet()
-                val additions = related.asSequence().filter { it.id !in queuedIds }
+                val additions = candidates.asSequence().filter { it.id !in queuedIds }
                     .distinctBy { it.id }.take(5).toList()
                 val mediaItems = withContext(Dispatchers.IO) {
                     additions.mapNotNull { song ->
