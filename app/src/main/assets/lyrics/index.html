@@ -15,6 +15,24 @@
       color: #fff;
     }
 
+    #lyrics-status {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      box-sizing: border-box;
+      color: #B69CFF;
+      background: #111015;
+      font: 13px Arial, sans-serif;
+      text-align: center;
+      z-index: 2;
+    }
+
+    #lyrics-status[hidden] { display: none; }
+
+    body { position: relative; }
+
     am-lyrics {
       display: block;
       width: 100%;
@@ -31,6 +49,7 @@
   </style>
 </head>
 <body>
+  <div id="lyrics-status" role="status">Loading lyrics…</div>
   <am-lyrics
     id="parker-am-lyrics"
     auto-scroll
@@ -68,7 +87,23 @@
 
       window.setParkerTrack = applyTrack;
 
+      const status = document.getElementById('lyrics-status');
+      let ready = false;
+      const showFailure = message => {
+        if (status && !ready) status.textContent = message;
+      };
+
+      window.addEventListener('error', event => {
+        showFailure('Lyrics could not start. Please try reopening the player.');
+        console.error('ParkerTunes lyrics error:', event.message || event);
+      });
+      window.addEventListener('unhandledrejection', event => {
+        console.error('ParkerTunes lyrics rejected:', event.reason);
+      });
+
       customElements.whenDefined('am-lyrics').then(() => {
+        ready = true;
+        if (status) status.hidden = true;
         lyrics.addEventListener('line-click', event => {
           const timestamp = Number(event.detail && event.detail.timestamp);
           if (
@@ -89,6 +124,15 @@
     })();
   </script>
 
-  <script type="module" src="./am-lyrics.js"></script>
+  <script type="module" src="./am-lyrics.js"
+    onerror="document.getElementById('lyrics-status').textContent='Lyrics component failed to load. Please check your connection and reopen the player.'"></script>
+  <script>
+    setTimeout(() => {
+      if (!customElements.get('am-lyrics')) {
+        const status = document.getElementById('lyrics-status');
+        if (status) status.textContent = 'Lyrics component did not load. Please reopen the player.';
+      }
+    }, 8000);
+  </script>
 </body>
 </html>
