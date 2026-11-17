@@ -7,3 +7,6 @@ services:
     startCommand: ./server
     healthCheckPath: /healthz
     plan: free
+    envVars:
+      - key: GOOGLE_WEB_CLIENT_ID
+        value: 512448803456-q5l3pr6h6uovcrhkea9u2qlv86t7hkc1.apps.googleusercontent.com
