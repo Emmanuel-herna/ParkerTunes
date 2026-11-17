@@ -90,7 +90,19 @@ func (m *Member) sendWelcome(p *Party) { p.mu.Lock(); defer p.mu.Unlock(); b,_:=
 func (m *Member) handle(p *Party,msg envelope) { p.mu.Lock(); defer p.mu.Unlock(); m.LastSeen=time.Now(); if msg.Type=="ping" { m.sendJSON(map[string]any{"type":"pong","clientMs":msg.ClientMS,"serverMs":nowMS()}); return }; if msg.Type=="sync" { m.sendJSON(map[string]any{"type":"state","playback":p.Playback,"serverMs":nowMS()}); return }; if msg.Type=="syncQueue" { m.sendJSON(map[string]any{"type":"queue","queue":p.Queue,"serverMs":nowMS()}); return }; if msg.Type!="control" { return }; if p.HostOnlyControl && !m.Host { m.sendJSON(map[string]string{"type":"error","error":"host_only"}); return }; if msg.Action=="setHostOnlyControl" { if !m.Host { m.sendJSON(map[string]string{"type":"error","error":"host_only"}); return }; p.HostOnlyControl=msg.Enabled; sMembers:=make([]map[string]any,0,len(p.Members)); for _,x:=range p.Members { sMembers=append(sMembers,map[string]any{"deviceId":x.DeviceID,"displayName":x.DisplayName,"host":x.Host,"connected":x.Connected}) }; m.broadcast(p,map[string]any{"type":"members","members":sMembers,"maxMembers":maxMembers,"hostOnlyControl":p.HostOnlyControl,"serverMs":nowMS()}); return }; now:=nowMS(); switch msg.Action { case "play": p.Playback.PositionMS=msg.PositionMS; p.Playback.AnchorMS=now+350; p.Playback.IsPlaying=true
 case "pause": if msg.PositionMS>0 {p.Playback.PositionMS=msg.PositionMS} else {p.Playback.PositionMS=positionAt(p.Playback,now)}; p.Playback.AnchorMS=now; p.Playback.IsPlaying=false
 case "seek": p.Playback.PositionMS=msg.PositionMS; p.Playback.AnchorMS=now+350
-case "setTrack": p.Playback.Track=msg.Track; p.Playback.PositionMS=msg.PositionMS; p.Playback.AnchorMS=now+350; p.Playback.IsPlaying=msg.IsPlaying; p.Playback.StartedBy=m.DeviceID; p.Playback.StartedByName=m.DisplayName
+case "setTrack":
+if msg.Track!=nil {
+	found:=-1
+	for i:=p.Queue.Index+1;i<len(p.Queue.Items);i++ { if p.Queue.Items[i].VideoID==msg.Track.VideoID { found=i; break } }
+	if found>=0 { p.Queue.Index=found } else {
+		upcoming:=[]Track{}
+		if p.Queue.Index+1<len(p.Queue.Items) { upcoming=append(upcoming,p.Queue.Items[p.Queue.Index+1:]...) }
+		p.Queue.Items=append([]Track{*msg.Track},upcoming...)
+		p.Queue.Index=0
+	}
+	p.Queue.Seq++
+}
+p.Playback.Track=msg.Track; p.Playback.PositionMS=msg.PositionMS; p.Playback.AnchorMS=now+350; p.Playback.IsPlaying=msg.IsPlaying; p.Playback.StartedBy=m.DeviceID; p.Playback.StartedByName=m.DisplayName
 case "setQueue": if len(msg.Queue)>maxUpcoming+1 {m.sendJSON(map[string]string{"type":"error","error":"queue_full"});return}; p.Queue.Items=append([]Track{},msg.Queue...); p.Queue.Index=msg.QueueIndex; p.Queue.Seq++
 case "queueAdd": for _,t:=range msg.Tracks { if len(p.Queue.Items)>=maxUpcoming+1 {break}; if t.VideoID=="" {continue}; if t.FromAutoplay {duplicate:=false; for i:=p.Queue.Index+1;i<len(p.Queue.Items);i++ {if p.Queue.Items[i].VideoID==t.VideoID {duplicate=true}}; if duplicate {continue} }; at:=len(p.Queue.Items); if msg.PlayNext {at=p.Queue.Index+1}; if at<0 {at=0}; if at>len(p.Queue.Items){at=len(p.Queue.Items)}; p.Queue.Items=append(p.Queue.Items,Track{}); copy(p.Queue.Items[at+1:],p.Queue.Items[at:]); p.Queue.Items[at]=t }; p.Queue.Seq++
 case "queueRemove": for i:=p.Queue.Index+1;i<len(p.Queue.Items);i++ {if p.Queue.Items[i].VideoID==msg.VideoID {p.Queue.Items=append(p.Queue.Items[:i],p.Queue.Items[i+1:]...);break}}; p.Queue.Seq++
@@ -98,7 +110,7 @@ case "queueClear": if p.Queue.Index+1<len(p.Queue.Items) {p.Queue.Items=p.Queue.
 case "queueMove": from:=msg.FromIndex; for i:=p.Queue.Index+1;i<len(p.Queue.Items);i++ {if msg.VideoID!=""&&p.Queue.Items[i].VideoID==msg.VideoID {from=i;break}}; to:=msg.ToIndex; if from>p.Queue.Index&&from<len(p.Queue.Items)&&to>p.Queue.Index&&to<len(p.Queue.Items) {v:=p.Queue.Items[from]; p.Queue.Items=append(p.Queue.Items[:from],p.Queue.Items[from+1:]...); if to>=len(p.Queue.Items){to=len(p.Queue.Items)-1}; p.Queue.Items=append(p.Queue.Items,Track{}); copy(p.Queue.Items[to+1:],p.Queue.Items[to:]); p.Queue.Items[to]=v}; p.Queue.Seq++
 case "next": if p.Queue.Index+1<len(p.Queue.Items) {p.Queue.Index++;p.Playback.Track=&p.Queue.Items[p.Queue.Index];p.Playback.PositionMS=0;p.Playback.AnchorMS=now+350;p.Playback.IsPlaying=true;p.Playback.StartedBy=m.DeviceID;p.Playback.StartedByName=m.DisplayName}
 case "previous": if p.Queue.Index>0 {p.Queue.Index--;p.Playback.Track=&p.Queue.Items[p.Queue.Index];p.Playback.PositionMS=0;p.Playback.AnchorMS=now+350;p.Playback.IsPlaying=true;p.Playback.StartedBy=m.DeviceID;p.Playback.StartedByName=m.DisplayName}
-default:return }; p.Playback.Seq++; p.Playback.UpdatedBy=m.DeviceID; if strings.HasPrefix(msg.Action,"queue")||msg.Action=="setQueue" { m.broadcast(p,map[string]any{"type":"queue","queue":p.Queue,"serverMs":nowMS()}) }; m.broadcast(p,map[string]any{"type":"state","playback":p.Playback,"serverMs":nowMS()}) }
+default:return }; p.Playback.Seq++; p.Playback.UpdatedBy=m.DeviceID; if strings.HasPrefix(msg.Action,"queue")||msg.Action=="setQueue"||msg.Action=="setTrack" { m.broadcast(p,map[string]any{"type":"queue","queue":p.Queue,"serverMs":nowMS()}) }; m.broadcast(p,map[string]any{"type":"state","playback":p.Playback,"serverMs":nowMS()}) }
 func positionAt(s Playback,now int64) int64 { if !s.IsPlaying||now<=s.AnchorMS{return s.PositionMS}; return s.PositionMS+now-s.AnchorMS }
 func (m *Member) sendJSON(v any) { b,e:=json.Marshal(v); if e==nil&&m.send!=nil {select{case m.send<-b:default:}} }
 func (m *Member) broadcast(p *Party,v any) { b,e:=json.Marshal(v); if e!=nil{return}; for _,x:=range p.Members {if x.conn!=nil {select{case x.send<-b:default:}}} }
