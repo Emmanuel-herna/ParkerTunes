@@ -150,7 +150,7 @@ class ListenTogetherClient(context:Context) {
                 it.child("startedByName").getValue(String::class.java))
         }
         val q=queueData
-        val tracks=q?.child("items")?.children.orEmpty().sortedBy { it.key?.toIntOrNull() ?: Int.MAX_VALUE }.mapNotNull { parseTrack(it) }
+        val tracks=q?.child("items")?.children?.toList().orEmpty().sortedBy { it.key?.toIntOrNull() ?: Int.MAX_VALUE }.mapNotNull { parseTrack(it) }
         val index=q?.child("index")?.getValue(Int::class.java) ?: -1
         _state.value=_state.value.copy(isHost=hostUid==_state.value.userUid,
             party=JamSnapshot(_state.value.code,list,room.child("hostOnlyControl").getValue(Boolean::class.java) ?: false,playback,tracks,index))
