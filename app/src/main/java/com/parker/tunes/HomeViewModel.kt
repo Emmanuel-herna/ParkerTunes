@@ -58,7 +58,7 @@ class HomeViewModel(private val api: MusicApi) {
         }
         val artistSeeds = stats.values.sortedByDescending { it.first }
             .map { it.second }.distinctBy { it.artist.trim().lowercase() }
-        artistQueue = ArrayDeque(artistSeeds)
+        artistQueue = ArrayDeque(artistSeeds.drop(INITIAL_ARTISTS))
 
         activeLoad?.cancel()
         mutableState.update { it.copy(loading = artistSeeds.isNotEmpty()) }
@@ -66,18 +66,10 @@ class HomeViewModel(private val api: MusicApi) {
             try {
                 val batches = mutableListOf<Song>()
                 for (seed in artistSeeds.take(INITIAL_ARTISTS)) {
-                    batches += api.getRelatedSongs(seed.id)
+                    batches += api.getRelatedSongs(seed.id, seed.title, seed.artist)
                     if (merge(emptyList(), batches).size >= TARGET_INITIAL) break
                 }
-                if (merge(emptyList(), batches).size < MIN_INITIAL) {
-                    val artist = artistSeeds.firstOrNull()?.artist
-                    batches += api.getMoodSongs(
-                        if (artist.isNullOrBlank()) "popular music" else "music similar to $artist"
-                    )
-                }
-                if (merge(emptyList(), batches).size < MIN_INITIAL) {
-                    batches += api.getTrending()
-                }
+                // Keep this shelf personal: do not pad it with unrelated global trends.
                 mutableState.update {
                     it.copy(songs = merge(emptyList(), batches), loading = false)
                 }
@@ -106,7 +98,7 @@ class HomeViewModel(private val api: MusicApi) {
                 while (artistQueue.isNotEmpty()) {
                     val seed = artistQueue.removeFirst()
                     val before = mutableState.value.songs.size
-                    val related = api.getRelatedSongs(seed.id)
+                    val related = api.getRelatedSongs(seed.id, seed.title, seed.artist)
                     mutableState.update { current ->
                         current.copy(songs = merge(current.songs, related))
                     }
@@ -140,7 +132,6 @@ class HomeViewModel(private val api: MusicApi) {
     private companion object {
         const val INITIAL_ARTISTS = 4
         const val TARGET_INITIAL = 24
-        const val MIN_INITIAL = 8
         const val MAX_RECOMMENDATIONS = 60
     }
 }
