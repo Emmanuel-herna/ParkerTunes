@@ -30,6 +30,7 @@ import androidx.media3.session.MediaController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 @Composable
 fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api:MusicApi,onBack:()->Unit) {
@@ -37,6 +38,7 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api
     val scope= rememberCoroutineScope()
     val context=LocalContext.current
     var signingIn by remember { mutableStateOf(false) }
+    var signInStage by remember { mutableStateOf("") }
     var signInError by remember { mutableStateOf<String?>(null) }
     var name by remember(state.displayName){mutableStateOf(state.displayName)}
     var code by remember(state.code){mutableStateOf(state.code)}
@@ -80,9 +82,12 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api
                 Button(
                     onClick={
                         signInError=null
+                        signInStage="Preparing Google sign-in…"
                         scope.launch {
                             signingIn=true
                             try {
+                                withTimeout(30_000L) {
+                                signInStage="Opening Google account chooser…"
                                 val option=GetGoogleIdOption.Builder()
                                     .setServerClientId(context.getString(R.string.default_web_client_id))
                                     .setFilterByAuthorizedAccounts(false)
@@ -90,18 +95,21 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api
                                     .build()
                                 val request=GetCredentialRequest.Builder().addCredentialOption(option).build()
                                 val result=CredentialManager.create(context).getCredential(context,request)
+                                signInStage="Completing Firebase authentication…"
                                 val credential=result.credential
                                 if(credential is CustomCredential && credential.type==GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                                     val google=GoogleIdTokenCredential.createFrom(credential.data)
                                     client.signInWithGoogle(google.idToken,google.displayName.orEmpty(),google.id,google.profilePictureUri?.toString())
                                 } else error("Google did not return a valid sign-in credential.")
-                            } catch(e:Exception) { signInError=e.message ?: "Google sign-in failed." }
-                            finally { signingIn=false }
+                                }
+                            } catch(e:Exception) { signInError="${signInStage}: ${e.message ?: "Google sign-in failed."}" }
+                            finally { signingIn=false; signInStage="" }
                         }
                     },
                     enabled=!signingIn,
                     modifier=Modifier.fillMaxWidth()
                 ) { Text(if(signingIn) "Signing in…" else "Continue with Google") }
+                if(signingIn) Text(signInStage,color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
             } else {
                 ListItem(
                     headlineContent={Text(state.googleName.ifBlank { state.displayName })},
