@@ -27,6 +27,8 @@ class HomeViewModel(private val api: MusicApi) {
     val state: StateFlow<HomeRecommendationState> = mutableState.asStateFlow()
 
     private var historyIds: Set<String> = emptySet()
+    private var historyKey: List<String> = emptyList()
+    private var hasInitializedHistory = false
     private var artistQueue: ArrayDeque<Song> = ArrayDeque()
     private var activeLoad: Job? = null
     private var loadMoreJob: Job? = null
@@ -34,7 +36,10 @@ class HomeViewModel(private val api: MusicApi) {
     fun onListeningHistory(history: List<Song>) {
         val cleaned = history.filter { it.id.isNotBlank() && it.artist.isNotBlank() }
         val newIds = cleaned.map { it.id }.toSet()
-        if (newIds == historyIds) return
+        val newKey = cleaned.map { it.id }
+        if (hasInitializedHistory && newKey == historyKey) return
+        hasInitializedHistory = true
+        historyKey = newKey
         historyIds = newIds
 
         // Frequency is the main signal; most-recent appearance breaks ties.
