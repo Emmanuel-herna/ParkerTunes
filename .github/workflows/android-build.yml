@@ -38,6 +38,28 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Prepare stable debug signing key
+        id: debug-signing
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$ANDROID_KEYSTORE_BASE64" || -z "$ANDROID_KEYSTORE_PASSWORD" ]]; then
+            echo "::warning::Stable Android signing secrets are not configured yet; this run will use a temporary debug key."
+            echo "Add ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD repository secrets to make the OAuth signing fingerprint stable."
+            exit 0
+          fi
+          keystore="$RUNNER_TEMP/parkertunes-ci.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          if [[ ! -s "$keystore" ]]; then
+            echo "Decoded Android signing keystore is empty." >&2
+            exit 1
+          fi
+          echo "PARKERTUNES_KEYSTORE_PATH=$keystore" >> "$GITHUB_ENV"
+          echo "PARKERTUNES_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+
       - name: Build debug APK
         id: build-apk
         run: gradle --no-daemon :app:assembleDebug
