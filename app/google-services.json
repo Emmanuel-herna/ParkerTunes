@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "1091691285089",
+    "firebase_url": "https://parkerjnr-5a13a-default-rtdb.firebaseio.com",
     "project_id": "parkerjnr-5a13a",
     "storage_bucket": "parkerjnr-5a13a.firebasestorage.app"
   },
@@ -13,6 +14,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "1091691285089-c2finnl7vnsbg6ju4hgqk046kt67t24v.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.parker.tunes",
+            "certificate_hash": "a2b58ffa00d7347ee7b42eced004a6641014983a"
+          }
+        },
         {
           "client_id": "1091691285089-4q7opnscm9epp87lo3knvaut97gjhfpm.apps.googleusercontent.com",
           "client_type": 3
