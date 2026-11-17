@@ -14,77 +14,61 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/**
- * Home recommendation state is deliberately cumulative: a newly played artist
- * adds another recommendation source instead of replacing the previous shelf.
- *
- * This class is screen-scoped by SpotifyHomeScreen and does not require a
- * separate dependency-injection setup.
- */
 data class HomeRecommendationState(
     val songs: List<Song> = emptyList(),
     val loading: Boolean = true,
     val loadingMore: Boolean = false
 )
 
+/** Builds recommendations from the listener's complete play history. */
 class HomeViewModel(private val api: MusicApi) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mutableState = MutableStateFlow(HomeRecommendationState())
     val state: StateFlow<HomeRecommendationState> = mutableState.asStateFlow()
 
-    private var hasInitialized = false
-    private var lastTrackId: String? = null
-    private var lastArtist: String = ""
-    private var recentIds: Set<String> = emptySet()
-    private var pendingGenreQueries: ArrayDeque<String> = ArrayDeque()
+    private var historyIds: Set<String> = emptySet()
+    private var artistQueue: ArrayDeque<Song> = ArrayDeque()
     private var activeLoad: Job? = null
     private var loadMoreJob: Job? = null
-    private val seenIds = LinkedHashSet<String>()
 
-    fun onTrackChanged(songId: String?, artist: String, recentSongIds: Set<String>) {
-        recentIds = recentSongIds
-        val normalizedArtist = artist.trim()
-        if (hasInitialized && songId == lastTrackId &&
-            normalizedArtist.equals(lastArtist, ignoreCase = true)
-        ) {
-            return
+    fun onListeningHistory(history: List<Song>) {
+        val cleaned = history.filter { it.id.isNotBlank() && it.artist.isNotBlank() }
+        val newIds = cleaned.map { it.id }.toSet()
+        if (newIds == historyIds) return
+        historyIds = newIds
+
+        // Frequency is the main signal; most-recent appearance breaks ties.
+        val stats = LinkedHashMap<String, Pair<Int, Song>>()
+        cleaned.forEach { song ->
+            val key = song.artist.trim().lowercase()
+            val previous = stats[key]
+            stats[key] = Pair((previous?.first ?: 0) + 1, previous?.second ?: song)
         }
-
-        hasInitialized = true
-        lastTrackId = songId
-        lastArtist = normalizedArtist
-        val genreQueries = genreQueriesFor(normalizedArtist)
-        pendingGenreQueries = ArrayDeque(genreQueries)
-
-        // Do not clear the current shelf when the listener changes artist.
-        mutableState.update { it.copy(loading = true) }
+        val artistSeeds = stats.values.sortedByDescending { it.first }
+            .map { it.second }.distinctBy { it.artist.trim().lowercase() }
+        artistQueue = ArrayDeque(artistSeeds)
 
         activeLoad?.cancel()
+        mutableState.update { it.copy(loading = artistSeeds.isNotEmpty()) }
         activeLoad = scope.launch {
             try {
-                val related = if (!songId.isNullOrBlank()) {
-                    api.getRelatedSongs(songId)
-                } else {
-                    emptyList()
+                val batches = mutableListOf<Song>()
+                for (seed in artistSeeds.take(INITIAL_ARTISTS)) {
+                    batches += api.getRelatedSongs(seed.id)
+                    if (merge(emptyList(), batches).size >= TARGET_INITIAL) break
                 }
-
-                val firstGenre = pendingGenreQueries.removeFirstOrNull()
-                val genreSongs = firstGenre?.let { api.getMoodSongs(it) }.orEmpty()
-
-                // A second genre query gives the first shelf enough variety to
-                // reach a useful size even when artist radio is sparse.
-                val secondGenre = pendingGenreQueries.removeFirstOrNull()
-                val secondGenreSongs = secondGenre?.let { api.getMoodSongs(it) }.orEmpty()
-
-                val current = mutableState.value.songs
-                val combined = merge(current, related + genreSongs + secondGenreSongs)
-                if (combined.size < MIN_INITIAL_SONGS) {
-                    val trending = api.getTrending()
-                    mergeIntoState(trending)
+                if (merge(emptyList(), batches).size < MIN_INITIAL) {
+                    val artist = artistSeeds.firstOrNull()?.artist
+                    batches += api.getMoodSongs(
+                        if (artist.isNullOrBlank()) "popular music" else "music similar to $artist"
+                    )
                 }
-
-                // Keep a usable shelf even when one of the sources is offline.
-                mutableState.update { it.copy(loading = false) }
+                if (merge(emptyList(), batches).size < MIN_INITIAL) {
+                    batches += api.getTrending()
+                }
+                mutableState.update {
+                    it.copy(songs = merge(emptyList(), batches), loading = false)
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -93,86 +77,37 @@ class HomeViewModel(private val api: MusicApi) {
         }
     }
 
-    /**
-     * Called when the horizontal shelf is swiped close to its end. Each call
-     * consumes the next genre query and appends its unique tracks.
-     */
     fun loadMore() {
-        if (pendingGenreQueries.isEmpty() || loadMoreJob?.isActive == true) return
+        if (artistQueue.isEmpty() || loadMoreJob?.isActive == true) return
         loadMoreJob = scope.launch {
             mutableState.update { it.copy(loadingMore = true) }
             try {
-                var added = false
-                while (pendingGenreQueries.isNotEmpty() && !added) {
-                    val query = pendingGenreQueries.removeFirst()
-                    val batch = api.getMoodSongs(query)
+                while (artistQueue.isNotEmpty()) {
+                    val seed = artistQueue.removeFirst()
                     val before = mutableState.value.songs.size
-                    mergeIntoState(batch)
-                    added = mutableState.value.songs.size > before
+                    val related = api.getRelatedSongs(seed.id)
+                    mutableState.update { current ->
+                        current.copy(songs = merge(current.songs, related))
+                    }
+                    if (mutableState.value.songs.size > before) break
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                // Keep the current shelf intact; a later swipe can retry the
-                // remaining genre queries.
+                // Keep the existing shelf intact.
             } finally {
                 mutableState.update { it.copy(loadingMore = false) }
             }
         }
     }
 
-    private fun mergeIntoState(incoming: List<Song>) {
-        mutableState.update { current ->
-            current.copy(songs = merge(current.songs, incoming))
-        }
-    }
-
     private fun merge(existing: List<Song>, incoming: List<Song>): List<Song> {
-        val result = LinkedHashMap<String, Song>(existing.size + incoming.size)
-        existing.forEach { song ->
-            result[song.id] = song
-            seenIds.add(song.id)
-        }
+        val result = LinkedHashMap<String, Song>()
+        existing.forEach { result[it.id] = it }
         incoming.forEach { song ->
-            if (song.id.isNotBlank() && song.id !in recentIds) {
-                result.putIfAbsent(song.id, song)
-                seenIds.add(song.id)
-            }
+            if (song.id.isNotBlank() && song.id !in historyIds) result.putIfAbsent(song.id, song)
         }
         return result.values.take(MAX_RECOMMENDATIONS)
-    }
-
-    private fun genreQueriesFor(artist: String): List<String> {
-        val name = artist.lowercase()
-        val afrobeatsArtists = listOf(
-            "asake", "rema", "fireboy", "burna boy", "wizkid", "davido",
-            "tems", "ayra starr", "odumodublvck", "olamide", "tiwa savage",
-            "joeboy", "oxlade", "ckay", "kizz daniel", "king promise",
-            "stonebwoy", "black sherif", "sarkodie", "kuami eugene", "camidoh"
-        )
-        val ukRapArtists = listOf(
-            "central cee", "dave", "stormzy", "headie one", "skepta",
-            "aj tracey", "fredo", "digga d", "arrdee", "aitch", "tion wayne"
-        )
-        val usHipHopArtists = listOf(
-            "drake", "kendrick lamar", "j. cole", "travis scott",
-            "21 savage", "future", "metro boomin", "lil baby"
-        )
-
-        return when {
-            afrobeatsArtists.any(name::contains) ->
-                listOf("Afrobeats", "Nigerian Afrobeats", "African pop", "Afropop", "Ghanaian Afrobeats")
-            ukRapArtists.any(name::contains) ->
-                listOf("UK rap", "UK drill", "British hip hop", "UK rap hits")
-            usHipHopArtists.any(name::contains) ->
-                listOf("Hip hop", "US rap", "Trap music", "Melodic rap")
-            name.contains("dancehall") || name.contains("shatta") ->
-                listOf("Dancehall", "Afro-dancehall", "Caribbean hits")
-            name.isBlank() ->
-                listOf("Afrobeats", "Hip hop", "Pop", "Trending music")
-            else ->
-                listOf("songs like $artist", "Pop", "Hip hop", "Afrobeats", "Trending music")
-        }
     }
 
     fun close() {
@@ -182,7 +117,9 @@ class HomeViewModel(private val api: MusicApi) {
     }
 
     private companion object {
-        const val MIN_INITIAL_SONGS = 20
+        const val INITIAL_ARTISTS = 4
+        const val TARGET_INITIAL = 24
+        const val MIN_INITIAL = 8
         const val MAX_RECOMMENDATIONS = 60
     }
 }
