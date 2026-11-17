@@ -104,7 +104,7 @@ fun HomeScreen(
         withContext(Dispatchers.IO) { dao.recentlyPlayed().first() }
         historyReady = true
     }
-    LaunchedEffect(historyReady, recentIds) {
+    LaunchedEffect(historyReady, recentIds, favorites) {
         if (historyReady) {
             val history = withContext(Dispatchers.IO) { dao.historySnapshot() }
             // Use the visible recent-play rows as a safety net if the snapshot
