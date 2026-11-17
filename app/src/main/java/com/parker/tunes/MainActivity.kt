@@ -10,8 +10,11 @@ import android.os.Handler
 import android.os.Looper
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewClientCompat
 import org.json.JSONObject
 import android.os.Build
 import androidx.activity.ComponentActivity
@@ -946,27 +949,56 @@ private fun MiniPlayer(
 
 @Composable
 private fun AmLyricsWebView(
+    trackId: String,
     title: String,
     artist: String,
     durationMs: Long,
     currentTimeMs: Long,
+    isPlaying: Boolean,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val latestOnSeek by rememberUpdatedState(onSeek)
+    val latestDuration by rememberUpdatedState(durationMs)
+    val trackJson = remember(trackId, title, artist, durationMs, currentTimeMs, isPlaying) {
+        JSONObject()
+            .put("id", trackId)
+            .put("title", title)
+            .put("artist", artist)
+            .put("query", listOf(title, artist).filter { it.isNotBlank() }.joinToString(" "))
+            .put("durationMs", durationMs.coerceAtLeast(0L))
+            .put("positionMs", currentTimeMs.coerceAtLeast(0L))
+            .put("playing", isPlaying)
+            .toString()
+    }
+    val latestTrackJson by rememberUpdatedState(trackJson)
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val bridge = remember {
         object {
             @JavascriptInterface
             fun seekTo(timestampMs: Double) {
-                val safeTimestamp = timestampMs.toLong().coerceAtLeast(0L)
+                if (!timestampMs.isFinite()) return
+                val requested = timestampMs.toLong().coerceAtLeast(0L)
+                val safeTimestamp = if (latestDuration > 0L) {
+                    requested.coerceAtMost(latestDuration)
+                } else {
+                    requested
+                }
                 mainHandler.post { latestOnSeek(safeTimestamp) }
             }
         }
     }
+
     AndroidView(
         modifier = modifier,
         factory = { context ->
+            val assetLoader = WebViewAssetLoader.Builder()
+                .addPathHandler(
+                    "/assets/",
+                    WebViewAssetLoader.AssetsPathHandler(context)
+                )
+                .build()
+
             WebView(context).apply {
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 isVerticalScrollBarEnabled = false
@@ -975,79 +1007,37 @@ private fun AmLyricsWebView(
                 settings.domStorageEnabled = true
                 settings.allowFileAccess = false
                 settings.allowContentAccess = false
+                settings.javaScriptCanOpenWindowsAutomatically = false
+                settings.setSupportMultipleWindows(false)
+                settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 addJavascriptInterface(bridge, "ParkerLyricsBridge")
-                webViewClient = object : WebViewClient() {
+                webViewClient = object : WebViewClientCompat() {
+                    override fun shouldInterceptRequest(
+                        view: WebView,
+                        request: WebResourceRequest
+                    ): WebResourceResponse? {
+                        return assetLoader.shouldInterceptRequest(request.url)
+                    }
+
                     override fun onPageFinished(view: WebView, url: String?) {
                         super.onPageFinished(view, url)
-                        view.evaluateJavascript("window.__parkerLyricsPageLoaded = true;", null)
+                        view.evaluateJavascript(
+                            "window.setParkerTrack && window.setParkerTrack($latestTrackJson);",
+                            null
+                        )
                     }
                 }
-                loadDataWithBaseURL(
-                    "https://parker-tunes.local/",
-                    AM_LYRICS_HTML,
-                    "text/html",
-                    "UTF-8",
-                    null
-                )
+                loadUrl("https://appassets.androidplatform.net/assets/lyrics/index.html")
             }
         },
         update = { webView ->
-            val track = JSONObject()
-                .put("title", title)
-                .put("artist", artist)
-                .put("query", listOf(title, artist).filter { it.isNotBlank() }.joinToString(" "))
-                .put("duration", durationMs.coerceAtLeast(0L))
-                .put("currentTime", currentTimeMs.coerceAtLeast(0L))
-            webView.evaluateJavascript("window.setParkerTrack && window.setParkerTrack($track);", null)
+            webView.evaluateJavascript(
+                "window.setParkerTrack && window.setParkerTrack($trackJson);",
+                null
+            )
         }
     )
 }
-
-private val AM_LYRICS_HTML = """
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<style>
-html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:transparent; color:#fff; }
-am-lyrics { display:block; width:100%; height:100%; color:#fff; --am-lyrics-highlight-color:#B69CFF; --highlight-color:#B69CFF; --am-lyrics-font-size:22px; --am-lyrics-line-height:1.2; --am-lyrics-line-spacing:14px; }
-</style>
-</head>
-<body>
-<am-lyrics autoscroll interpolate highlight-color="#B69CFF" font-family="Arial, sans-serif"></am-lyrics>
-<script type="module">
-window.__parkerPendingTrack = null;
-window.setParkerTrack = (track) => {
-  window.__parkerPendingTrack = track;
-  const el = document.querySelector('am-lyrics');
-  if (!el || !window.__parkerAmLyricsReady) return;
-  el.songTitle = track.title;
-  el.songArtist = track.artist;
-  el.query = track.query;
-  el.songDuration = track.duration;
-  el.currentTime = track.currentTime;
-  el.duration = track.duration > 0 ? track.duration : -1;
-};
-import('https://cdn.jsdelivr.net/npm/@uimaxbai/am-lyrics@1.8.9/dist/src/am-lyrics.min.js')
-  .then(() => {
-    const el = document.querySelector('am-lyrics');
-    window.__parkerAmLyricsReady = true;
-    el.addEventListener('line-click', (event) => {
-      const timestamp = Number(event.detail && event.detail.timestamp);
-      if (Number.isFinite(timestamp) && window.ParkerLyricsBridge) {
-        window.ParkerLyricsBridge.seekTo(timestamp);
-      }
-    });
-    if (window.__parkerPendingTrack) window.setParkerTrack(window.__parkerPendingTrack);
-  })
-  .catch((error) => {
-    document.body.innerHTML = '<div style="font:14px Arial;color:#aaa;padding:12px">Lyrics could not be loaded. Check your internet connection.</div>';
-  });
-</script>
-</body>
-</html>
-""".trimIndent()
 
 @Composable
 private fun NowPlayingScreen(
@@ -1235,12 +1225,14 @@ private fun NowPlayingScreen(
             }
             if (title.isNotBlank()) {
                 AmLyricsWebView(
+                    trackId = songId,
                     title = title,
                     artist = artist,
                     durationMs = duration,
                     currentTimeMs = position,
+                    isPlaying = playing,
                     onSeek = { timestamp -> player?.seekTo(timestamp) },
-                    modifier = Modifier.fillMaxWidth().height(174.dp)
+                    modifier = Modifier.fillMaxWidth().height(210.dp)
                 )
             } else {
                 Text("Play a song to see its lyrics.", color = Muted, fontSize = 12.sp)
