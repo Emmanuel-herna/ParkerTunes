@@ -903,7 +903,7 @@ private fun NowPlayingScreen(
     val title = playerState.title
     val artist = playerState.artist
     val coverUrl = playerState.artworkUri
-    val coverCandidates = remember(coverUrl, songId) { playerCoverCandidates(coverUrl, songId) }
+    val coverCandidates = remember(coverUrl, player?.currentMediaItem?.mediaId) { playerCoverCandidates(coverUrl, player?.currentMediaItem?.mediaId) }
     var coverCandidateIndex by remember(coverUrl) { mutableIntStateOf(0) }
     var coverImageLoaded by remember(coverUrl) { mutableStateOf(false) }
     val coverImageAlpha by animateFloatAsState(
