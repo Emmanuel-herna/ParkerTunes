@@ -141,7 +141,7 @@ class PlaybackService : MediaSessionService() {
                 if (mediaSession?.player === player) {
                     if (playbackState == Player.STATE_READY) effects.attach(player.audioSessionId)
                     WidgetProvider.update(this@PlaybackService, player)
-                    if (playbackState == Player.STATE_ENDED) maybeAppendRelated(player)
+                    if (playbackState == Player.STATE_ENDED) handlePlaybackEnded(player)
                 }
             }
 
@@ -163,6 +163,26 @@ class PlaybackService : MediaSessionService() {
                 }
             }
         })
+    }
+
+    /**
+     * Handles the end of the active track. If the user already has another
+     * track queued, advance to it immediately. Only request related songs when
+     * the current track was the final queue item.
+     */
+    private fun handlePlaybackEnded(observedPlayer: ExoPlayer) {
+        val activePlayer = crossfadeController?.activePlayer() ?: observedPlayer
+        if (mediaSession?.player !== activePlayer) return
+        if (activePlayer.repeatMode == Player.REPEAT_MODE_ONE) return
+
+        val nextIndex = activePlayer.currentMediaItemIndex + 1
+        if (nextIndex in 0 until activePlayer.mediaItemCount) {
+            activePlayer.seekToNextMediaItem()
+            activePlayer.prepare()
+            activePlayer.play()
+        } else {
+            maybeAppendRelated(activePlayer)
+        }
     }
 
     private fun maybeAppendRelated(player: ExoPlayer) {
