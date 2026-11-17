@@ -63,6 +63,7 @@ type Party struct {
 	Queue Queue `json:"queue"`
 	HostOnlyControl bool `json:"hostOnlyControl"`
 	Created time.Time `json:"-"`
+	EmptySince time.Time `json:"-"`
 }
 type Server struct { mu sync.Mutex; parties map[string]*Party; upgrader websocket.Upgrader }
 type Identity struct { UserID string `json:"userId"`; DeviceID string `json:"deviceId"`; DisplayName string `json:"displayName"`; AvatarURL string `json:"avatarUrl"` }
@@ -115,5 +116,5 @@ default:return }; p.Playback.Seq++; p.Playback.UpdatedBy=m.DeviceID; if strings.
 func positionAt(s Playback,now int64) int64 { if !s.IsPlaying||now<=s.AnchorMS{return s.PositionMS}; return s.PositionMS+now-s.AnchorMS }
 func (m *Member) sendJSON(v any) { b,e:=json.Marshal(v); if e==nil&&m.send!=nil {select{case m.send<-b:default:}} }
 func (m *Member) broadcast(p *Party,v any) { b,e:=json.Marshal(v); if e!=nil{return}; for _,x:=range p.Members {if x.conn!=nil {select{case x.send<-b:default:}}} }
-func main() { s:=&Server{parties:map[string]*Party{},upgrader:websocket.Upgrader{CheckOrigin:func(r *http.Request)bool{return r.Header.Get("Origin")==""||strings.Contains(os.Getenv("JAM_ALLOWED_ORIGINS"),r.Header.Get("Origin"))}}}; mux:=http.NewServeMux(); mux.HandleFunc("/",s.serve); go func(){ t:=time.NewTicker(heartbeat); for range t.C { s.mu.Lock(); for code,p:=range s.parties { p.mu.Lock(); active:=false; for _,m:=range p.Members {if m.Connected {active=true}}; if !active&&time.Since(p.Created)>2*time.Minute {delete(s.parties,code);p.mu.Unlock();continue}; s.sendStateLocked(p); p.mu.Unlock() }; s.mu.Unlock() } }(); addr:=":"+os.Getenv("PORT"); if addr==":" {addr=":8000"}; log.Fatal(http.ListenAndServe(addr,mux)) }
+func main() { s:=&Server{parties:map[string]*Party{},upgrader:websocket.Upgrader{CheckOrigin:func(r *http.Request)bool{return r.Header.Get("Origin")==""||strings.Contains(os.Getenv("JAM_ALLOWED_ORIGINS"),r.Header.Get("Origin"))}}}; mux:=http.NewServeMux(); mux.HandleFunc("/",s.serve); go func(){ t:=time.NewTicker(heartbeat); for range t.C { s.mu.Lock(); for code,p:=range s.parties { p.mu.Lock(); now:=time.Now(); for id,m:=range p.Members { if !m.Connected && now.Sub(m.LastSeen)>grace { delete(p.Members,id) } }; hasHost:=false; for _,m:=range p.Members { if m.Host {hasHost=true;break} }; if !hasHost { for _,m:=range p.Members {m.Host=true;break} }; if len(p.Members)==0 { if p.EmptySince.IsZero(){p.EmptySince=now}; if now.Sub(p.EmptySince)>2*time.Minute {delete(s.parties,code);p.mu.Unlock();continue} } else {p.EmptySince=time.Time{}}; if now.Sub(p.Created)>12*time.Hour {delete(s.parties,code);p.mu.Unlock();continue}; s.sendStateLocked(p); p.mu.Unlock() }; s.mu.Unlock() } }(); addr:=":"+os.Getenv("PORT"); if addr==":" {addr=":8000"}; log.Fatal(http.ListenAndServe(addr,mux)) }
 
