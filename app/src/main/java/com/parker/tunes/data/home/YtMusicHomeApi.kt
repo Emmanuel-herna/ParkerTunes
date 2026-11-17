@@ -84,9 +84,10 @@ class YtMusicHomeApi(
         .put("clientVersion", "1.20241001.01.00")
         .put("hl", "en").put("gl", "US"))
 
-    private fun parse(root: JSONObject): YtMusicHomePage {
-        val tab = root.path("contents", "singleColumnBrowseResultsRenderer", "tabs")
-            ?.optJSONArray(0)?.optJSONObject(0)?.path("tabRenderer", "content")
+    internal fun parseResponseForTests(json: String): YtMusicHomePage = parse(JSONObject(json))\n\n    private fun parse(root: JSONObject): YtMusicHomePage {
+        val tabs = root.optJSONObject("contents")?.optJSONObject("singleColumnBrowseResultsRenderer")
+            ?.optJSONArray("tabs")
+        val tab = tabs?.optJSONObject(0)?.path("tabRenderer", "content")
         val sections = tab?.path("sectionListRenderer", "contents") ?: JSONArray()
         val shelves = mutableListOf<HomeShelf>()
         for (i in 0 until sections.length()) {
@@ -102,7 +103,8 @@ class YtMusicHomeApi(
                 val itemRenderer = rawItems.optJSONObject(j)?.optJSONObject("musicTwoRowItemRenderer") ?: continue
                 val itemTitle = itemRenderer.textAt("title")?.takeIf { it.isNotBlank() } ?: continue
                 val subtitle = itemRenderer.textAt("subtitle")
-                val thumbnails = itemRenderer.path("thumbnailRenderer", "musicThumbnailRenderer", "thumbnail", "thumbnails") as? JSONArray
+                val thumbnails = itemRenderer.optJSONObject("thumbnailRenderer")
+                    ?.optJSONObject("musicThumbnailRenderer")?.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
                 val thumbnail = thumbnails?.optJSONObject((thumbnails.length() - 1).coerceAtLeast(0))
                     ?.optString("url")?.takeIf { it.isNotBlank() }
                 val endpoint = itemRenderer.path("navigationEndpoint")
@@ -123,7 +125,7 @@ class YtMusicHomeApi(
             }
             shelves += HomeShelf(title, strapline, layout, parsed)
         }
-        val chipArray = root.path("header", "chipCloudRenderer", "chips") as? JSONArray
+        val chipArray = root.optJSONObject("header")?.optJSONObject("chipCloudRenderer")?.optJSONArray("chips")
         val chips = buildList {
             if (chipArray != null) for (i in 0 until chipArray.length()) {
                 val chip = chipArray.optJSONObject(i) ?: continue
@@ -144,16 +146,15 @@ private fun JSONObject.path(vararg keys: String): JSONObject? {
     return current
 }
 private fun JSONObject.textAt(key: String): String? {
-    val runs = path(key, "runs")?.optJSONArray(0) ?: return null
+    val runs = optJSONObject(key)?.optJSONArray("runs") ?: return null
     return runs.optJSONObject(0)?.optString("text")?.takeIf { it.isNotBlank() }
 }
 private fun JSONObject.findContinuation(): String? {
-    val contents = path("continuationContents", "sectionListContinuation")
+    val contents = optJSONObject("continuationContents")?.optJSONObject("sectionListContinuation")
         ?.optJSONArray("continuations")
-        ?: path("contents", "singleColumnBrowseResultsRenderer", "tabs")?.let { tabs ->
-            tabs.optJSONObject(0)?.path("tabRenderer", "content", "sectionListRenderer")
-                ?.optJSONArray("continuations")
-        }
+        ?: optJSONObject("contents")?.optJSONObject("singleColumnBrowseResultsRenderer")
+            ?.optJSONArray("tabs")?.optJSONObject(0)?.path("tabRenderer", "content", "sectionListRenderer")
+            ?.optJSONArray("continuations")
     return contents?.optJSONObject(0)?.path("nextContinuationData")
         ?.optString("continuation")?.takeIf { it.isNotBlank() }
 }
