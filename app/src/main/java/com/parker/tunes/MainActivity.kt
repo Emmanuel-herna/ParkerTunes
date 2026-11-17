@@ -946,7 +946,7 @@ private fun NowPlayingScreen(
                         LyricsParser.parse(stamp + source.text)
                     }
                     lyricRows = VLine.of(mapped)
-                    val serialized = mapped.joinToString("\\n") { line ->
+                    val serialized = mapped.joinToString("\n") { line ->
                         val total = line.timeMs.coerceAtLeast(0L)
                         val stamp = "[%02d:%02d.%02d]".format(total / 60_000,
                             (total / 1_000) % 60, (total % 1_000) / 10)
