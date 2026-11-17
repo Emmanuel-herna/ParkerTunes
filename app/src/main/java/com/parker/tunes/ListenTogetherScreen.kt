@@ -36,6 +36,7 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api
     var server by remember(state.serverUrl){mutableStateOf(state.serverUrl)}
     var code by remember(state.code){mutableStateOf(state.code)}
     var lastApplied by remember { mutableStateOf("") }
+    LaunchedEffect(state.token) { if (state.token.isNotBlank() && !state.connected) runCatching { client.connect() } }
     LaunchedEffect(state.party?.playback?.seq,state.connected,player) {
         val playback=state.party?.playback ?: return@LaunchedEffect
         val track=playback.track ?: return@LaunchedEffect
