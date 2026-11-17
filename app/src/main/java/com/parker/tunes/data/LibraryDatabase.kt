@@ -95,7 +95,8 @@ data class RecommendationCacheEntity(
     val fetchedAt: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "recent_searches")
+@Entity(tableName = "home_shelf_cache")
+data class HomeShelfCacheEntity(\n    @PrimaryKey val pageIndex: Int,\n    val jsonPayload: String,\n    val fetchedAt: Long = System.currentTimeMillis()\n)\n\n@Entity(tableName = "recent_searches")
 data class RecentSearchEntity(
     @PrimaryKey val query: String,
     val searchedAt: Long = System.currentTimeMillis(),
@@ -157,7 +158,7 @@ interface LibraryDao {
     @Query("DELETE FROM home_recommendation_cache WHERE fetchedAt < :before")
     suspend fun pruneRecommendationCache(before: Long)
 
-    @Query("SELECT * FROM recent_searches ORDER BY searchedAt DESC LIMIT 20")
+    @Query("SELECT * FROM home_shelf_cache ORDER BY pageIndex ASC")\n    suspend fun homeShelfCache(): List<HomeShelfCacheEntity>\n\n    @Insert(onConflict = OnConflictStrategy.REPLACE)\n    suspend fun saveHomeShelfCache(item: HomeShelfCacheEntity)\n\n    @Query("DELETE FROM home_shelf_cache WHERE fetchedAt < :before")\n    suspend fun pruneHomeShelfCache(before: Long)\n\n    @Query("SELECT * FROM recent_searches ORDER BY searchedAt DESC LIMIT 20")
     fun recentSearches(): Flow<List<RecentSearchEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -241,8 +242,8 @@ interface LibraryDao {
 }
 
 @Database(
-    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class, EqualizerSettingsEntity::class, LyricsCacheEntity::class, DownloadEntity::class, RecommendationCacheEntity::class, com.parker.tunes.data.sources.AddonEntity::class, com.parker.tunes.data.sources.AddonSettingsEntity::class],
-    version = 10,
+    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class, EqualizerSettingsEntity::class, LyricsCacheEntity::class, DownloadEntity::class, RecommendationCacheEntity::class, HomeShelfCacheEntity::class, com.parker.tunes.data.sources.AddonEntity::class, com.parker.tunes.data.sources.AddonSettingsEntity::class],
+    version = 11,
     exportSchema = false
 )
 abstract class LibraryDatabase : RoomDatabase() {
@@ -313,13 +314,13 @@ abstract class LibraryDatabase : RoomDatabase() {
             }
         }
 
-        fun get(context: Context): LibraryDatabase =
+        private val MIGRATION_10_11 = object : Migration(10, 11) {\n            override fun migrate(db: SupportSQLiteDatabase) {\n                db.execSQL("CREATE TABLE IF NOT EXISTS home_shelf_cache (pageIndex INTEGER NOT NULL, jsonPayload TEXT NOT NULL, fetchedAt INTEGER NOT NULL, PRIMARY KEY(pageIndex))")\n            }\n        }\n\n        fun get(context: Context): LibraryDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     LibraryDatabase::class.java,
                     "parker_tunes.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11).build().also { INSTANCE = it }
             }
     }
 }
