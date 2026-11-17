@@ -42,6 +42,23 @@ jobs:
         id: build-apk
         run: gradle --no-daemon :app:assembleDebug
 
+      - name: Print APK signing SHA-1
+        id: signing-sha1
+        if: ${{ steps.build-apk.outcome == 'success' }}
+        shell: bash
+        run: |
+          apk="app/build/outputs/apk/debug/app-debug.apk"
+          echo "Signing certificate for $apk:"
+          cert_output="$(keytool -printcert -jarfile "$apk")"
+          printf '%s\n' "$cert_output"
+          sha1="$(printf '%s\n' "$cert_output" | awk -F': ' '/SHA1:/{print $2; exit}')"
+          if [[ -z "$sha1" ]]; then
+            echo "Could not extract the APK signing SHA-1 fingerprint." >&2
+            exit 1
+          fi
+          echo "SHA-1: $sha1" >> "$GITHUB_STEP_SUMMARY"
+          echo "APK signing SHA-1: $sha1" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run Roborazzi screenshot tests
         id: roborazzi
         if: ${{ always() && steps.build-apk.outcome == 'success' }}
