@@ -64,8 +64,11 @@ fun SpotifyHomeScreen(
     val recent by remember(dao) { dao.recentlyPlayed().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
     val favorites by remember(dao) { dao.favorites().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
     var historyReady by remember(dao) { mutableStateOf(false) }
-    var recommendations by remember(api) { mutableStateOf(emptyList<Song>()) }
-    var recommendationsLoading by remember(api) { mutableStateOf(true) }
+    val recommendationViewModel = remember(api) { HomeViewModel(api) }
+    val recommendationState by recommendationViewModel.state.collectAsState()
+    val recommendations = recommendationState.songs
+    val recommendationsLoading = recommendationState.loading
+    val recommendationListState = rememberLazyListState()
     var homeShelves by remember(homeApi) { mutableStateOf(emptyList<HomeShelf>()) }
     var homeChips by remember(homeApi) { mutableStateOf(emptyList<HomeChip>()) }
     var homeContinuation by remember(homeApi) { mutableStateOf<String?>(null) }
@@ -73,9 +76,8 @@ fun SpotifyHomeScreen(
     var homePageLoading by remember(homeApi) { mutableStateOf(false) }
     val homeListState = rememberLazyListState()
     val latestTrack = recent.firstOrNull()
-    val recommendationKey = latestTrack?.songId?.let { "related:$it" } ?: "trending"
     val recommendationSubtitle = latestTrack?.artist?.takeIf { it.isNotBlank() }
-        ?.let { "Because you listened to $it" } ?: "Trending now"
+        ?.let { "Inspired by $it and similar sounds" } ?: "Trending now"
 
     LaunchedEffect(dao) {
         withContext(Dispatchers.IO) { dao.recentlyPlayed().first() }
@@ -125,49 +127,30 @@ fun SpotifyHomeScreen(
     }
 
 
-    LaunchedEffect(api, dao, historyReady, recommendationKey) {
-        if (!historyReady) return@LaunchedEffect
-
-        // Room cache is rendered first, even when stale; the network refresh never blocks it.
-        val cached = withContext(Dispatchers.IO) { dao.recommendationCache(recommendationKey) }
-        if (cached != null) {
-            val cachedSongs = decodeSongs(cached.songIdList)
-            if (cachedSongs.isNotEmpty()) recommendations = cachedSongs.take(30)
+    LaunchedEffect(api) {
+        // The recommendation model owns a screen-lifetime scope and is closed
+        // when this Home destination leaves composition.
+    }
+    DisposableEffect(recommendationViewModel) {
+        onDispose { recommendationViewModel.close() }
+    }
+    LaunchedEffect(historyReady, latestTrack?.songId, recent.map { it.songId }) {
+        if (historyReady) {
+            recommendationViewModel.onTrackChanged(
+                songId = latestTrack?.songId,
+                artist = latestTrack?.artist.orEmpty(),
+                recentSongIds = recent.map { it.songId }.toSet()
+            )
         }
-        recommendationsLoading = recommendations.isEmpty()
-
-        val refreshed = withContext(Dispatchers.IO) {
-            val related = latestTrack?.songId?.let { api.getRelatedSongs(it) }.orEmpty()
-            val trending = if (latestTrack == null || related.size < 10) api.getTrending() else emptyList()
-            val fetched = (related + trending).distinctBy { it.id }
-            val recentIds = recent.map { it.songId }.toSet()
-            var recentDuplicates = 0
-            val deduped = fetched.distinctBy { it.id }.filter { song ->
-                if (song.id !in recentIds) true
-                else if (recentDuplicates < 3) {
-                    recentDuplicates++
-                    true
-                } else false
-            }.take(30)
-            android.util.Log.i("ParkerTunes", "Home recs: fetched=${fetched.size}, deduped=${deduped.size}")
-            deduped
+    }
+    LaunchedEffect(recommendationListState) {
+        snapshotFlow {
+            val info = recommendationListState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisible >= info.totalItemsCount - 3
+        }.distinctUntilChanged().collect { nearEnd ->
+            if (nearEnd) recommendationViewModel.loadMore()
         }
-
-        if (refreshed.isNotEmpty()) {
-            recommendations = refreshed
-            withContext(Dispatchers.IO) {
-                dao.saveRecommendationCache(
-                    RecommendationCacheEntity(
-                        queryOrSongId = recommendationKey,
-                        songIdList = encodeSongs(refreshed),
-                        fetchedAt = System.currentTimeMillis()
-                    )
-                )
-                dao.pruneRecommendationCache(System.currentTimeMillis() - RECOMMENDATION_TTL_MS * 2)
-            }
-        }
-        // Keep any usable cached rows when offline. Empty results become 10 shimmer placeholders.
-        recommendationsLoading = false
     }
 
     LazyColumn(
@@ -220,6 +203,7 @@ fun SpotifyHomeScreen(
                     RecommendationRow(
                         songs = recommendations,
                         loading = recommendationsLoading,
+                        listState = recommendationListState,
                         onPlay = onPlay
                     )
                 }
@@ -289,90 +273,28 @@ fun SpotifyHomeScreen(
 }
 
 @Composable
-private fun RecommendationRow(songs: List<Song>, loading: Boolean, onPlay: (Song) -> Unit) {
-    // This composable is inside the Home screen's parent LazyColumn.
-    // Use a vertical Column here so the whole Home feed remains one scrollable list.
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+private fun RecommendationRow(
+    songs: List<Song>,
+    loading: Boolean,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    onPlay: (Song) -> Unit
+) {
+    LazyRow(
+        state = listState,
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        songs.take(30).forEach { song ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(68.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable { onPlay(song) }
-                    .padding(horizontal = 2.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF202020)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (song.coverUrl.isNullOrBlank()) {
-                        Icon(Icons.Default.MusicNote, null, tint = SpotifyGray)
-                    } else {
-                        AsyncImage(
-                            model = song.coverUrl,
-                            contentDescription = "${song.title} cover",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
-                Column(
-                    modifier = Modifier.weight(1f).padding(start = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Text(
-                        song.title,
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        song.artist.ifBlank { "Unknown artist" },
-                        color = SpotifyGray,
-                        fontSize = 13.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Icon(
-                    Icons.Default.MoreVert,
-                    contentDescription = "More options",
-                    tint = SpotifyGray,
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            }
+        items(songs, key = { "made_for_you_" + it.id }) { song ->
+            RecommendationCard(song = song, onClick = { onPlay(song) }, width = 112.dp)
         }
-
-        val placeholders = (10 - songs.size).coerceAtLeast(0)
-        if (loading || (songs.isEmpty() && placeholders > 0)) {
-            repeat(if (loading && songs.isEmpty()) 10 else placeholders) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().height(68.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        Modifier.size(54.dp).clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF303030))
-                    )
-                    Column(
-                        Modifier.weight(1f).padding(start = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(7.dp)
-                    ) {
-                        Box(Modifier.fillMaxWidth(0.68f).height(13.dp)
-                            .clip(RoundedCornerShape(4.dp)).background(Color(0xFF303030)))
-                        Box(Modifier.fillMaxWidth(0.42f).height(10.dp)
-                            .clip(RoundedCornerShape(4.dp)).background(Color(0xFF303030)))
-                    }
+        if (loading && songs.isEmpty()) {
+            items(6) { RecommendationPlaceholder(it) }
+        }
+        if (loading && songs.isNotEmpty()) {
+            item(key = "recommendations_loading_more") {
+                Box(Modifier.width(112.dp).height(155.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = SpotifyAccent, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                 }
             }
         }
@@ -381,9 +303,9 @@ private fun RecommendationRow(songs: List<Song>, loading: Boolean, onPlay: (Song
 
 @Composable
 private fun RecommendationCard(song: Song, onClick: () -> Unit, width: androidx.compose.ui.unit.Dp) {
-    Column(Modifier.width(width).clickable(onClick = onClick), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+    Column(Modifier.width(width).clickable(onClick = onClick), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(
-            Modifier.size(width = width, height = 180.dp).clip(RoundedCornerShape(12.dp))
+            Modifier.size(width = width, height = width).clip(RoundedCornerShape(10.dp))
                 .background(Color(0xFF202020)),
             contentAlignment = Alignment.Center
         ) {
@@ -394,9 +316,9 @@ private fun RecommendationCard(song: Song, onClick: () -> Unit, width: androidx.
                     contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             }
         }
-        Text(song.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+        Text(song.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
             maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(song.artist.ifBlank { "Unknown artist" }, color = SpotifyGray, fontSize = 13.sp,
+        Text(song.artist.ifBlank { "Unknown artist" }, color = SpotifyGray, fontSize = 11.sp,
             maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
@@ -409,8 +331,8 @@ private fun RecommendationPlaceholder(keyIndex: Int) {
         animationSpec = infiniteRepeatable(tween(850), RepeatMode.Reverse),
         label = "recommendationShimmerAlpha"
     )
-    Column(Modifier.width(180.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.size(180.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF303030).copy(alpha = alpha)))
+    Column(Modifier.width(112.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.size(112.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF303030).copy(alpha = alpha)))
         Box(Modifier.fillMaxWidth(0.82f).height(14.dp).clip(RoundedCornerShape(5.dp))
             .background(Color(0xFF303030).copy(alpha = alpha)))
         Box(Modifier.fillMaxWidth(0.55f).height(11.dp).clip(RoundedCornerShape(5.dp))
