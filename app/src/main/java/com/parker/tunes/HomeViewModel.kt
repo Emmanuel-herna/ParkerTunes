@@ -42,6 +42,13 @@ class HomeViewModel(private val api: MusicApi) {
         historyKey = newKey
         historyIds = newIds
 
+        if (cleaned.isEmpty()) {
+            activeLoad?.cancel()
+            artistQueue.clear()
+            mutableState.update { it.copy(songs = emptyList(), loading = false, loadingMore = false) }
+            return
+        }
+
         // Frequency is the main signal; most-recent appearance breaks ties.
         val stats = LinkedHashMap<String, Pair<Int, Song>>()
         cleaned.forEach { song ->
