@@ -864,7 +864,7 @@ private fun MiniPlayer(
         Box(Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF303030)),
             contentAlignment = Alignment.Center) {
             if (coverUrl.isNullOrBlank()) Icon(Icons.Default.Album, null, tint = Color.White)
-            else AsyncImage(model = coverUrl, contentDescription = "Current cover art",
+            else AsyncImage(model = coverUrl.artworkAt(272), contentDescription = "Current cover art",
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
         Column(Modifier.weight(1f).padding(start = 10.dp)) {
@@ -903,7 +903,7 @@ private fun NowPlayingScreen(
     val title = playerState.title
     val artist = playerState.artist
     val coverUrl = playerState.artworkUri
-    val coverCandidates = remember(coverUrl) { playerCoverCandidates(coverUrl) }
+    val coverCandidates = remember(coverUrl, songId) { playerCoverCandidates(coverUrl, songId) }
     var coverCandidateIndex by remember(coverUrl) { mutableIntStateOf(0) }
     var coverImageLoaded by remember(coverUrl) { mutableStateOf(false) }
     val coverImageAlpha by animateFloatAsState(
@@ -1212,10 +1212,10 @@ private fun NowPlayingScreen(
     }
 }
 
-private fun playerCoverCandidates(coverUrl: String?): List<String> {
+private fun playerCoverCandidates(coverUrl: String?, currentSongId: String? = null): List<String> {
     if (coverUrl.isNullOrBlank()) return emptyList()
-    val videoId = Regex("""/vi/([A-Za-z0-9_-]{11})/""")
-        .find(coverUrl)?.groupValues?.getOrNull(1)
+    val videoId = currentSongId?.takeIf { it.length == 11 }
+        ?: Regex("""/vi/([A-Za-z0-9_-]{11})/""").find(coverUrl)?.groupValues?.getOrNull(1)
     if (videoId != null) return listOf(
         "https://i.ytimg.com/vi/$videoId/maxresdefault.jpg",
         "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
