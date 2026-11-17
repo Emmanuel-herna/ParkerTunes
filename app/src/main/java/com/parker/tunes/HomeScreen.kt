@@ -112,29 +112,40 @@ fun HomeScreen(
         loadHome(uiState is UiState.Success)
     }
 
-    LaunchedEffect(listState, continuation, loadingMore, uiState) {
+    // Keep one scroll observer alive. Restarting it when loadingMore toggles can
+    // repeatedly fetch pages while the first screen is still near the bottom.
+    val latestContinuation by rememberUpdatedState(continuation)
+    val latestLoadingMore by rememberUpdatedState(loadingMore)
+    val latestUiState by rememberUpdatedState(uiState)
+    LaunchedEffect(listState) {
+        var lastRequestedToken: String? = null
         snapshotFlow {
             val info = listState.layoutInfo
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-            last >= info.totalItemsCount - 3
-        }.distinctUntilChanged().collect { nearEnd ->
-            val token = continuation
-            if (nearEnd && token != null && !loadingMore && uiState is UiState.Success) {
+            val nearEnd = info.totalItemsCount > 0 && last >= info.totalItemsCount - 3
+            nearEnd to latestContinuation
+        }.distinctUntilChanged().collect { (nearEnd, token) ->
+            if (nearEnd && token != null && token != lastRequestedToken &&
+                !latestLoadingMore && latestUiState is UiState.Success
+            ) {
+                lastRequestedToken = token
                 loadingMore = true
                 try {
                     val page = homeApi.getHome(token)
-                    val old = (uiState as? UiState.Success)?.data.orEmpty()
-                    val merged = (old + page.shelves.filter { it.items.isNotEmpty() })
+                    val existing = (latestUiState as? UiState.Success)?.data.orEmpty()
+                    val additions = page.shelves.filter { it.items.isNotEmpty() }
+                    val merged = (existing + additions)
                         .distinctBy { it.title + it.items.firstOrNull()?.browseId }
-                    continuation = page.continuation
+                    continuation = page.continuation?.takeUnless { it == token }
                     uiState = UiState.Success(merged)
                     withContext(Dispatchers.IO) {
+                        val nextIndex = dao.homeShelfCache().maxOfOrNull { it.pageIndex }?.plus(1) ?: 1
                         dao.saveHomeShelfCache(
-                            HomeShelfCacheEntity(dao.homeShelfCache().size, encodeHomeShelves(page.shelves))
+                            HomeShelfCacheEntity(nextIndex, encodeHomeShelves(additions))
                         )
                     }
                 } catch (_: Exception) {
-                    // Existing shelves stay visible; a later scroll can retry.
+                    // Keep already loaded shelves visible; do not spin on a failed token.
                 } finally {
                     loadingMore = false
                 }
