@@ -212,10 +212,15 @@ fun ParkerTunesRoot() {
         onSurface = Color(0xFF171421)
     ) else darkColorScheme(
         primary = liveAccent,
-        background = if (useAmoledBlack) Color.Black else Color(0xFF101010),
-        surface = if (useAmoledBlack) Color.Black else Panel,
+        secondary = Color.White,
+        background = if (useAmoledBlack) Color.Black else Color(0xFF0A0A0A),
+        surface = if (useAmoledBlack) Color.Black else Color(0xFF111111),
+        surfaceVariant = Color(0xFF171717),
         onBackground = Color.White,
-        onSurface = Color.White
+        onSurface = Color.White,
+        onSurfaceVariant = Color(0xFF9A9A9A),
+        outline = Color(0xFF5A5A5A),
+        outlineVariant = Color(0xFF303030)
     )
 
     MaterialTheme(colorScheme = scheme) {
