@@ -507,8 +507,13 @@ fun ParkerTunesRoot() {
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Row(
                                 Modifier.weight(1f).height(68.dp).clip(RoundedCornerShape(22.dp))
-                                    .border(1.dp, Color(0xFF505050), RoundedCornerShape(22.dp))
-                                    .background(Color.Black).padding(horizontal = 5.dp, vertical = 5.dp),
+                                    .background(Brush.verticalGradient(listOf(
+                                        Color.White.copy(alpha = 0.17f),
+                                        Color(0xFF777777).copy(alpha = 0.10f),
+                                        Color.Black.copy(alpha = 0.58f)
+                                    )))
+                                    .border(1.dp, Color.White.copy(alpha = 0.48f), RoundedCornerShape(22.dp))
+                                    .padding(horizontal = 5.dp, vertical = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 listOf("Home", "Explore", "Library", "Together").forEach { item ->
@@ -516,7 +521,10 @@ fun ParkerTunesRoot() {
                                     val itemAccent = if (item == "Together") Color(0xFFFF4D5A) else Color.White
                                     Column(
                                         Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(17.dp))
-                                            .background(if (active) Color(0xFF202020) else Color.Transparent)
+                                            .background(if (active) Color.White.copy(alpha = 0.15f) else Color.Transparent)
+                                            .border(if (active) 1.dp else 0.dp,
+                                                if (active) Color.White.copy(alpha = 0.32f) else Color.Transparent,
+                                                RoundedCornerShape(17.dp))
                                             .clickable {
                                                 selectedTab = item
                                                 nav.navigate(when (item) { "Home" -> "home"; "Explore" -> "explore"; "Library" -> "library"; else -> "together" }) {
@@ -542,8 +550,10 @@ fun ParkerTunesRoot() {
                                 }
                             }
                             Box(Modifier.size(56.dp).clip(CircleShape)
-                                .border(1.dp, Color(0xFF777777), CircleShape)
-                                .background(Color.Black)
+                                .background(Brush.verticalGradient(listOf(
+                                    Color.White.copy(alpha = 0.18f), Color.Black.copy(alpha = 0.60f)
+                                )))
+                                .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
                                 .clickable {
                                     selectedTab = "Search"
                                     nav.navigate("search") { launchSingleTop = true }
