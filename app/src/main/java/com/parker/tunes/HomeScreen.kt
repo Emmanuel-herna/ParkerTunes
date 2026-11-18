@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -237,48 +238,33 @@ fun HomeScreen(
         ) {
             item(key = "home_top_bar") {
                 Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text("PARKER", color = Color.White, fontSize = 23.sp,
-                            fontWeight = FontWeight.Black, letterSpacing = 2.2.sp)
-                        Text("T U N E S", color = Color(0xFF9A9A9A), fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold, letterSpacing = 2.4.sp)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = onSearch,
-                            modifier = Modifier.size(40.dp).border(1.dp, Color(0xFF555555), CircleShape)
-                        ) {
-                            Icon(Icons.Default.Search, contentDescription = "Search music",
-                                tint = Color.White)
-                        }
-                        IconButton(
-                            onClick = onSettings,
-                            modifier = Modifier.size(40.dp).border(1.dp, Color(0xFF555555), CircleShape)
-                        ) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings",
-                                tint = Color.White)
-                        }
+                    Text("ParkerTunes", color = Color(0xFFD6C2B9), fontSize = 17.sp,
+                        fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.4).sp)
+                    IconButton(
+                        onClick = onSettings,
+                        modifier = Modifier.size(38.dp).clip(CircleShape)
+                            .background(Color(0xFFB8B8B8).copy(alpha = 0.10f))
+                            .border(1.dp, Color.White.copy(alpha = 0.48f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings",
+                            tint = Color(0xFFD9D9D9), modifier = Modifier.size(23.dp))
                     }
                 }
             }
 
-            if (latestTrack != null) {
-                item(key = "continue_listening") {
-                    ContinueListeningCard(
-                        song = Song(latestTrack.songId, latestTrack.title.ifBlank { latestTrack.songId },
-                            latestTrack.artist, latestTrack.coverUrl),
-                        onPlay = onPlay
-                    )
-                }
+            item(key = "recently_played_feature") {
+                FeaturedRecentCard(
+                    song = latestTrack?.let { Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl) },
+                    onPlay = onPlay
+                )
             }
 
             item(key = "made_for_you") {
-                Column(Modifier.padding(top = 18.dp)) {
+                Column(Modifier.padding(top = 2.dp)) {
                     HomeSectionHeading("Made for you")
                     RecommendationShelf(
                         songs = recommendationState.songs,
@@ -377,6 +363,42 @@ fun HomeScreen(
                             style = MaterialTheme.typography.bodySmall)
                         Button(onClick = onSearch) { Text("Find music") }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeaturedRecentCard(song: Song?, onPlay: (Song) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 5.dp)
+            .height(178.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.width(34.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+            Text("Recently played", color = Color(0xFFE6E6E6), fontSize = 14.sp,
+                fontWeight = FontWeight.ExtraBold, maxLines = 1,
+                modifier = Modifier.graphicsLayer { rotationZ = -90f })
+        }
+        Box(Modifier.weight(1f).fillMaxHeight()) {
+            Box(Modifier.fillMaxWidth(0.91f).fillMaxHeight().align(Alignment.CenterStart)
+                .border(1.5.dp, Color(0xFFD0D0D0), RoundedCornerShape(28.dp)))
+            Box(
+                Modifier.fillMaxWidth(0.78f).fillMaxHeight().align(Alignment.CenterStart)
+                    .clip(RoundedCornerShape(28.dp))
+                    .border(1.5.dp, Color(0xFFD0D0D0), RoundedCornerShape(28.dp))
+                    .background(Color(0xFF171717))
+                    .then(if (song != null) Modifier.clickable { onPlay(song) } else Modifier),
+                contentAlignment = Alignment.Center
+            ) {
+                if (song?.coverUrl?.isNotBlank() == true) {
+                    AsyncImage(model = song.coverUrl, contentDescription = song.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(28.dp)))
+                } else {
+                    Icon(Icons.Default.History, contentDescription = null,
+                        tint = Color(0xFF777777), modifier = Modifier.size(42.dp))
                 }
             }
         }
@@ -497,14 +519,13 @@ private fun RecommendationShelf(
                                         width = cardWidth,
                                         onClick = { onPlay(songs[index]) }
                                     )
-                                } else if (loading && songs.isEmpty()) {
-                                    Box(
-                                        Modifier.width(cardWidth).aspectRatio(1f)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    )
                                 } else {
-                                    Spacer(Modifier.width(cardWidth).aspectRatio(1f))
+                                    Box(Modifier.width(cardWidth).aspectRatio(1f), contentAlignment = Alignment.Center) {
+                                        Box(Modifier.fillMaxWidth(0.94f).aspectRatio(1f)
+                                            .clip(CircleShape)
+                                            .border(1.5.dp, Color(0xFFD0D0D0), CircleShape)
+                                            .background(Color(0xFF111111)))
+                                    }
                                 }
                             }
                         }
@@ -543,33 +564,25 @@ private fun RecommendationShelf(
 
 @Composable
 private fun RecommendationGridTile(song: Song, width: Dp, onClick: () -> Unit) {
-    Column(
-        Modifier.width(width).clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+    Box(
+        Modifier.width(width).aspectRatio(1f).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
         Box(
-            Modifier.fillMaxWidth(0.88f).aspectRatio(1f)
+            Modifier.fillMaxWidth(0.94f).aspectRatio(1f)
                 .clip(CircleShape)
-                .border(1.dp, Color(0xFF777777), CircleShape)
-                .background(Color(0xFF151515)),
+                .border(1.5.dp, Color(0xFFD0D0D0), CircleShape)
+                .background(Color(0xFF111111)),
             contentAlignment = Alignment.Center
         ) {
             if (!song.coverUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = song.coverUrl,
-                    contentDescription = "${song.title} cover",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().clip(CircleShape)
-                )
+                AsyncImage(model = song.coverUrl, contentDescription = "${song.title} cover",
+                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
             } else {
                 Icon(Icons.Default.MusicNote, contentDescription = null,
                     tint = Color(0xFFBDBDBD), modifier = Modifier.size(30.dp))
             }
         }
-        Text(song.title, color = Color.White, fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 
