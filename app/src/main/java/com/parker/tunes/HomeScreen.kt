@@ -464,17 +464,12 @@ private fun QuickAccessTile(
 
 @Composable
 private fun HomeSectionHeading(title: String, subtitle: String? = null) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+    Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            Box(Modifier.width(3.dp).height(20.dp).clip(RoundedCornerShape(2.dp))
-                .background(Color.White))
-            Text(title.uppercase(), color = Color.White, fontSize = 15.sp,
-                fontWeight = FontWeight.ExtraBold, letterSpacing = 1.15.sp)
-        }
+        Text(title, color = Color(0xFFE5E5E5), fontSize = 15.sp,
+            fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.2).sp)
         if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF8F8F8F), modifier = Modifier.padding(start = 12.dp))
+            color = Color(0xFF8F8F8F))
     }
 }
 
