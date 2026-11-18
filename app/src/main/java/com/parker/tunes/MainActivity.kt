@@ -16,7 +16,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
-import androidx.webkit.WebViewClientCompat
+import android.webkit.WebViewClient
 import org.json.JSONObject
 import android.os.Build
 import androidx.activity.ComponentActivity
@@ -1091,7 +1091,7 @@ private fun AmLyricsWebView(
                         return true
                     }
                 }
-                webViewClient = object : WebViewClientCompat() {
+                webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(
                         view: WebView,
                         request: WebResourceRequest
