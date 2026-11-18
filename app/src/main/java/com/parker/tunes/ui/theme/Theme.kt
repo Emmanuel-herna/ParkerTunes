@@ -7,12 +7,16 @@ import androidx.compose.ui.graphics.Color
 
 private val DarkColors = darkColorScheme(
     primary = Color(0xFFB69CFF),
-    secondary = Color(0xFF8EDBD0),
-    background = Color(0xFF090B12),
-    surface = Color(0xFF151925),
-    onPrimary = Color(0xFF171126),
+    secondary = Color.White,
+    background = Color.Black,
+    surface = Color(0xFF101010),
+    surfaceVariant = Color(0xFF171717),
+    onPrimary = Color.Black,
     onBackground = Color.White,
-    onSurface = Color.White
+    onSurface = Color.White,
+    onSurfaceVariant = Color(0xFF9A9A9A),
+    outline = Color(0xFF5A5A5A),
+    outlineVariant = Color(0xFF303030)
 )
 
 @Composable
