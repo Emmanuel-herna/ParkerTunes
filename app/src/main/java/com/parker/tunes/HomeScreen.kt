@@ -7,6 +7,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -230,24 +231,37 @@ fun HomeScreen(
     ) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            modifier = Modifier.fillMaxSize().background(Color.Black),
             contentPadding = PaddingValues(top = 8.dp, bottom = 132.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             item(key = "home_top_bar") {
                 Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("ParkerTunes", style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.4).sp)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onSearch) {
-                            Icon(Icons.Default.Search, contentDescription = "Search music")
+                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text("PARKER", color = Color.White, fontSize = 23.sp,
+                            fontWeight = FontWeight.Black, letterSpacing = 2.2.sp)
+                        Text("T U N E S", color = Color(0xFF9A9A9A), fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold, letterSpacing = 2.4.sp)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = onSearch,
+                            modifier = Modifier.size(40.dp).border(1.dp, Color(0xFF555555), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = "Search music",
+                                tint = Color.White)
                         }
-                        IconButton(onClick = onSettings) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        IconButton(
+                            onClick = onSettings,
+                            modifier = Modifier.size(40.dp).border(1.dp, Color(0xFF555555), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings",
+                                tint = Color.White)
                         }
                     }
                 }
@@ -373,29 +387,31 @@ fun HomeScreen(
 private fun ContinueListeningCard(song: Song, onPlay: (Song) -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(Brush.horizontalGradient(listOf(Color(0xFF302344), Color(0xFF19151F))))
-            .clickable { onPlay(song) }.padding(14.dp),
+            .clip(RoundedCornerShape(18.dp))
+            .border(1.dp, Color(0xFF686868), RoundedCornerShape(18.dp))
+            .background(Color(0xFF080808))
+            .clickable { onPlay(song) }.padding(13.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(13.dp)
     ) {
-        Box(Modifier.size(76.dp).clip(RoundedCornerShape(13.dp))
-            .background(Color(0xFF403451)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(76.dp).clip(CircleShape)
+            .border(1.dp, Color(0xFF777777), CircleShape)
+            .background(Color(0xFF151515)), contentAlignment = Alignment.Center) {
             if (!song.coverUrl.isNullOrBlank()) {
                 AsyncImage(song.coverUrl, contentDescription = song.title,
-                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
             } else Icon(Icons.Default.Album, null, tint = Color.White, modifier = Modifier.size(34.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("PICK UP WHERE YOU LEFT OFF", color = Color(0xFFD0B9FF),
-                fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Text("CONTINUE LISTENING", color = Color(0xFFB7B7B7),
+                fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
             Text(song.title, color = Color.White, fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(song.artist.ifBlank { "Unknown artist" }, color = Color(0xFFC0B8CA),
                 style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.White,
-            modifier = Modifier.size(38.dp).clip(CircleShape).background(Color(0xFF8E6BD1)).padding(7.dp))
+        Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.Black,
+            modifier = Modifier.size(38.dp).clip(CircleShape).background(Color.White).padding(7.dp))
     }
 }
 
@@ -426,11 +442,17 @@ private fun QuickAccessTile(
 
 @Composable
 private fun HomeSectionHeading(title: String, subtitle: String? = null) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 9.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            Box(Modifier.width(3.dp).height(20.dp).clip(RoundedCornerShape(2.dp))
+                .background(Color.White))
+            Text(title.uppercase(), color = Color.White, fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold, letterSpacing = 1.15.sp)
+        }
         if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+            color = Color(0xFF8F8F8F), modifier = Modifier.padding(start = 12.dp))
     }
 }
 
@@ -521,64 +543,53 @@ private fun RecommendationShelf(
 
 @Composable
 private fun RecommendationGridTile(song: Song, width: Dp, onClick: () -> Unit) {
-    Box(
-        Modifier.width(width).aspectRatio(1f)
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick)
+    Column(
+        Modifier.width(width).clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        if (!song.coverUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = song.coverUrl,
-                contentDescription = "${song.title} cover",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        } else {
-            Icon(
-                Icons.Default.MusicNote,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.Center).size(34.dp)
-            )
-        }
         Box(
-            Modifier.fillMaxWidth().height(48.dp).align(Alignment.BottomCenter)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color.Transparent, Color.Black.copy(alpha = 0.82f))
-                    )
+            Modifier.fillMaxWidth(0.88f).aspectRatio(1f)
+                .clip(CircleShape)
+                .border(1.dp, Color(0xFF777777), CircleShape)
+                .background(Color(0xFF151515)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (!song.coverUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = song.coverUrl,
+                    contentDescription = "${song.title} cover",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(CircleShape)
                 )
-        )
-        Text(
-            song.title,
-            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 7.dp),
-            color = Color.White,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+            } else {
+                Icon(Icons.Default.MusicNote, contentDescription = null,
+                    tint = Color(0xFFBDBDBD), modifier = Modifier.size(30.dp))
+            }
+        }
+        Text(song.title, color = Color.White, fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 
 @Composable
 private fun HomeSongCard(song: Song, onClick: () -> Unit, width: Dp) {
     Column(Modifier.width(width).clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Box(Modifier.size(width).clip(RoundedCornerShape(13.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(width * 0.86f).clip(CircleShape)
+            .border(1.dp, Color(0xFF777777), CircleShape)
+            .background(Color(0xFF151515)), contentAlignment = Alignment.Center) {
             if (song.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(34.dp))
+                tint = Color(0xFFBDBDBD), modifier = Modifier.size(34.dp))
             else AsyncImage(song.coverUrl, contentDescription = "${song.title} cover",
-                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
         }
-        Text(song.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
-            maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(song.artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
-            overflow = TextOverflow.Ellipsis)
+        Text(song.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
+        Text(song.artist.ifBlank { "Unknown artist" }, color = Color(0xFF8F8F8F), fontSize = 10.sp,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
     }
 }
 
