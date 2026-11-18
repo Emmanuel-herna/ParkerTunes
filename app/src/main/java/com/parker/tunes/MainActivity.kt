@@ -1050,18 +1050,6 @@ private fun AmLyricsWebView(
     }
 
     Column(modifier = modifier) {
-    // Keep diagnostics outside AndroidView; native WebView rendering can
-    // cover Compose siblings drawn as overlays inside a Box.
-    Text(
-        text = nativeLyricsStatus,
-        color = Color(0xFFB69CFF),
-        fontSize = 10.sp,
-        maxLines = 2,
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF111015))
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-    )
     AndroidView(
         modifier = Modifier.fillMaxWidth().weight(1f),
         factory = { context ->
