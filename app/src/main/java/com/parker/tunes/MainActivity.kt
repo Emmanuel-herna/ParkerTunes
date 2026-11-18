@@ -1098,6 +1098,50 @@ private fun AmLyricsWebView(
                         view.evaluateJavascript(
                             "if (window.setParkerTrack) { window.setParkerTrack($latestTrackJson); 'track-delivered'; } else { 'track-handler-missing'; }",
                         ) { result -> Log.d("ParkerLyricsWeb", "Track delivery: $result") }
+
+                        // Inspect the real WebView layout and Lit shadow DOM after
+                        // the custom element has had time to finish its first render.
+                        view.postDelayed({
+                            if (!view.isAttachedToWindow) return@postDelayed
+                            Log.d(
+                                "ParkerLyricsWeb",
+                                "Native WebView size: ${view.width}x${view.height}, measured: ${view.measuredWidth}x${view.measuredHeight}"
+                            )
+                            view.evaluateJavascript(
+                                """(() => {
+                                  const host = document.querySelector('am-lyrics');
+                                  const root = host && host.shadowRoot;
+                                  const content = root && root.querySelector('.lyrics-container');
+                                  const status = document.getElementById('lyrics-status');
+                                  const rect = el => {
+                                    if (!el) return null;
+                                    const r = el.getBoundingClientRect();
+                                    const s = getComputedStyle(el);
+                                    return {
+                                      width: Math.round(r.width), height: Math.round(r.height),
+                                      display: s.display, visibility: s.visibility,
+                                      color: s.color, background: s.backgroundColor,
+                                      scrollHeight: el.scrollHeight
+                                    };
+                                  };
+                                  return JSON.stringify({
+                                    readyState: document.readyState,
+                                    title: document.title,
+                                    handler: typeof window.setParkerTrack,
+                                    componentDefined: !!customElements.get('am-lyrics'),
+                                    host: rect(host),
+                                    lyrics: rect(content),
+                                    status: status ? {
+                                      text: status.textContent,
+                                      hidden: status.hidden,
+                                      rect: rect(status)
+                                    } : null,
+                                    shadowText: root ? root.innerText.slice(0, 160) : null,
+                                    body: rect(document.body)
+                                  });
+                                })()""".trimIndent(),
+                            ) { result -> Log.d("ParkerLyricsWeb", "Rendered DOM snapshot: $result") }
+                        }, 1500)
                     }
 
                 }
