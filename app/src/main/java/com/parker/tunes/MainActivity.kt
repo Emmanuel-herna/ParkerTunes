@@ -1157,7 +1157,10 @@ private fun AmLyricsWebView(
                         }
                         view.evaluateJavascript(
                             "if (window.setParkerTrack) { window.setParkerTrack($latestTrackJson); 'track-delivered'; } else { 'track-handler-missing'; }",
-                        ) { result -> Log.d("ParkerLyricsWeb", "Track delivery: $result") }
+                        ) { result ->
+                            Log.d("ParkerLyricsWeb", "Track delivery: $result")
+                            mainHandler.post { nativeLyricsStatus = "Track delivery: $result" }
+                        }
 
                         // Inspect the real WebView layout and Lit shadow DOM after
                         // the custom element has had time to finish its first render.
@@ -1200,7 +1203,12 @@ private fun AmLyricsWebView(
                                     body: rect(document.body)
                                   });
                                 })()""".trimIndent(),
-                            ) { result -> Log.d("ParkerLyricsWeb", "Rendered DOM snapshot: $result") }
+                            ) { result ->
+                                Log.d("ParkerLyricsWeb", "Rendered DOM snapshot: $result")
+                                mainHandler.post {
+                                    nativeLyricsStatus = "Lyrics DOM: " + result.take(220)
+                                }
+                            }
                         }, 1500)
                     }
 
