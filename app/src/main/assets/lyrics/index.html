@@ -8,6 +8,7 @@
     html, body {
       width: 100%;
       height: 100%;
+      min-height: 100%;
       margin: 0;
       padding: 0;
       overflow: hidden;
@@ -15,7 +16,10 @@
       color: #fff;
     }
 
-    body { position: relative; }
+    body {
+      position: relative;
+      min-height: 100vh;
+    }
 
     #lyrics-status {
       position: absolute;
@@ -35,8 +39,11 @@
 
     am-lyrics {
       display: block;
+      position: absolute;
+      inset: 0;
       width: 100%;
-      height: 100%;
+      height: 100vh;
+      min-height: 100vh;
       color: #fff;
       --am-lyrics-highlight-color: #B69CFF;
       --highlight-color: #B69CFF;
@@ -99,7 +106,14 @@
 
         lyrics = element;
         activeTrackKey = key;
-        element.style.minHeight = '100%';
+        // Android WebView can report a zero-height percentage host even when
+        // its native view has a real height. Anchor the custom element to the
+        // WebView viewport so Lit's 100% lyrics container has a definite size.
+        element.style.position = 'absolute';
+        element.style.inset = '0';
+        element.style.width = '100%';
+        element.style.height = '100vh';
+        element.style.minHeight = '100vh';
         document.body.appendChild(element);
 
         // Do not hide the fallback message merely because the custom element
