@@ -505,15 +505,17 @@ fun ParkerTunesRoot() {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Row(
-                                Modifier.weight(1f).height(68.dp).clip(RoundedCornerShape(28.dp))
-                                    .background(Color(0xFF1A1A1A)).padding(horizontal = 5.dp, vertical = 5.dp),
+                                Modifier.weight(1f).height(68.dp).clip(RoundedCornerShape(22.dp))
+                                    .border(1.dp, Color(0xFF505050), RoundedCornerShape(22.dp))
+                                    .background(Color.Black).padding(horizontal = 5.dp, vertical = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 listOf("Home", "Explore", "Library", "Together").forEach { item ->
                                     val active = selectedTab == item
+                                    val itemAccent = if (item == "Together") Color(0xFFFF4D5A) else Color.White
                                     Column(
-                                        Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(22.dp))
-                                            .background(if (active) Color(0xFF34303B) else Color.Transparent)
+                                        Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(17.dp))
+                                            .background(if (active) Color(0xFF202020) else Color.Transparent)
                                             .clickable {
                                                 selectedTab = item
                                                 nav.navigate(when (item) { "Home" -> "home"; "Explore" -> "explore"; "Library" -> "library"; else -> "together" }) {
@@ -527,18 +529,20 @@ fun ParkerTunesRoot() {
                                             when (item) { "Home" -> Icons.Default.Home; "Explore" -> Icons.Default.GridView
                                                 "Library" -> Icons.Default.LibraryBooks; else -> Icons.Default.Groups },
                                             contentDescription = item,
-                                            tint = if (active) Color.White else Color(0xFFA7A7A7),
+                                            tint = if (active) itemAccent else Color(0xFF888888),
                                             modifier = Modifier.size(21.dp)
                                         )
                                         Text(
-                                            item, color = if (active) Color.White else Color(0xFFA7A7A7),
+                                            item, color = if (active) itemAccent else Color(0xFF888888),
                                             fontSize = 10.sp, maxLines = 1, softWrap = false,
-                                            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium
+                                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
                                         )
                                     }
                                 }
                             }
-                            Box(Modifier.size(56.dp).clip(CircleShape).background(Color(0xFF242424))
+                            Box(Modifier.size(56.dp).clip(CircleShape)
+                                .border(1.dp, Color(0xFF777777), CircleShape)
+                                .background(Color.Black)
                                 .clickable {
                                     selectedTab = "Search"
                                     nav.navigate("search") { launchSingleTop = true }
