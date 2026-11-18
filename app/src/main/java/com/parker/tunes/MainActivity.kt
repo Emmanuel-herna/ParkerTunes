@@ -1172,36 +1172,40 @@ private fun AmLyricsWebView(
                             )
                             view.evaluateJavascript(
                                 """(() => {
-                                  const host = document.querySelector('am-lyrics');
-                                  const root = host && host.shadowRoot;
-                                  const content = root && root.querySelector('.lyrics-container');
-                                  const status = document.getElementById('lyrics-status');
-                                  const rect = el => {
-                                    if (!el) return null;
-                                    const r = el.getBoundingClientRect();
-                                    const s = getComputedStyle(el);
-                                    return {
-                                      width: Math.round(r.width), height: Math.round(r.height),
-                                      display: s.display, visibility: s.visibility,
-                                      color: s.color, background: s.backgroundColor,
-                                      scrollHeight: el.scrollHeight
+                                  try {
+                                    const host = document.querySelector('am-lyrics');
+                                    const root = host && host.shadowRoot;
+                                    const content = root && root.querySelector('.lyrics-container');
+                                    const status = document.getElementById('lyrics-status');
+                                    const rect = el => {
+                                      if (!el) return null;
+                                      const r = el.getBoundingClientRect();
+                                      const style = getComputedStyle(el);
+                                      return {
+                                        width: Math.round(r.width), height: Math.round(r.height),
+                                        display: style.display, visibility: style.visibility,
+                                        color: style.color, background: style.backgroundColor,
+                                        scrollHeight: el.scrollHeight
+                                      };
                                     };
-                                  };
-                                  return JSON.stringify({
-                                    readyState: document.readyState,
-                                    title: document.title,
-                                    handler: typeof window.setParkerTrack,
-                                    componentDefined: !!customElements.get('am-lyrics'),
-                                    host: rect(host),
-                                    lyrics: rect(content),
-                                    status: status ? {
-                                      text: status.textContent,
-                                      hidden: status.hidden,
-                                      rect: rect(status)
-                                    } : null,
-                                    shadowText: root ? root.innerText.slice(0, 160) : null,
-                                    body: rect(document.body)
-                                  });
+                                    return JSON.stringify({
+                                      readyState: document.readyState,
+                                      title: document.title,
+                                      handler: typeof window.setParkerTrack,
+                                      componentDefined: !!customElements.get('am-lyrics'),
+                                      host: rect(host),
+                                      lyrics: rect(content),
+                                      status: status ? {
+                                        text: status.textContent,
+                                        hidden: status.hidden,
+                                        rect: rect(status)
+                                      } : null,
+                                      shadowText: root ? (root.textContent || '').slice(0, 160) : null,
+                                      body: rect(document.body)
+                                    });
+                                  } catch (error) {
+                                    return JSON.stringify({ inspectionError: String(error), stack: error && error.stack });
+                                  }
                                 })()""".trimIndent(),
                             ) { result ->
                                 Log.d("ParkerLyricsWeb", "Rendered DOM snapshot: $result")
