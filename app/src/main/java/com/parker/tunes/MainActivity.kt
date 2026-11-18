@@ -488,6 +488,9 @@ fun ParkerTunesRoot() {
         }
 
         Scaffold(
+            modifier = if (currentRoute == "home") Modifier.padding(8.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .border(2.dp, Color(0xFFD0D0D0), RoundedCornerShape(28.dp)) else Modifier,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
@@ -536,14 +539,14 @@ fun ParkerTunesRoot() {
                                         verticalArrangement = Arrangement.Center
                                     ) {
                                         Icon(
-                                            when (item) { "Home" -> Icons.Default.Home; "Explore" -> Icons.Default.GridView
+                                            when (item) { "Home" -> Icons.Default.Home; "Explore" -> Icons.Default.Explore
                                                 "Library" -> Icons.Default.LibraryBooks; else -> Icons.Default.Groups },
                                             contentDescription = item,
                                             tint = if (active) itemAccent else Color(0xFF888888),
                                             modifier = Modifier.size(21.dp)
                                         )
                                         Text(
-                                            item, color = if (active) itemAccent else Color(0xFF888888),
+                                            item.uppercase(), color = if (active) itemAccent else Color(0xFF888888),
                                             fontSize = 10.sp, maxLines = 1, softWrap = false,
                                             fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
                                         )
