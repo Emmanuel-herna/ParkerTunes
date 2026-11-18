@@ -18,7 +18,8 @@
 
     body {
       position: relative;
-      min-height: 100vh;
+      height: 100%;
+      min-height: 280px;
     }
 
     #lyrics-status {
@@ -39,11 +40,12 @@
 
     am-lyrics {
       display: block;
-      position: absolute;
-      inset: 0;
+      position: relative;
+      inset: auto;
       width: 100%;
-      height: 100vh;
-      min-height: 100vh;
+      height: 100%;
+      min-height: 280px;
+      box-sizing: border-box;
       color: #fff;
       --am-lyrics-highlight-color: #B69CFF;
       --highlight-color: #B69CFF;
@@ -106,14 +108,16 @@
 
         lyrics = element;
         activeTrackKey = key;
-        // Android WebView can report a zero-height percentage host even when
-        // its native view has a real height. Anchor the custom element to the
-        // WebView viewport so Lit's 100% lyrics container has a definite size.
-        element.style.position = 'absolute';
-        element.style.inset = '0';
-        element.style.width = '100%';
-        element.style.height = '100vh';
-        element.style.minHeight = '100vh';
+        // Give the custom element a real layout height. Android WebView can
+        // report 100vh/absolute hosts as zero-height; a normal-flow host with
+        // a pixel minimum lets its shadow-DOM lyrics container measure itself.
+        element.style.setProperty('position', 'relative', 'important');
+        element.style.setProperty('inset', 'auto', 'important');
+        element.style.setProperty('display', 'block', 'important');
+        element.style.setProperty('width', '100%', 'important');
+        element.style.setProperty('height', '100%', 'important');
+        element.style.setProperty('min-height', '280px', 'important');
+        element.style.setProperty('box-sizing', 'border-box', 'important');
         document.body.appendChild(element);
 
         // Do not hide the fallback message merely because the custom element
