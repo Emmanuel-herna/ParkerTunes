@@ -1188,20 +1188,24 @@ private fun AmLyricsWebView(
                                         scrollHeight: el.scrollHeight
                                       };
                                     };
+                                    const compactRect = el => {
+                                      if (!el) return 'missing';
+                                      const r = el.getBoundingClientRect();
+                                      const s = getComputedStyle(el);
+                                      return Math.round(r.width) + 'x' + Math.round(r.height) +
+                                        '/' + s.display + '/' + s.visibility;
+                                    };
+                                    const lyricText = root
+                                      ? (root.querySelector('.lyrics-container')?.textContent || '').trim()
+                                      : '';
                                     return JSON.stringify({
-                                      readyState: document.readyState,
-                                      title: document.title,
-                                      handler: typeof window.setParkerTrack,
-                                      componentDefined: !!customElements.get('am-lyrics'),
-                                      host: rect(host),
-                                      lyrics: rect(content),
-                                      status: status ? {
-                                        text: status.textContent,
-                                        hidden: status.hidden,
-                                        rect: rect(status)
-                                      } : null,
-                                      shadowText: root ? (root.textContent || '').slice(0, 160) : null,
-                                      body: rect(document.body)
+                                      host: compactRect(host),
+                                      inner: compactRect(content),
+                                      body: compactRect(document.body),
+                                      loading: host ? String(host.isLoading) : 'no-host',
+                                      count: host && Array.isArray(host.lyrics) ? host.lyrics.length : -1,
+                                      status: status ? status.textContent.slice(0, 65) : 'none',
+                                      text: lyricText.slice(0, 45)
                                     });
                                   } catch (error) {
                                     return JSON.stringify({ inspectionError: String(error), stack: error && error.stack });
