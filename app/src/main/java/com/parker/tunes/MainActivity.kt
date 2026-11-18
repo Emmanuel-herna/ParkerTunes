@@ -1029,6 +1029,7 @@ private fun AmLyricsWebView(
             .toString()
     }
     val latestTrackJson by rememberUpdatedState(trackJson)
+    var nativeLyricsStatus by remember { mutableStateOf("Starting lyrics WebView...") }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val bridge = remember {
         object {
@@ -1048,8 +1049,9 @@ private fun AmLyricsWebView(
         }
     }
 
+    Box(modifier = modifier) {
     AndroidView(
-        modifier = modifier,
+        modifier = Modifier.fillMaxSize(),
         factory = { context ->
             val assetLoader = WebViewAssetLoader.Builder()
                 .addPathHandler(
@@ -1092,9 +1094,15 @@ private fun AmLyricsWebView(
                     override fun onPageFinished(view: WebView, url: String?) {
                         super.onPageFinished(view, url)
                         Log.d("ParkerLyricsWeb", "Page finished: $url")
+                        nativeLyricsStatus = "Lyrics page loaded; checking JavaScript..."
                         view.evaluateJavascript(
                             "({pageReady: !!document.readyState, trackHandler: typeof window.setParkerTrack, componentDefined: !!customElements.get('am-lyrics')})",
-                        ) { result -> Log.d("ParkerLyricsWeb", "Page state: $result") }
+                        ) { result ->
+                            Log.d("ParkerLyricsWeb", "Page state: $result")
+                            mainHandler.post {
+                                nativeLyricsStatus = "Web page ready: $result"
+                            }
+                        }
                         view.evaluateJavascript(
                             "if (window.setParkerTrack) { window.setParkerTrack($latestTrackJson); 'track-delivered'; } else { 'track-handler-missing'; }",
                         ) { result -> Log.d("ParkerLyricsWeb", "Track delivery: $result") }
@@ -1154,6 +1162,18 @@ private fun AmLyricsWebView(
             ) { result -> Log.d("ParkerLyricsWeb", "Updated track delivery: $result") }
         }
     )
+    Text(
+        text = nativeLyricsStatus,
+        color = Color(0xFFB69CFF),
+        fontSize = 9.sp,
+        maxLines = 2,
+        modifier = Modifier
+            .align(Alignment.BottomStart)
+            .padding(horizontal = 6.dp, vertical = 3.dp)
+            .background(Color(0xCC111015), RoundedCornerShape(4.dp))
+            .padding(horizontal = 5.dp, vertical = 2.dp)
+    )
+    }
 }
 
 @Composable
