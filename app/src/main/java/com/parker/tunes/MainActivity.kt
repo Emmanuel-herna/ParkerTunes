@@ -70,6 +70,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
@@ -1262,6 +1264,7 @@ private fun NowPlayingScreen(
     val dragOffset = dragAnimation.value
     val progressValue = if (seeking) seekValue
         else position.toFloat().coerceIn(0f, duration.toFloat().coerceAtLeast(1f))
+    var lyricsExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -1554,6 +1557,68 @@ private fun NowPlayingScreen(
                     onSeek = { timestamp -> player?.seekTo(timestamp) },
                     modifier = Modifier.fillMaxWidth().height(280.dp)
                 )
+                IconButton(
+                    onClick = { lyricsExpanded = true },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(2.dp).size(38.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Fullscreen,
+                        contentDescription = "Expand lyrics",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        }
+
+        if (lyricsExpanded && title.isNotBlank()) {
+            Dialog(
+                onDismissRequest = { lyricsExpanded = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Column(
+                    Modifier.fillMaxSize().background(Color(0xFF08080B))
+                        .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().height(48.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { lyricsExpanded = false }) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Close full-screen lyrics",
+                                tint = Color.White
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "LYRICS",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 2.sp
+                        )
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = { lyricsExpanded = false }) {
+                            Icon(
+                                Icons.Default.FullscreenExit,
+                                contentDescription = "Exit full-screen lyrics",
+                                tint = Color.White
+                            )
+                        }
+                    }
+                    AmLyricsWebView(
+                        trackId = player?.currentMediaItem?.mediaId.orEmpty(),
+                        title = title,
+                        artist = artist,
+                        durationMs = duration,
+                        currentTimeMs = position,
+                        isPlaying = playing,
+                        onSeek = { timestamp -> player?.seekTo(timestamp) },
+                        modifier = Modifier.fillMaxWidth().weight(1f)
+                    )
+                }
             }
         }
     }
