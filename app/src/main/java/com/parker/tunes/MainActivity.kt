@@ -1049,9 +1049,21 @@ private fun AmLyricsWebView(
         }
     }
 
-    Box(modifier = modifier) {
+    Column(modifier = modifier) {
+    // Keep diagnostics outside AndroidView; native WebView rendering can
+    // cover Compose siblings drawn as overlays inside a Box.
+    Text(
+        text = nativeLyricsStatus,
+        color = Color(0xFFB69CFF),
+        fontSize = 10.sp,
+        maxLines = 2,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF111015))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    )
     AndroidView(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxWidth().weight(1f),
         factory = { context ->
             val assetLoader = WebViewAssetLoader.Builder()
                 .addPathHandler(
@@ -1089,6 +1101,46 @@ private fun AmLyricsWebView(
                             Log.d("ParkerLyricsWeb", "Asset request: ${request.url} | ${if (response != null) "served by asset loader" else "not handled by asset loader"}")
                         }
                         return response
+                    }
+
+                    override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                        super.onPageStarted(view, url, favicon)
+                        nativeLyricsStatus = "Loading lyrics page..."
+                        Log.d("ParkerLyricsWeb", "Page started: $url")
+                    }
+
+                    override fun onReceivedError(
+                        view: WebView,
+                        request: WebResourceRequest,
+                        error: android.webkit.WebResourceError
+                    ) {
+                        super.onReceivedError(view, request, error)
+                        if (request.isForMainFrame) {
+                            val detail = error.description?.toString() ?: "Unknown WebView error"
+                            nativeLyricsStatus = "Lyrics page error: " + detail + " (" + error.errorCode + ")"
+                            Log.e("ParkerLyricsWeb", nativeLyricsStatus)
+                        }
+                    }
+
+                    override fun onReceivedHttpError(
+                        view: WebView,
+                        request: WebResourceRequest,
+                        response: WebResourceResponse
+                    ) {
+                        super.onReceivedHttpError(view, request, response)
+                        if (request.isForMainFrame) {
+                            nativeLyricsStatus = "Lyrics page HTTP error: " + response.statusCode
+                            Log.e("ParkerLyricsWeb", nativeLyricsStatus)
+                        }
+                    }
+
+                    override fun onRenderProcessGone(
+                        view: WebView,
+                        detail: android.webkit.RenderProcessGoneDetail
+                    ): Boolean {
+                        nativeLyricsStatus = "Lyrics WebView process stopped (crashed=" + detail.didCrash() + ")"
+                        Log.e("ParkerLyricsWeb", nativeLyricsStatus)
+                        return true
                     }
 
                     override fun onPageFinished(view: WebView, url: String?) {
@@ -1161,17 +1213,6 @@ private fun AmLyricsWebView(
                 "if (window.setParkerTrack) { window.setParkerTrack($trackJson); 'track-delivered'; } else { 'track-handler-not-ready'; }",
             ) { result -> Log.d("ParkerLyricsWeb", "Updated track delivery: $result") }
         }
-    )
-    Text(
-        text = nativeLyricsStatus,
-        color = Color(0xFFB69CFF),
-        fontSize = 9.sp,
-        maxLines = 2,
-        modifier = Modifier
-            .align(Alignment.BottomStart)
-            .padding(horizontal = 6.dp, vertical = 3.dp)
-            .background(Color(0xCC111015), RoundedCornerShape(4.dp))
-            .padding(horizontal = 5.dp, vertical = 2.dp)
     )
     }
 }
