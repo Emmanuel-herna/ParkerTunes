@@ -336,63 +336,6 @@ fun ParkerTunesRoot() {
             }
         }
 
-        // Persist every newly selected media item from Media3 callbacks. This
-        // also covers tracks started from Home, playlists, and system controls.
-        DisposableEffect(controller, dao) {
-            val activePlayer = controller
-            if (activePlayer == null) {
-                onDispose { }
-            } else {
-                var lastRecordedMediaId: String? = null
-                val historyListener = object : Player.Listener {
-                    private fun record(item: MediaItem?) {
-                        val songId = item?.mediaId?.takeIf { it.isNotBlank() } ?: return
-                        val metadata = item.mediaMetadata
-                        scope.launch(Dispatchers.IO) {
-                            dao.recordPlay(
-                                PlayHistoryEntity(
-                                    songId = songId,
-                                    title = metadata.title?.toString().orEmpty(),
-                                    artist = metadata.artist?.toString().orEmpty(),
-                                    coverUrl = metadata.artworkUri?.toString()
-                                )
-                            )
-                        }
-                    }
-
-                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                        val nextId = mediaItem?.mediaId
-                        if (!nextId.isNullOrBlank() && nextId != lastRecordedMediaId) {
-                            lastRecordedMediaId = nextId
-                            record(mediaItem)
-                        }
-                    }
-
-                    override fun onIsPlayingChanged(isPlaying: Boolean) {
-                        if (isPlaying) {
-                            val current = activePlayer.currentMediaItem
-                            if (current?.mediaId != lastRecordedMediaId) {
-                                lastRecordedMediaId = current?.mediaId
-                                record(current)
-                            }
-                        }
-                    }
-
-                    override fun onPlaybackStateChanged(playbackState: Int) {
-                        if (playbackState == Player.STATE_ENDED) {
-                            val current = activePlayer.currentMediaItem
-                            if (current?.mediaId != lastRecordedMediaId) {
-                                lastRecordedMediaId = current?.mediaId
-                                record(current)
-                            }
-                        }
-                    }
-                }
-                activePlayer.addListener(historyListener)
-                onDispose { activePlayer.removeListener(historyListener) }
-            }
-        }
-
         val playSong: (Song) -> Unit = { song ->
             val activeController = controller
             if (activeController != null) {
