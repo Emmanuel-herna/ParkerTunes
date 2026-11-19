@@ -31,6 +31,7 @@ import com.parker.tunes.data.LibraryDao
 import com.parker.tunes.data.ListeningEventEntity
 import com.parker.tunes.data.SettingsRepository
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val SettingsMuted = Color(0xFFA7A7A7)
 private val SettingsAccents = listOf(
@@ -136,7 +137,7 @@ fun SettingsScreen(
         item { SettingRow(Icons.Default.Explore, "Reduce similar music", "Favor variety over repeating familiar artists", if (reduceSimilar) "On" else "Off", { scope.launch { repository.setReduceSimilarMusic(!reduceSimilar) } }, toggle = reduceSimilar) }
         item { SettingRow(Icons.Default.Tune, "Discovery diversity", "Balance familiar music and new artists", diversity.toString() + "%", { sheet = "discovery_diversity" }) }
         item { SettingRow(Icons.Default.History, "View listening activity", "See recommendation signals stored on this device", "View", { scope.launch { activityItems = withContext(kotlinx.coroutines.Dispatchers.IO) { dao.listeningEvents(100) }; showActivity = true } }) }
-        item { SettingRow(Icons.Default.DeleteSweep, "Clear listening activity", "Remove local signals; keep favorites and play history", "Clear", { confirmClearActivity = true }) }
+        item { SettingRow(Icons.Default.DeleteSweep, "Reset Music DNA", "Clear local listening signals; keep favorites and play history", "Reset", { confirmClearActivity = true }) }
 
         item { SettingsSection("SOUND") }
         item { SettingRow(Icons.Default.Equalizer, "Equalizer", "Presets and frequency controls", "Open", onOpenEqualizer) }
