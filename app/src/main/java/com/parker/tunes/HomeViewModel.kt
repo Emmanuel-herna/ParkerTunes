@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class HomeRecommendationState(
     val songs: List<Song> = emptyList(),
@@ -36,6 +37,8 @@ class HomeViewModel(private val api: MusicApi) {
     private var artistQueue: ArrayDeque<Song> = ArrayDeque()
     private var discoveryQueue: ArrayDeque<String> = ArrayDeque()
     private var activeLoad: Job? = null
+    private var profileJob: Job? = null
+    private var profileGeneration: Long = 0L
     private var loadMoreJob: Job? = null
     private var musicProfile: MusicTasteProfile = MusicTasteProfile.EMPTY
     private var discoveryDiversity: Int = 50
@@ -46,17 +49,39 @@ class HomeViewModel(private val api: MusicApi) {
         events: List<ListeningEventEntity>, favorites: List<FavoriteEntity>,
         personalizationEnabled: Boolean = true, diversity: Int = 50, reduceSimilar: Boolean = false
     ) {
-        musicProfile = if (personalizationEnabled) MusicTasteProfile.build(events, favorites) else MusicTasteProfile.EMPTY
         discoveryDiversity = diversity.coerceIn(0, 100)
         reduceSimilarMusic = reduceSimilar
-        val current = mutableState.value.songs
-        val topArtists = musicProfile.artistAffinity.entries.sortedByDescending { it.value }
-            .take(8).map { it.key }
-        mutableState.update { it.copy(topArtists = topArtists, songs = if (current.isNotEmpty()) rank(current) else current) }
+        val generation = ++profileGeneration
+        profileJob?.cancel()
+        profileJob = scope.launch {
+            val profile = withContext(Dispatchers.Default) {
+                if (personalizationEnabled) MusicTasteProfile.build(events, favorites)
+                else MusicTasteProfile.EMPTY
+            }
+            if (generation != profileGeneration) return@launch
+            musicProfile = profile
+            val topArtists = profile.artistAffinity.entries.sortedByDescending { it.value }
+                .take(8).map { it.key }
+            val current = mutableState.value.songs
+            val ranked = if (current.isNotEmpty()) rank(current) else current
+            if (generation == profileGeneration) {
+                mutableState.update { it.copy(topArtists = topArtists, songs = ranked) }
+            }
+        }
     }
 
-    private fun rank(candidates: List<Song>): List<Song> =
-        musicProfile.rank(candidates, historyIds, limit = MAX_RECOMMENDATIONS, diversityPercent = discoveryDiversity, reduceSimilarMusic = reduceSimilarMusic)
+    private suspend fun rank(candidates: List<Song>): List<Song> {
+        val profile = musicProfile
+        val excluded = historyIds
+        val diversity = discoveryDiversity
+        val reduceSimilar = reduceSimilarMusic
+        return withContext(Dispatchers.Default) {
+            profile.rank(
+                candidates, excluded, limit = MAX_RECOMMENDATIONS,
+                diversityPercent = diversity, reduceSimilarMusic = reduceSimilar
+            )
+        }
+    }
 
     fun onListeningHistory(history: List<Song>) {
         val cleaned = history.filter { it.id.isNotBlank() }
@@ -212,6 +237,7 @@ class HomeViewModel(private val api: MusicApi) {
     fun close() {
         activeLoad?.cancel()
         loadMoreJob?.cancel()
+        profileJob?.cancel()
         scope.cancel()
     }
 
