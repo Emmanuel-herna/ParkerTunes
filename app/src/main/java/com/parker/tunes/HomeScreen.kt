@@ -225,7 +225,8 @@ fun HomeScreen(
                         onQueue = onQueue,
                         onDownload = downloads::enqueue,
                         isFavorite = { it.id in favoriteIds },
-                        onFavorite = toggleFavorite
+                        onFavorite = toggleFavorite,
+                        reduceMotion = reduceMotion
                     )
                 }
             }
@@ -304,7 +305,8 @@ private fun QuickPicksSection(
 @Composable
 private fun QuickPickRow(
     number: Int, song: Song, onPlay: (Song) -> Unit, onQueue: (Song, Boolean) -> Unit,
-    onDownload: (Song) -> Unit, isFavorite: (Song) -> Boolean, onFavorite: (Song) -> Unit
+    onDownload: (Song) -> Unit, isFavorite: (Song) -> Boolean, onFavorite: (Song) -> Unit,
+    reduceMotion: Boolean = false
 ) {
     var menu by remember(song.id) { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 5.dp)
@@ -387,7 +389,7 @@ private fun ActionSongCard(
 private fun SongActionMenu(
     expanded: Boolean, dismiss: () -> Unit, song: Song, onPlay: (Song) -> Unit,
     onQueue: (Song, Boolean) -> Unit, onDownload: (Song) -> Unit,
-    favorite: Boolean, onFavorite: () -> Unit
+    favorite: Boolean, onFavorite: () -> Unit, reduceMotion: Boolean = false
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = dismiss) {
         DropdownMenuItem(text = { Text("Play") }, onClick = { dismiss(); onPlay(song) })
@@ -582,7 +584,8 @@ private fun RecommendationShelf(
                                         onQueue = onQueue,
                                         onDownload = onDownload,
                                         favorite = isFavorite(songs[index]),
-                                        onFavorite = { onFavorite(songs[index]) }
+                                        onFavorite = { onFavorite(songs[index]) },
+                                        reduceMotion = reduceMotion
                                     )
                                 }
                             }
@@ -679,7 +682,7 @@ private fun RecommendationGridTile(
 }
 
 @Composable
-private fun HomeSongCard(song: Song, onClick: () -> Unit, width: Dp) {
+private fun HomeSongCard(song: Song, onClick: () -> Unit, width: Dp, reduceMotion: Boolean = false) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
