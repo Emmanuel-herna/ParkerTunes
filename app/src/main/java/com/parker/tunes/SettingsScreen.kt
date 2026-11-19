@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import coil.imageLoader
 import com.parker.tunes.data.BackupManager
 import com.parker.tunes.data.LibraryDao
+import com.parker.tunes.data.ListeningEventEntity
 import com.parker.tunes.data.SettingsRepository
 import kotlinx.coroutines.launch
 
@@ -66,6 +67,9 @@ fun SettingsScreen(
     var sheet by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf<String?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
+    var confirmClearActivity by remember { mutableStateOf(false) }
+    var showActivity by remember { mutableStateOf(false) }
+    var activityItems by remember { mutableStateOf<List<ListeningEventEntity>>(emptyList()) }
     val quality by repository.audioQuality.collectAsState(initial = "Auto")
     val crossfade by repository.crossfadeSeconds.collectAsState(initial = 0)
     val automix by repository.automix.collectAsState(initial = false)
@@ -127,6 +131,13 @@ fun SettingsScreen(
         item { SettingRow(Icons.Default.HighQuality, "Audio quality", "Preferred streaming quality", quality, { sheet = "quality" }) }
         item { SettingRow(Icons.Default.PlayCircle, "Resume where you left off", "Continue from your last position", if (resume) "On" else "Off", { scope.launch { repository.setResumePlayback(!resume) } }, toggle = resume) }
 
+        item { SettingsSection("MUSIC INTELLIGENCE") }
+        item { SettingRow(Icons.Default.AutoAwesome, "Personalize recommendations", "Use your on-device listening signals", if (personalization) "On" else "Off", { scope.launch { repository.setRecommendationPersonalization(!personalization) } }, toggle = personalization) }
+        item { SettingRow(Icons.Default.Explore, "Reduce similar music", "Favor variety over repeating familiar artists", if (reduceSimilar) "On" else "Off", { scope.launch { repository.setReduceSimilarMusic(!reduceSimilar) } }, toggle = reduceSimilar) }
+        item { SettingRow(Icons.Default.Tune, "Discovery diversity", "Balance familiar music and new artists", diversity.toString() + "%", { sheet = "discovery_diversity" }) }
+        item { SettingRow(Icons.Default.History, "View listening activity", "See recommendation signals stored on this device", "View", { scope.launch { activityItems = withContext(kotlinx.coroutines.Dispatchers.IO) { dao.listeningEvents(100) }; showActivity = true } }) }
+        item { SettingRow(Icons.Default.DeleteSweep, "Clear listening activity", "Remove local signals; keep favorites and play history", "Clear", { confirmClearActivity = true }) }
+
         item { SettingsSection("SOUND") }
         item { SettingRow(Icons.Default.Equalizer, "Equalizer", "Presets and frequency controls", "Open", onOpenEqualizer) }
         item { SettingRow(Icons.Default.GraphicEq, "Bass Boost", null, if (bass) "On" else "Off", { scope.launch { repository.setBassBoost(!bass) } }, toggle = bass) }
@@ -176,6 +187,44 @@ fun SettingsScreen(
         item { status?.let { Text(it, color = SettingsMuted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp)) } }
     }
 
+    if (confirmClearActivity) AlertDialog(
+        onDismissRequest = { confirmClearActivity = false },
+        title = { Text("Clear listening activity?") },
+        text = { Text("This deletes local listening-event signals used by Music DNA. Favorites, playlists, downloads and play history will remain. Favorites can still influence recommendations.") },
+        confirmButton = { TextButton(onClick = {
+            confirmClearActivity = false
+            scope.launch {
+                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    dao.clearListeningEvents()
+                    dao.clearHomeShelfCache()
+                    dao.pruneRecommendationCache(Long.MAX_VALUE)
+                }
+                activityItems = emptyList()
+                status = "Listening activity cleared. Your library and play history are unchanged."
+            }
+        }) { Text("Clear activity") } },
+        dismissButton = { TextButton(onClick = { confirmClearActivity = false }) { Text("Cancel") } }
+    )
+
+    if (showActivity) AlertDialog(
+        onDismissRequest = { showActivity = false },
+        title = { Text("Listening activity") },
+        text = {
+            if (activityItems.isEmpty()) Text("No local recommendation activity has been recorded yet.")
+            else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                activityItems.take(12).forEach { event ->
+                    Column {
+                        Text(event.title.ifBlank { event.songId }, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(event.artist.ifBlank { "Unknown artist" } + " · " + event.eventType.replace("_", " ").lowercase(), color = SettingsMuted, fontSize = 12.sp)
+                    }
+                }
+                if (activityItems.size > 12) Text("Showing the latest 12 of " + activityItems.size + " events.", color = SettingsMuted, fontSize = 11.sp)
+            }
+        },
+        confirmButton = { TextButton(onClick = { showActivity = false }) { Text("Close") } },
+        dismissButton = { TextButton(onClick = { showActivity = false; confirmClearActivity = true }) { Text("Clear activity") } }
+    )
+
     if (confirmClear) AlertDialog(
         onDismissRequest = { confirmClear = false },
         title = { Text("Clear cache?") },
@@ -194,6 +243,13 @@ fun SettingsScreen(
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         when (sheet) {
+            "discovery_diversity" -> {
+                Text("Discovery diversity", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(22.dp))
+                Text("Lower values favor familiar artists. Higher values introduce more variety.", color = SettingsMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 22.dp))
+                Slider(value = diversity.toFloat(), onValueChange = { value -> scope.launch { repository.setDiscoveryDiversity(value.toInt()) } }, valueRange = 0f..100f, modifier = Modifier.padding(horizontal = 20.dp))
+                Text(diversity.toString() + "%", color = Color.White, modifier = Modifier.padding(horizontal = 22.dp))
+                TextButton(onClick = { sheet = null }, modifier = Modifier.padding(12.dp)) { Text("Done") }
+            }
             "quality" -> ChoiceSheet("Audio quality", listOf("Auto","High","Medium","Low"), quality) { scope.launch { repository.setAudioQuality(it) }; sheet = null }
             "refresh_rate" -> ChoiceSheet("Refresh rate", refreshRateOptions, refreshRateLabel) { choice ->
                 val rate = when (choice) {
