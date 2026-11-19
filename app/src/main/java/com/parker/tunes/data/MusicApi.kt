@@ -347,8 +347,7 @@ class NewPipeMusicApi : MusicApi {
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            if (browseId.isNullOrBlank()) throw failure
-            emptyList()
+            throw failure
         }
     }
 

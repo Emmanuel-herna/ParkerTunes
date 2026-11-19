@@ -34,6 +34,7 @@ import com.parker.tunes.model.Album
 import com.parker.tunes.model.Artist
 import com.parker.tunes.model.ArtistProfile
 import com.parker.tunes.model.Song
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -348,9 +349,15 @@ fun AlbumScreen(album: Album, api: MusicApi, onBack: () -> Unit, onPlay: (Song) 
     LaunchedEffect(album.id, api, retryToken) {
         loading = true
         error = null
-        try { tracks = withContext(Dispatchers.IO) { api.getAlbumTracks(album.id) } }
-        catch (failure: Exception) { error = failure.message ?: "Couldn't load this album." }
-        finally { loading = false }
+        try {
+            tracks = withContext(Dispatchers.IO) { api.getAlbumTracks(album.id) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            error = failure.message?.takeIf { it.isNotBlank() } ?: "Couldn't load this album. Check your connection and try again."
+        } finally {
+            loading = false
+        }
     }
     Column(Modifier.fillMaxSize().background(ArtistBg)) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -370,9 +377,39 @@ fun AlbumScreen(album: Album, api: MusicApi, onBack: () -> Unit, onPlay: (Song) 
             }
             if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = ArtistAccent) }
             if (error != null) item {
-                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    Modifier.fillMaxWidth().padding(28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("Couldn't load this album", color = Color.White,
+                        fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     Text(error.orEmpty(), color = ArtistMuted)
-                    TextButton(onClick = { retryToken++ }) { Text("Retry", color = ArtistAccent) }
+                    TextButton(onClick = { retryToken++ }) {
+                        Text("Try again", color = ArtistAccent)
+                    }
+                }
+            } else if (!loading && tracks.isEmpty()) {
+                item {
+                    Column(
+                        Modifier.fillMaxWidth().padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        androidx.compose.material3.Icon(
+                            androidx.compose.material.icons.Icons.Default.MusicNote,
+                            contentDescription = null,
+                            tint = ArtistMuted,
+                            modifier = Modifier.size(34.dp)
+                        )
+                        Text("No tracks found", color = Color.White,
+                            fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text("This album didn't return any playable tracks. Try again in a moment.",
+                            color = ArtistMuted)
+                        TextButton(onClick = { retryToken++ }) {
+                            Text("Retry", color = ArtistAccent)
+                        }
+                    }
                 }
             }
             items(tracks, key = { it.id }) { song ->
