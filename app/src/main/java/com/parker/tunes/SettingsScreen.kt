@@ -99,6 +99,9 @@ fun SettingsScreen(
     val listenBrainz by repository.listenBrainzEnabled.collectAsState(initial = false)
     val lastFmKey by repository.lastFmApiKey.collectAsState(initial = "")
     val listenBrainzToken by repository.listenBrainzToken.collectAsState(initial = "")
+    val personalization by repository.recommendationPersonalization.collectAsState(initial = true)
+    val reduceSimilar by repository.reduceSimilarMusic.collectAsState(initial = false)
+    val diversity by repository.discoveryDiversity.collectAsState(initial = 50)
     val accentColor = SettingsAccents.firstOrNull { it.first == accent }?.second ?: SettingsAccents.first().second
 
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
