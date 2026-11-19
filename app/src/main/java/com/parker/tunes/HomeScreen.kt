@@ -350,7 +350,7 @@ private fun SongShelfSection(
             horizontalArrangement = Arrangement.spacedBy(13.dp)) {
             items(songs.take(5), key = { title + "_" + it.id }) { song ->
                 ActionSongCard(song, currentSongId == song.id, onPlay, onQueue, onDownload,
-                    isFavorite(song)) { onFavorite(song) }
+                    favorite = isFavorite(song), onFavorite = { onFavorite(song) })
             }
         }
     }
