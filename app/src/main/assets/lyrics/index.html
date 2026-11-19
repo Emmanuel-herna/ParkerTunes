@@ -29,10 +29,14 @@
       place-items: center;
       padding: 20px;
       box-sizing: border-box;
-      color: #B69CFF;
-      background: #111015;
-      font: 13px Arial, sans-serif;
+      color: #E9E2FF;
+      background:
+        radial-gradient(ellipse at 50% 0%, rgba(182, 156, 255, 0.16), transparent 66%),
+        linear-gradient(180deg, #17131F 0%, #100F15 100%);
+      font: 500 14px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      letter-spacing: 0.01em;
       text-align: center;
+      text-wrap: balance;
       z-index: 2;
     }
 
@@ -47,13 +51,19 @@
       min-height: 280px;
       box-sizing: border-box;
       color: #fff;
-      --am-lyrics-highlight-color: #B69CFF;
-      --highlight-color: #B69CFF;
-      --lyplus-font-size-base: 23px;
-      --am-lyrics-line-height: 1.25;
-      --am-lyrics-line-spacing: 16px;
-      --am-lyrics-inline-padding: 14px;
-      --lyrics-scroll-padding-top: 25%;
+      --am-lyrics-highlight-color: #C7B2FF;
+      --highlight-color: #C7B2FF;
+      --lyplus-font-size-base: clamp(24px, 5.8vw, 32px);
+      --am-lyrics-line-height: 1.32;
+      --am-lyrics-line-spacing: 23px;
+      --am-lyrics-inline-padding: 20px;
+      --am-lyrics-inactive-scale: 0.97;
+      --am-lyrics-highlight-radius: 18px;
+      --am-lyrics-highlight-surface: rgba(182, 156, 255, 0.09);
+      --am-lyrics-progression-feather: 34px;
+      --lyplus-blur-amount: 0.045em;
+      --lyplus-blur-amount-near: 0.02em;
+      --lyrics-scroll-padding-top: 34%;
     }
   </style>
 </head>
