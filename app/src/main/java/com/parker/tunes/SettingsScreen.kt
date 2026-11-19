@@ -1,5 +1,6 @@
 package com.parker.tunes
 
+import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -50,6 +51,17 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var preferredRefreshRate by remember(settingsPrefs) {
+        mutableIntStateOf(settingsPrefs.getInt("preferred_refresh_rate", 0))
+    }
+    val refreshRateOptions = remember(context) {
+        val display = (context as? Activity)?.window?.decorView?.display
+        val supported = display?.supportedModes.orEmpty().map { it.refreshRate }
+        listOf(60, 90, 120).filter { target ->
+            supported.any { kotlin.math.abs(it - target.toFloat()) <= 1.5f }
+        }.map { "$it Hz" }.let { listOf("System default") + it }
+    }
+    val refreshRateLabel = if (preferredRefreshRate <= 0) "System default" else "${preferredRefreshRate} Hz"
     val backup = remember(dao, context) { BackupManager(context, dao, settingsPrefs) }
     var sheet by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf<String?>(null) }
@@ -131,6 +143,7 @@ fun SettingsScreen(
         item { SettingRow(Icons.Default.Speed, "Stats for nerds", "Codec, bitrate and sample-rate overlay · UI pending", if (nerds) "On" else "Off", { scope.launch { repository.setStatsForNerds(!nerds) } }, toggle = nerds) }
 
         item { SettingsSection("DISPLAY") }
+        item { SettingRow(Icons.Default.Speed, "Refresh rate", "Choose the display smoothness ParkerTunes requests", refreshRateLabel, { sheet = "refresh_rate" }) }
         item { SettingRow(Icons.Default.Palette, "Accent color", "Choose ParkerTunes highlight color", accent.replaceFirstChar { it.uppercase() }, { sheet = "theme" }) }
         item { SettingRow(Icons.Default.DarkMode, "AMOLED black", "Use pure black surfaces", if (amoled) "On" else "Off", { scope.launch { repository.setAmoledBlack(!amoled) } }, toggle = amoled) }
         item { SettingRow(Icons.Default.Wallpaper, "Player background", null, playerBackground, { sheet = "background" }) }
@@ -182,6 +195,18 @@ fun SettingsScreen(
     ) {
         when (sheet) {
             "quality" -> ChoiceSheet("Audio quality", listOf("Auto","High","Medium","Low"), quality) { scope.launch { repository.setAudioQuality(it) }; sheet = null }
+            "refresh_rate" -> ChoiceSheet("Refresh rate", refreshRateOptions, refreshRateLabel) { choice ->
+                val rate = when (choice) {
+                    "60 Hz" -> 60
+                    "90 Hz" -> 90
+                    "120 Hz" -> 120
+                    else -> 0
+                }
+                preferredRefreshRate = rate
+                settingsPrefs.edit().putInt("preferred_refresh_rate", rate).apply()
+                (context as? Activity)?.let { applyPreferredRefreshRate(it, rate) }
+                sheet = null
+            }
             "background" -> ChoiceSheet("Player background", listOf("Artwork colors","AMOLED black","Gradient"), playerBackground) { scope.launch { repository.setPlayerBackground(it) }; sheet = null }
             "size" -> ChoiceSheet("Interface size", listOf("90%","100%","110%","120%"), "$size%") { scope.launch { repository.setInterfaceSize(it.removeSuffix("%").toInt()) }; sheet = null }
             "theme" -> {
