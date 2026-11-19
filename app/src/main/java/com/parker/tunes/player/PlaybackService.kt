@@ -199,22 +199,31 @@ class PlaybackService : MediaSessionService() {
         if (startedTrackByPlayer[player] == songId) return
         startedTrackByPlayer[player] = songId
         val metadata = item.mediaMetadata
+        // ExoPlayer is confined to its application looper. Snapshot every player
+        // value before dispatching database work to IO; never read player.duration
+        // from the background coroutine.
+        val durationMs = player.duration.takeIf { it > 0L } ?: 0L
+        val title = metadata.title?.toString().orEmpty()
+        val artist = metadata.artist?.toString().orEmpty()
+        val coverUrl = metadata.artworkUri?.toString()
         serviceScope.launch(Dispatchers.IO) {
-            val dao = (application as ParkerTunesApp).database.libraryDao()
-            dao.recordPlay(PlayHistoryEntity(
-                songId = songId,
-                title = metadata.title?.toString().orEmpty(),
-                artist = metadata.artist?.toString().orEmpty(),
-                coverUrl = metadata.artworkUri?.toString()
-            ))
-            dao.recordListeningEvent(ListeningEventEntity(
-                songId = songId,
-                eventType = "PLAY_STARTED",
-                title = metadata.title?.toString().orEmpty(),
-                artist = metadata.artist?.toString().orEmpty(),
-                coverUrl = metadata.artworkUri?.toString(),
-                durationMs = player.duration.takeIf { it > 0L } ?: 0L
-            ))
+            runCatching {
+                val dao = (application as ParkerTunesApp).database.libraryDao()
+                dao.recordPlay(PlayHistoryEntity(
+                    songId = songId,
+                    title = title,
+                    artist = artist,
+                    coverUrl = coverUrl
+                ))
+                dao.recordListeningEvent(ListeningEventEntity(
+                    songId = songId,
+                    eventType = "PLAY_STARTED",
+                    title = title,
+                    artist = artist,
+                    coverUrl = coverUrl,
+                    durationMs = durationMs
+                ))
+            }
         }
         serviceScope.launch {
             kotlinx.coroutines.delay(30_000L)
