@@ -13,8 +13,8 @@ class MusicTasteProfileTest {
         val now = 1_800_000_000_000L
         val profile = MusicTasteProfile.build(
             events = listOf(
-                event("artist-a", "PLAY_QUALIFIED", now),
-                event("artist-b", "PLAY_STARTED", now)
+                event("Artist A", "PLAY_QUALIFIED", now),
+                event("Artist B", "PLAY_STARTED", now)
             ),
             favorites = emptyList(),
             now = now
@@ -33,9 +33,9 @@ class MusicTasteProfileTest {
         val now = 1_800_000_000_000L
         val profile = MusicTasteProfile.build(
             events = listOf(
-                event("artist-a", "PLAY_QUALIFIED", now),
-                event("artist-a", "SKIPPED", now, positionMs = 20_000L),
-                event("artist-b", "PLAY_QUALIFIED", now)
+                event("Artist A", "PLAY_QUALIFIED", now),
+                event("Artist A", "SKIPPED", now, positionMs = 20_000L),
+                event("Artist B", "PLAY_QUALIFIED", now)
             ),
             favorites = emptyList(),
             now = now
