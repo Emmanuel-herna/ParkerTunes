@@ -5,6 +5,12 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -375,9 +381,18 @@ private fun SettingRow(
     icon: ImageVector, title: String, subtitle: String?, value: String,
     onClick: () -> Unit, toggle: Boolean? = null
 ) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.975f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "settingRowPress"
+    )
     Row(
-        Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick).padding(horizontal = 0.dp),
+        Modifier.fillMaxWidth().height(56.dp).graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 0.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, null, tint = SettingsMuted, modifier = Modifier.size(24.dp))
