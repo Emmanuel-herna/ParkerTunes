@@ -30,6 +30,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
 import org.json.JSONArray
+import org.json.JSONObject
 
 data class LyricLine(val timeMs: Long, val text: String)
 data class SyncedLyrics(val lines: List<LyricLine>)
