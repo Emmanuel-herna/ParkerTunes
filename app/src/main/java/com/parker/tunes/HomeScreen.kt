@@ -105,6 +105,7 @@ fun HomeScreen(
     val personalizationEnabled by settingsRepository.recommendationPersonalization.collectAsState(initial = true)
     val reduceSimilar by settingsRepository.reduceSimilarMusic.collectAsState(initial = false)
     val discoveryDiversity by settingsRepository.discoveryDiversity.collectAsState(initial = 50)
+    val reduceMotion by settingsRepository.reduceMotion.collectAsState(initial = false)
     val recommendationViewModel = remember(api) { HomeViewModel(api) }
     val recommendationState by recommendationViewModel.state.collectAsState()
     var historyReady by remember(dao) { mutableStateOf(false) }
@@ -630,8 +631,8 @@ private fun RecommendationGridTile(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.94f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        targetValue = if (pressed) 0.90f else 1f,
+        animationSpec = if (reduceMotion) tween(durationMillis = 80) else spring(dampingRatio = 0.08f, stiffness = 650f),
         label = "recommendationTilePress"
     )
     var menu by remember(song.id) { mutableStateOf(false) }
@@ -682,8 +683,8 @@ private fun HomeSongCard(song: Song, onClick: () -> Unit, width: Dp) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.94f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        targetValue = if (pressed) 0.90f else 1f,
+        animationSpec = if (reduceMotion) tween(durationMillis = 80) else spring(dampingRatio = 0.08f, stiffness = 650f),
         label = "homeSongPress"
     )
     Column(Modifier.width(width).graphicsLayer { scaleX = scale; scaleY = scale }
