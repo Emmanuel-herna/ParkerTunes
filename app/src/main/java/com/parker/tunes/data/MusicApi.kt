@@ -126,8 +126,15 @@ class NewPipeMusicApi : MusicApi {
                 albumExtractor.initialPage.items.filterIsInstance<PlaylistInfoItem>()
                     .mapNotNull { item ->
                         val id = item.url?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                        Album(id, item.name.orEmpty(), item.thumbnails.firstOrNull()?.url,
-                            item.streamCount.coerceAtLeast(0L))
+                        Album(
+                            id = id,
+                            title = item.name.orEmpty(),
+                            coverUrl = item.thumbnails.firstOrNull()?.url,
+                            trackCount = item.streamCount.coerceAtLeast(0L),
+                            year = extractReleaseYear(
+                                item.name.orEmpty() + " " + item.description?.content.orEmpty()
+                            )
+                        )
                     }.distinctBy { it.id }.take(20)
             }.getOrDefault(emptyList())
 
@@ -534,7 +541,7 @@ class DemoMusicApi : MusicApi by NewPipeMusicApi()
 
 /** Extracts a release year only when the source metadata actually contains one. */
 private fun extractReleaseYear(metadata: String): String {
-    val match = Regex("""\\b(19\\d{2}|20\\d{2})\\b""").find(metadata) ?: return ""
+    val match = Regex("""\b(19\d{2}|20\d{2})\b""").find(metadata) ?: return ""
     val year = match.value.toIntOrNull() ?: return ""
     return year.takeIf { it in 1900..2100 }?.toString().orEmpty()
 }
