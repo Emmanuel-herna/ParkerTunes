@@ -1286,19 +1286,23 @@ private fun NowPlayingScreen(
 
                     val shouldDismiss = dismissGesture && totalDrag > dismissThreshold
                     if (shouldDismiss) {
-                        dragAnimation.animateTo(
-                            exitDistance,
-                            tween(240, easing = FastOutSlowInEasing)
-                        )
-                        onBack()
-                    } else {
-                        dragAnimation.animateTo(
-                            0f,
-                            spring(
-                                dampingRatio = Spring.DampingRatioNoBouncy,
-                                stiffness = Spring.StiffnessMediumLow
+                        dragScope.launch {
+                            dragAnimation.animateTo(
+                                exitDistance,
+                                tween(240, easing = FastOutSlowInEasing)
                             )
-                        )
+                            onBack()
+                        }
+                    } else {
+                        dragScope.launch {
+                            dragAnimation.animateTo(
+                                0f,
+                                spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            )
+                        }
                     }
                 }
             }
