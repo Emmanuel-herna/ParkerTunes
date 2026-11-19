@@ -84,79 +84,33 @@ fun HomeScreen(
     onExplore: () -> Unit,
     homeApi: YtMusicHomeApi,
     settingsRepository: SettingsRepository,
+    downloads: com.parker.tunes.data.SongDownloadManager,
     onOpenPlaylist: (ShelfItem, HomeShelf) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    val recommendationListState = rememberLazyListState()
-    // Reuse the application-wide Coil loader and its shared caches.
     val imageLoader = context.imageLoader
 
-    val recentFlow = remember(dao) { dao.recentlyPlayed().flowOn(Dispatchers.IO) }
-    val favoritesFlow = remember(dao) { dao.favorites().flowOn(Dispatchers.IO) }
-    val recent by recentFlow.collectAsState(initial = emptyList())
-    val favorites by favoritesFlow.collectAsState(initial = emptyList())
+    val recent by remember(dao) { dao.recentlyPlayed().flowOn(Dispatchers.IO) }
+        .collectAsState(initial = emptyList())
+    val favorites by remember(dao) { dao.favorites().flowOn(Dispatchers.IO) }
+        .collectAsState(initial = emptyList())
+    val mostPlayed by remember(dao) { dao.mostPlayed().flowOn(Dispatchers.IO) }
+        .collectAsState(initial = emptyList())
     val listeningEvents by remember(dao) { dao.observeListeningEvents().flowOn(Dispatchers.IO) }
         .collectAsState(initial = emptyList())
     val personalizationEnabled by settingsRepository.recommendationPersonalization.collectAsState(initial = true)
     val reduceSimilar by settingsRepository.reduceSimilarMusic.collectAsState(initial = false)
     val discoveryDiversity by settingsRepository.discoveryDiversity.collectAsState(initial = 50)
-    var historyReady by remember(dao) { mutableStateOf(false) }
-    val latestTrack = recent.firstOrNull()
-    val recentHistoryKey = remember(recent) { recent.map { it.id } }
-
     val recommendationViewModel = remember(api) { HomeViewModel(api) }
     val recommendationState by recommendationViewModel.state.collectAsState()
+    var historyReady by remember(dao) { mutableStateOf(false) }
+    var currentSongId by remember(player) { mutableStateOf(player?.currentMediaItem?.mediaId) }
+
     DisposableEffect(recommendationViewModel) {
         onDispose { recommendationViewModel.close() }
     }
-    LaunchedEffect(dao) {
-        withContext(Dispatchers.IO) { dao.recentlyPlayed().first() }
-        historyReady = true
-    }
-    LaunchedEffect(historyReady, recentHistoryKey, favorites, listeningEvents, personalizationEnabled, reduceSimilar, discoveryDiversity) {
-        if (historyReady) {
-            val history = withContext(Dispatchers.IO) { dao.historySnapshot() }
-            // Use the visible recent-play rows as a safety net if the snapshot
-            // races the Room Flow's first emission on a fresh install.
-            val historySongs = history.map { entry ->
-                Song(entry.songId, entry.title.ifBlank { entry.songId }, entry.artist, entry.coverUrl)
-            }
-            val recentSongs = recent.map { entry ->
-                Song(entry.songId, entry.title.ifBlank { entry.songId }, entry.artist, entry.coverUrl)
-            }
-            val favoriteSongs = favorites.map { entry ->
-                Song(entry.songId, entry.title.ifBlank { entry.songId }, entry.artist, entry.coverUrl)
-            }
-            // Build Music DNA only from this device's local events and favourites.
-            // No listening data is uploaded or shared with other listeners.
-            recommendationViewModel.onMusicSignals(listeningEvents, favorites, personalizationEnabled, discoveryDiversity, reduceSimilar)
-            // Keep repeated history rows so artist frequency reflects actual plays.
-            // Recent rows are only a fallback when the full snapshot is empty; favourites
-            // seed the profile without duplicating songs already represented in history.
-            val historyIds = historySongs.map { it.id }.toSet()
-            val recommendationSeeds = historySongs.ifEmpty { recentSongs } +
-                favoriteSongs.filterNot { it.id in historyIds }
-            recommendationViewModel.onListeningHistory(recommendationSeeds)
-        }
-    }
-    LaunchedEffect(recommendationListState) {
-        snapshotFlow {
-            val info = recommendationListState.layoutInfo
-            val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-            info.totalItemsCount > 1 && last >= info.totalItemsCount - 1
-        }.distinctUntilChanged().collect { nearEnd ->
-            if (nearEnd) recommendationViewModel.loadMore()
-        }
-    }
-
-    var uiState by remember(homeApi) { mutableStateOf<UiState<List<HomeShelf>>>(UiState.Loading) }
-    var continuation by remember(homeApi) { mutableStateOf<String?>(null) }
-    var refreshing by remember { mutableStateOf(false) }
-    var loadingMore by remember { mutableStateOf(false) }
-    var currentSongId by remember(player) { mutableStateOf(player?.currentMediaItem?.mediaId) }
-
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -166,98 +120,66 @@ fun HomeScreen(
         player?.addListener(listener)
         onDispose { player?.removeListener(listener) }
     }
-
-    suspend fun loadHome(isRefresh: Boolean) {
-        if (isRefresh) refreshing = true
-        else if (uiState !is UiState.Success) uiState = UiState.Loading
-        try {
-            val page = homeApi.getHome()
-            val shelves = page.shelves.filter { it.items.isNotEmpty() }
-            continuation = page.continuation
-            uiState = UiState.Success(shelves)
-            withContext(Dispatchers.IO) {
-                dao.clearHomeShelfCache()
-                dao.saveHomeShelfCache(HomeShelfCacheEntity(0, encodeHomeShelves(shelves)))
-            }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (error: Exception) {
-            if (uiState !is UiState.Success) {
-                uiState = UiState.Error(error.message ?: "Couldn't load your music feed.")
-            }
-        } finally {
-            refreshing = false
-        }
+    LaunchedEffect(dao) {
+        withContext(Dispatchers.IO) { dao.recentlyPlayed().first() }
+        historyReady = true
     }
-
-    LaunchedEffect(homeApi, dao) {
-        val cache = withContext(Dispatchers.IO) { dao.homeShelfCache() }
-        val cachedShelves = cache.sortedBy { it.pageIndex }
-            .flatMap { decodeHomeShelves(it.jsonPayload) }
-            .distinctBy { it.title + it.items.firstOrNull()?.browseId }
-        if (cachedShelves.isNotEmpty()) uiState = UiState.Success(cachedShelves)
-        loadHome(uiState is UiState.Success)
-    }
-
-    // One stable observer, with one request per continuation token.
-    val latestContinuation by rememberUpdatedState(continuation)
-    val latestLoadingMore by rememberUpdatedState(loadingMore)
-    val latestUiState by rememberUpdatedState(uiState)
-    LaunchedEffect(listState) {
-        var lastRequestedToken: String? = null
-        snapshotFlow {
-            val info = listState.layoutInfo
-            val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-            val nearEnd = info.totalItemsCount > 0 && last >= info.totalItemsCount - 3
-            nearEnd to latestContinuation
-        }.distinctUntilChanged().collect { (nearEnd, token) ->
-            if (nearEnd && token != null && token != lastRequestedToken &&
-                !latestLoadingMore && latestUiState is UiState.Success
-            ) {
-                lastRequestedToken = token
-                loadingMore = true
-                try {
-                    val page = homeApi.getHome(token)
-                    val existing = (latestUiState as? UiState.Success)?.data.orEmpty()
-                    val additions = page.shelves.filter { it.items.isNotEmpty() }
-                    val merged = (existing + additions)
-                        .distinctBy { it.title + it.items.firstOrNull()?.browseId }
-                    continuation = page.continuation?.takeUnless { it == token }
-                    uiState = UiState.Success(merged)
-                    withContext(Dispatchers.IO) {
-                        val nextIndex = dao.homeShelfCache().maxOfOrNull { it.pageIndex }?.plus(1) ?: 1
-                        dao.saveHomeShelfCache(HomeShelfCacheEntity(nextIndex, encodeHomeShelves(additions)))
-                    }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    // Keep the content already on screen if a continuation fails.
-                } finally {
-                    loadingMore = false
-                }
-            }
-        }
-    }
-
-    val adaptiveShelves = remember(uiState, recommendationState.topArtists, discoveryDiversity) {
-        when (val homeState = uiState) {
-            is UiState.Success -> AdaptiveHomeFeed.rank(
-                homeState.data, recommendationState.topArtists, discoveryDiversity
+    LaunchedEffect(historyReady, recent, favorites, listeningEvents, personalizationEnabled, reduceSimilar, discoveryDiversity) {
+        if (historyReady) {
+            val history = withContext(Dispatchers.IO) { dao.historySnapshot() }
+            val historySongs = history.map { Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl) }
+            val recentSongs = recent.map { Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl) }
+            val favoriteSongs = favorites.map { Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl) }
+            recommendationViewModel.onMusicSignals(listeningEvents, favorites, personalizationEnabled, discoveryDiversity, reduceSimilar)
+            val historyIds = historySongs.map { it.id }.toSet()
+            recommendationViewModel.onListeningHistory(
+                historySongs.ifEmpty { recentSongs } + favoriteSongs.filterNot { it.id in historyIds }
             )
-            else -> emptyList()
+        }
+    }
+
+    var discovery by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var newReleases by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var trending by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var discoveryLoaded by remember { mutableStateOf(false) }
+    LaunchedEffect(api) {
+        coroutineScope {
+            val discoveryTask = async { runCatching { api.getMoodSongs("discover new music") }.getOrDefault(emptyList()) }
+            val releasesTask = async { runCatching { api.getMoodSongs("new music releases") }.getOrDefault(emptyList()) }
+            val trendingTask = async { runCatching { api.getTrending() }.getOrDefault(emptyList()) }
+            discovery = discoveryTask.await().distinctBy { it.id }.take(5)
+            newReleases = releasesTask.await().distinctBy { it.id }.take(5)
+            trending = trendingTask.await().distinctBy { it.id }.take(5)
+            discoveryLoaded = true
+        }
+    }
+
+    val favoriteIds = remember(favorites) { favorites.map { it.songId }.toSet() }
+    val toggleFavorite: (Song) -> Unit = { song ->
+        scope.launch(Dispatchers.IO) {
+            if (dao.isFavorite(song.id)) dao.removeFavorite(song.id)
+            else dao.addFavorite(com.parker.tunes.data.FavoriteEntity(
+                songId = song.id, title = song.title, artist = song.artist, coverUrl = song.coverUrl
+            ))
         }
     }
 
     PullToRefreshBox(
-        isRefreshing = refreshing,
-        onRefresh = { scope.launch { loadHome(true) } },
+        isRefreshing = false,
+        onRefresh = { scope.launch {
+            discoveryLoaded = false
+            discovery = runCatching { api.getMoodSongs("discover new music") }.getOrDefault(emptyList()).distinctBy { it.id }.take(5)
+            newReleases = runCatching { api.getMoodSongs("new music releases") }.getOrDefault(emptyList()).distinctBy { it.id }.take(5)
+            trending = runCatching { api.getTrending() }.getOrDefault(emptyList()).distinctBy { it.id }.take(5)
+            discoveryLoaded = true
+        } },
         modifier = Modifier.fillMaxSize()
     ) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().background(Color.Black),
             contentPadding = PaddingValues(top = 8.dp, bottom = 132.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             item(key = "home_top_bar") {
                 Row(
@@ -271,7 +193,6 @@ fun HomeScreen(
                         onClick = onSettings,
                         modifier = Modifier.size(38.dp).clip(CircleShape)
                             .background(Color(0xFFB8B8B8).copy(alpha = 0.10f))
-                            
                     ) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings",
                             tint = Color(0xFFD9D9D9), modifier = Modifier.size(23.dp))
@@ -279,118 +200,68 @@ fun HomeScreen(
                 }
             }
 
-            item(key = "recently_played_feature") {
-                val featuredSong = latestTrack?.let {
-                    Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl)
-                } ?: recommendationState.songs.firstOrNull()
-                FeaturedRecentCard(
-                    song = featuredSong,
-                    sectionLabel = if (latestTrack != null) "Recently played" else "Discover",
-                    onPlay = onPlay,
-                    onSearch = onSearch
+            item(key = "quick_picks") {
+                QuickPicksSection(
+                    songs = recommendationState.songs.take(5),
+                    loading = recommendationState.loading,
+                    onPlay = onPlay, onQueue = onQueue, onDownload = downloads::enqueue,
+                    isFavorite = { it.id in favoriteIds }, onFavorite = toggleFavorite
                 )
             }
 
             item(key = "made_for_you") {
-                Column(Modifier.padding(top = 2.dp)) {
+                Column(Modifier.padding(top = 5.dp)) {
                     HomeSectionHeading("Made for you")
                     RecommendationShelf(
-                        songs = recommendationState.songs,
+                        songs = recommendationState.songs.take(3),
                         loading = recommendationState.loading,
-                        loadingMore = recommendationState.loadingMore,
-                        listState = recommendationListState,
-                        onPlay = onPlay
+                        loadingMore = false,
+                        listState = rememberLazyListState(),
+                        onPlay = onPlay,
+                        onLongPress = { song -> }
                     )
                 }
             }
 
             if (recent.isNotEmpty()) {
                 item(key = "recently_played") {
-                    Column(Modifier.padding(top = 12.dp)) {
-                        HomeSectionHeading("Recently played")
-                        LazyRow(contentPadding = PaddingValues(horizontal = 18.dp),
-                            horizontalArrangement = Arrangement.spacedBy(13.dp)) {
-                            items(recent.take(20), key = { "recent_" + it.id }) { track ->
-                                HomeSongCard(
-                                    song = Song(track.songId, track.title.ifBlank { track.songId }, track.artist, track.coverUrl),
-                                    onClick = { onPlay(Song(track.songId, track.title.ifBlank { track.songId }, track.artist, track.coverUrl)) },
-                                    width = 132.dp
-                                )
-                            }
-                        }
-                    }
+                    SongShelfSection("Recently played", recent.take(5).map {
+                        Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl)
+                    }, currentSongId, onPlay, onQueue, downloads::enqueue, { it.id in favoriteIds }, toggleFavorite)
                 }
+            }
+
+            if (mostPlayed.isNotEmpty()) {
+                item(key = "heavy_rotation") {
+                    SongShelfSection("Heavy Rotation", mostPlayed.take(5).map {
+                        Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl)
+                    }, currentSongId, onPlay, onQueue, downloads::enqueue, { it.id in favoriteIds }, toggleFavorite)
+                }
+            }
+
+            item(key = "daily_discovery") {
+                SongShelfSection("Daily Discovery", discovery, currentSongId, onPlay, onQueue,
+                    downloads::enqueue, { it.id in favoriteIds }, toggleFavorite,
+                    emptyMessage = if (discoveryLoaded) "No discovery results available right now." else "Finding something new…")
+            }
+
+            item(key = "new_releases") {
+                SongShelfSection("New Releases", newReleases, currentSongId, onPlay, onQueue,
+                    downloads::enqueue, { it.id in favoriteIds }, toggleFavorite,
+                    emptyMessage = if (discoveryLoaded) "New release results aren't available right now." else "Loading new releases…")
+            }
+
+            item(key = "trending") {
+                SongShelfSection("Trending", trending, currentSongId, onPlay, onQueue,
+                    downloads::enqueue, { it.id in favoriteIds }, toggleFavorite,
+                    emptyMessage = if (discoveryLoaded) "Trending tracks aren't available right now." else "Loading trending tracks…")
             }
 
             if (favorites.isNotEmpty()) {
-                item(key = "favorites") {
-                    Column(Modifier.padding(top = 14.dp)) {
-                        HomeSectionHeading("Your favorites")
-                        LazyRow(contentPadding = PaddingValues(horizontal = 18.dp),
-                            horizontalArrangement = Arrangement.spacedBy(13.dp)) {
-                            items(favorites.take(20), key = { "favorite_" + it.songId }) { favorite ->
-                                val song = Song(favorite.songId, favorite.title, favorite.artist, favorite.coverUrl)
-                                HomeSongCard(song = song, onClick = { onPlay(song) }, width = 132.dp)
-                            }
-                        }
-                    }
-                }
-            }
-
-            when (val state = uiState) {
-                UiState.Loading -> items(3, key = { "loading_shelf_" + it }) { HomeShelfSkeleton() }
-                is UiState.Error -> item(key = "home_error") {
-                    Column(
-                        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 22.dp)
-                            .clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface)
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.Start,
-                        verticalArrangement = Arrangement.spacedBy(9.dp)
-                    ) {
-                        Text("Discover music", style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold)
-                        Text("Check your connection and try again.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall)
-                        TextButton(onClick = { scope.launch { loadHome(false) } }) { Text("Try again") }
-                    }
-                }
-                is UiState.Success -> {
-                    if (adaptiveShelves.isNotEmpty()) {
-                        items(adaptiveShelves, key = { shelf ->
-                            "shelf_" + shelf.title + "_" +
-                                (shelf.items.firstOrNull()?.videoId ?: shelf.items.firstOrNull()?.browseId.orEmpty())
-                        }) { shelf ->
-                            HomeShelfSection(
-                                shelf = shelf, currentSongId = currentSongId, imageLoader = imageLoader,
-                                onPlay = onPlay, onQueue = onQueue,
-                                onOpen = { onOpenPlaylist(it, shelf) }
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (loadingMore) item(key = "continuation_loading") { HomeShelfSkeleton() }
-
-            if (recent.isEmpty() && favorites.isEmpty() &&
-                recommendationState.songs.isEmpty() && uiState !is UiState.Loading
-            ) {
-                item(key = "empty_home") {
-                    Column(
-                        Modifier.fillMaxWidth().padding(horizontal = 30.dp, vertical = 30.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(42.dp))
-                        Text("Your next favorite song is waiting", style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold)
-                        Text("Search for an artist, album or song to get started.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall)
-                        Button(onClick = onSearch) { Text("Find music") }
-                    }
+                item(key = "your_favorites") {
+                    SongShelfSection("Your Favorites", favorites.take(5).map {
+                        Song(it.songId, it.title, it.artist, it.coverUrl)
+                    }, currentSongId, onPlay, onQueue, downloads::enqueue, { true }, toggleFavorite)
                 }
             }
         }
