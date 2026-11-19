@@ -120,6 +120,10 @@ fun HomeScreen(
             val favoriteSongs = favorites.map { entry ->
                 Song(entry.songId, entry.title.ifBlank { entry.songId }, entry.artist, entry.coverUrl)
             }
+            // Build Music DNA only from this device's local events and favourites.
+            // No listening data is uploaded or shared with other listeners.
+            val localEvents = withContext(Dispatchers.IO) { dao.listeningEvents(1000) }
+            recommendationViewModel.onMusicSignals(localEvents, favorites)
             // Preserve play frequency while also allowing favourites to seed radio
             // when a listener has saved music but little recorded history.
             recommendationViewModel.onListeningHistory(
