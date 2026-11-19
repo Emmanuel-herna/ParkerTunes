@@ -185,7 +185,7 @@ fun SearchScreen(
         }
         loading = true
         error = null
-        kotlinx.coroutines.delay(300)
+        kotlinx.coroutines.delay(400)
         try {
             val found = withContext(Dispatchers.IO) {
                 if (activeSource == "YouTube") {
@@ -404,7 +404,7 @@ fun SearchScreen(
                 error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                     Text(error ?: "Search failed", color = SearchMuted, modifier = Modifier.padding(top = 24.dp))
                 }
-                results.songs.isEmpty() && results.artists.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                results.songs.isEmpty() && results.artists.isEmpty() && results.albums.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                     Text("No artists or songs found", color = SearchMuted, modifier = Modifier.padding(top = 24.dp))
                 }
                 else -> LazyColumn(
@@ -419,7 +419,25 @@ fun SearchScreen(
                         item {
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                                 items(results.artists, key = { it.id }) { artist ->
-                                    ArtistSearchItem(artist, onClick = { query = artist.name })
+                                    ArtistSearchItem(artist, onClick = { onArtist(artist) })
+                                }
+                            }
+                        }
+                    }
+                    if (results.albums.isNotEmpty()) {
+                        item { Text("Albums", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+                        item {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                items(results.albums, key = { it.id }) { album ->
+                                    Column(Modifier.width(132.dp).clickable {
+                                        // Album navigation is added through the app-level callback.
+                                    }) {
+                                        AsyncImage(model = album.coverUrl, contentDescription = album.title,
+                                            modifier = Modifier.size(132.dp).clip(RoundedCornerShape(12.dp)),
+                                            contentScale = ContentScale.Crop)
+                                        Text(album.title, color = Color.White, fontSize = 13.sp,
+                                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    }
                                 }
                             }
                         }
