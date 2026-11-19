@@ -238,6 +238,15 @@ fun HomeScreen(
         }
     }
 
+    val adaptiveShelves = remember(uiState, recommendationState.topArtists, discoveryDiversity) {
+        when (val homeState = uiState) {
+            is UiState.Success -> AdaptiveHomeFeed.rank(
+                homeState.data, recommendationState.topArtists, discoveryDiversity
+            )
+            else -> emptyList()
+        }
+    }
+
     PullToRefreshBox(
         isRefreshing = refreshing,
         onRefresh = { scope.launch { loadHome(true) } },
@@ -346,9 +355,6 @@ fun HomeScreen(
                     }
                 }
                 is UiState.Success -> {
-                    val adaptiveShelves = remember(state.data, recommendationState.topArtists, discoveryDiversity) {
-                        AdaptiveHomeFeed.rank(state.data, recommendationState.topArtists, discoveryDiversity)
-                    }
                     if (adaptiveShelves.isNotEmpty()) {
                         items(adaptiveShelves, key = { shelf ->
                             "shelf_" + shelf.title + "_" +
