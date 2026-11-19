@@ -152,16 +152,26 @@ fun HomeScreen(
     var discoveryLoaded by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
 
+    suspend fun <T> loadSectionOrNull(request: suspend () -> T): T? {
+        return try {
+            withTimeoutOrNull(20_000L) { request() }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun loadHomeMusicSections() {
         coroutineScope {
             val discoveryTask = async {
-                withTimeoutOrNull(20_000L) { api.getMoodSongs("discover new music") }
+                loadSectionOrNull { api.getMoodSongs("discover new music") }
             }
             val releasesTask = async {
-                withTimeoutOrNull(20_000L) { api.getMoodSongs("new music releases") }
+                loadSectionOrNull { api.getMoodSongs("new music releases") }
             }
             val trendingTask = async {
-                withTimeoutOrNull(20_000L) { api.getTrending() }
+                loadSectionOrNull { api.getTrending() }
             }
 
             discoveryTask.await()?.let { discovery = it.distinctBy { song -> song.id }.take(5) }
