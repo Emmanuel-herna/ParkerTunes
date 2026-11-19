@@ -638,7 +638,7 @@ private fun RecommendationGridTile(
     var menu by remember(song.id) { mutableStateOf(false) }
     Column(
         Modifier.width(width).graphicsLayer { scaleX = scale; scaleY = scale }
-            .combinedClickable(onClick = onClick, onLongClick = { menu = true }),
+            .combinedClickable(interactionSource = interaction, indication = null, onClick = onClick, onLongClick = { menu = true }),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
