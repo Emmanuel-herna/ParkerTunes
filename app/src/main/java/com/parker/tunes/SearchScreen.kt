@@ -134,6 +134,7 @@ fun SearchScreen(
     onQueue: (Song, Boolean) -> Unit,
     onSettings: () -> Unit,
     onArtist: (Artist) -> Unit,
+    onAlbum: (Album) -> Unit,
     downloads: SongDownloadManager,
     onLowStorage: () -> Unit
 ) {
@@ -429,9 +430,7 @@ fun SearchScreen(
                         item {
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                                 items(results.albums, key = { it.id }) { album ->
-                                    Column(Modifier.width(132.dp).clickable {
-                                        // Album navigation is added through the app-level callback.
-                                    }) {
+                                    Column(Modifier.width(132.dp).clickable { onAlbum(album) }) {
                                         AsyncImage(model = album.coverUrl, contentDescription = album.title,
                                             modifier = Modifier.size(132.dp).clip(RoundedCornerShape(12.dp)),
                                             contentScale = ContentScale.Crop)
