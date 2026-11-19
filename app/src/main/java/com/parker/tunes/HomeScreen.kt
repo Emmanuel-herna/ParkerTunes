@@ -51,6 +51,7 @@ import coil.disk.DiskCache
 import com.parker.tunes.data.HomeShelfCacheEntity
 import com.parker.tunes.data.LibraryDao
 import com.parker.tunes.data.MusicApi
+import com.parker.tunes.data.SettingsRepository
 import com.parker.tunes.data.home.*
 import com.parker.tunes.model.Song
 import kotlinx.coroutines.CancellationException
@@ -76,6 +77,7 @@ fun HomeScreen(
     onSearch: () -> Unit,
     onExplore: () -> Unit,
     homeApi: YtMusicHomeApi,
+    settingsRepository: SettingsRepository,
     onOpenPlaylist: (ShelfItem, HomeShelf) -> Unit
 ) {
     val context = LocalContext.current
@@ -95,6 +97,9 @@ fun HomeScreen(
     val favorites by favoritesFlow.collectAsState(initial = emptyList())
     val listeningEvents by remember(dao) { dao.observeListeningEvents().flowOn(Dispatchers.IO) }
         .collectAsState(initial = emptyList())
+    val personalizationEnabled by settingsRepository.recommendationPersonalization.collectAsState(initial = true)
+    val reduceSimilar by settingsRepository.reduceSimilarMusic.collectAsState(initial = false)
+    val discoveryDiversity by settingsRepository.discoveryDiversity.collectAsState(initial = 50)
     var historyReady by remember(dao) { mutableStateOf(false) }
     val latestTrack = recent.firstOrNull()
     val recentHistoryKey = remember(recent) { recent.map { it.id } }
@@ -108,7 +113,7 @@ fun HomeScreen(
         withContext(Dispatchers.IO) { dao.recentlyPlayed().first() }
         historyReady = true
     }
-    LaunchedEffect(historyReady, recentHistoryKey, favorites, listeningEvents) {
+    LaunchedEffect(historyReady, recentHistoryKey, favorites, listeningEvents, personalizationEnabled, reduceSimilar, discoveryDiversity) {
         if (historyReady) {
             val history = withContext(Dispatchers.IO) { dao.historySnapshot() }
             // Use the visible recent-play rows as a safety net if the snapshot
@@ -124,7 +129,7 @@ fun HomeScreen(
             }
             // Build Music DNA only from this device's local events and favourites.
             // No listening data is uploaded or shared with other listeners.
-            recommendationViewModel.onMusicSignals(listeningEvents, favorites)
+            recommendationViewModel.onMusicSignals(listeningEvents, favorites, personalizationEnabled, discoveryDiversity, reduceSimilar)
             // Keep repeated history rows so artist frequency reflects actual plays.
             // Recent rows are only a fallback when the full snapshot is empty; favourites
             // seed the profile without duplicating songs already represented in history.
