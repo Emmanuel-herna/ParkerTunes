@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.imageLoader
 import com.parker.tunes.data.HomeShelfCacheEntity
