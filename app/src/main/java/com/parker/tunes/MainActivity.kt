@@ -531,6 +531,7 @@ fun ParkerTunesRoot() {
                         onExplore = { nav.navigate("explore") { launchSingleTop = true } },
                         homeApi = app.homeApi,
                         settingsRepository = settingsRepository,
+                        downloads = app.downloads,
                         onOpenPlaylist = { item, shelf ->
                             val browseId = item.browseId.orEmpty()
                             if (browseId.startsWith("VL") || browseId.startsWith("MPRE")) {
