@@ -488,9 +488,7 @@ fun ParkerTunesRoot() {
         }
 
         Scaffold(
-            modifier = if (currentRoute == "home") Modifier.padding(8.dp)
-                .clip(RoundedCornerShape(28.dp))
-                 else Modifier,
+            modifier = Modifier,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
