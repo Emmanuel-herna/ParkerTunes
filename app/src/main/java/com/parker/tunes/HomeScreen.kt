@@ -215,7 +215,7 @@ fun HomeScreen(
                 Column(Modifier.padding(top = 5.dp)) {
                     HomeSectionHeading("Made for you")
                     RecommendationShelf(
-                        songs = recommendationState.songs.take(3),
+                        songs = recommendationState.songs.drop(5).take(3),
                         loading = recommendationState.loading,
                         loadingMore = false,
                         listState = rememberLazyListState(),
