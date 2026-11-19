@@ -225,8 +225,7 @@ fun HomeScreen(
                         onQueue = onQueue,
                         onDownload = downloads::enqueue,
                         isFavorite = { it.id in favoriteIds },
-                        onFavorite = toggleFavorite,
-                        reduceMotion = reduceMotion
+                        onFavorite = toggleFavorite
                     )
                 }
             }
@@ -331,7 +330,7 @@ private fun QuickPickRow(
                 Text("⋮", color = Color.White, fontSize = 21.sp)
             }
             SongActionMenu(menu, { menu = false }, song, onPlay, onQueue, onDownload,
-                isFavorite(song)) { onFavorite(song) }
+                favorite = isFavorite(song), onFavorite = { onFavorite(song) })
         }
     }
 }
@@ -361,7 +360,8 @@ private fun SongShelfSection(
 @Composable
 private fun ActionSongCard(
     song: Song, playing: Boolean, onPlay: (Song) -> Unit, onQueue: (Song, Boolean) -> Unit,
-    onDownload: (Song) -> Unit, favorite: Boolean, onFavorite: (Song) -> Unit
+    onDownload: (Song) -> Unit, favorite: Boolean, onFavorite: (Song) -> Unit,
+    reduceMotion: Boolean = false
 ) {
     var menu by remember(song.id) { mutableStateOf(false) }
     Column(Modifier.width(132.dp).combinedClickable(
@@ -543,7 +543,8 @@ private fun RecommendationShelf(
     songs: List<Song>, loading: Boolean, loadingMore: Boolean,
     listState: androidx.compose.foundation.lazy.LazyListState, onPlay: (Song) -> Unit,
     onLongPress: (Song) -> Unit, onQueue: (Song, Boolean) -> Unit,
-    onDownload: (Song) -> Unit, isFavorite: (Song) -> Boolean, onFavorite: (Song) -> Unit
+    onDownload: (Song) -> Unit, isFavorite: (Song) -> Boolean, onFavorite: (Song) -> Unit,
+    reduceMotion: Boolean = false
 ) {
     if (songs.isEmpty() && !loading) {
         Text(if (loading) "Finding music based on your listening…" else "No close matches yet. Keep listening to build your radio.",
@@ -628,7 +629,7 @@ private fun RecommendationShelf(
 private fun RecommendationGridTile(
     song: Song, width: Dp, onClick: () -> Unit, onLongPress: (Song) -> Unit,
     onQueue: (Song, Boolean) -> Unit, onDownload: (Song) -> Unit,
-    favorite: Boolean, onFavorite: () -> Unit
+    favorite: Boolean, onFavorite: () -> Unit, reduceMotion: Boolean = false
 ) {
     var artworkFailed by remember(song.coverUrl) { mutableStateOf(false) }
     val interaction = remember { MutableInteractionSource() }
