@@ -122,7 +122,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val savedRate = getSharedPreferences("parker_tunes_settings", MODE_PRIVATE)
-            .getInt("preferred_refresh_rate", 120)
+            .getInt("preferred_refresh_rate", 0)
         applyPreferredRefreshRate(this, savedRate)
         setContent { ParkerTunesTheme { ParkerTunesRoot() } }
     }
@@ -134,12 +134,18 @@ private val Accent = Color(0xFFB69CFF)
 private val Muted = Color(0xFFA7A7A7)
 
 
-private fun applyPreferredRefreshRate(activity: Activity, requestedRate: Int) {
+internal fun applyPreferredRefreshRate(activity: Activity, requestedRate: Int) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-    val supportedModes = activity.window.decorView.display?.supportedModes.orEmpty()
-    val supportedRates = supportedModes.map { it.refreshRate }.distinct()
-    val selectedRate = supportedRates.minByOrNull { kotlin.math.abs(it - requestedRate) }
-        ?: requestedRate.toFloat()
+    val display = activity.window.decorView.display
+    val supportedModes = display?.supportedModes.orEmpty()
+    val selectedRate = if (requestedRate <= 0) {
+        0f // 0 clears the app preference and lets Android choose the system default.
+    } else {
+        supportedModes.map { it.refreshRate }
+            .minByOrNull { kotlin.math.abs(it - requestedRate.toFloat()) }
+            ?.takeIf { kotlin.math.abs(it - requestedRate.toFloat()) <= 1.5f }
+            ?: 0f // If the saved mode is no longer supported, fall back safely.
+    }
     activity.window.attributes = activity.window.attributes.apply {
         preferredRefreshRate = selectedRate
     }
