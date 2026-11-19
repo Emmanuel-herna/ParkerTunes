@@ -48,6 +48,9 @@ class SettingsRepository(context: Context) {
     val lastFmApiKey: Flow<String> = string(Keys.lastFmKey, "")
     val listenBrainzToken: Flow<String> = string(Keys.listenBrainzToken, "")
     val spotifyMetadataEnabled: Flow<Boolean> = bool(Keys.spotifyMetadataEnabled, true)
+    val recommendationPersonalization: Flow<Boolean> = bool(Keys.recommendationPersonalization, true)
+    val reduceSimilarMusic: Flow<Boolean> = bool(Keys.reduceSimilarMusic, false)
+    val discoveryDiversity: Flow<Int> = int(Keys.discoveryDiversity, 50)
     val spotifyClientId: Flow<String> = string(Keys.spotifyClientId, "")
     val spotifyClientSecret: Flow<String> = string(Keys.spotifyClientSecret, "")
 
@@ -80,6 +83,9 @@ class SettingsRepository(context: Context) {
     suspend fun setLastFmApiKey(v:String)=put(Keys.lastFmKey,v)
     suspend fun setListenBrainzToken(v:String)=put(Keys.listenBrainzToken,v)
     suspend fun setSpotifyMetadataEnabled(v:Boolean)=put(Keys.spotifyMetadataEnabled,v)
+    suspend fun setRecommendationPersonalization(v:Boolean)=put(Keys.recommendationPersonalization,v)
+    suspend fun setReduceSimilarMusic(v:Boolean)=put(Keys.reduceSimilarMusic,v)
+    suspend fun setDiscoveryDiversity(v:Int)=put(Keys.discoveryDiversity,v.coerceIn(0,100))
     suspend fun setSpotifyClientId(v:String)=put(Keys.spotifyClientId,v.trim())
     suspend fun setSpotifyClientSecret(v:String)=put(Keys.spotifyClientSecret,v.trim())
 
@@ -115,6 +121,9 @@ class SettingsRepository(context: Context) {
         val lastFmKey=stringPreferencesKey("lastfm_api_key")
         val listenBrainzToken=stringPreferencesKey("listenbrainz_token")
         val spotifyMetadataEnabled=booleanPreferencesKey("spotify_metadata_enabled")
+        val recommendationPersonalization=booleanPreferencesKey("recommendation_personalization")
+        val reduceSimilarMusic=booleanPreferencesKey("reduce_similar_music")
+        val discoveryDiversity=intPreferencesKey("discovery_diversity")
         val spotifyClientId=stringPreferencesKey("spotify_client_id")
         val spotifyClientSecret=stringPreferencesKey("spotify_client_secret")
     }
