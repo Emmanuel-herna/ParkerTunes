@@ -374,9 +374,8 @@ private fun ActionSongCard(
             else AsyncImage(model = song.coverUrl, contentDescription = song.title,
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             if (playing) PlayingBars(Modifier.align(Alignment.BottomEnd).padding(6.dp))
-            SongActionMenu(menu, { menu = false }, song, onPlay, onQueue, onDownload, favorite) {
-                onFavorite(song)
-            }
+            SongActionMenu(menu, { menu = false }, song, onPlay, onQueue, onDownload,
+                favorite = favorite, onFavorite = { onFavorite(song) })
         }
         Text(song.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
             maxLines = 1, overflow = TextOverflow.Ellipsis)
