@@ -42,6 +42,20 @@ data class PlayHistoryEntity(
     @ColumnInfo(defaultValue = "0") val playDurationMs: Long = 0L
 )
 
+@Entity(tableName = "listening_events")
+data class ListeningEventEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val songId: String,
+    val eventType: String,
+    val occurredAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(defaultValue = "''") val title: String = "",
+    @ColumnInfo(defaultValue = "''") val artist: String = "",
+    val coverUrl: String? = null,
+    @ColumnInfo(defaultValue = "0") val positionMs: Long = 0L,
+    @ColumnInfo(defaultValue = "0") val durationMs: Long = 0L,
+    @ColumnInfo(defaultValue = "'PLAYER'") val source: String = "PLAYER"
+)
+
 @Entity(tableName = "equalizer_settings")
 data class EqualizerSettingsEntity(
     @PrimaryKey val id: Int = 1,
@@ -213,6 +227,18 @@ interface LibraryDao {
     suspend fun isFavorite(songId: String): Boolean
 
     @Insert
+    suspend fun recordListeningEvent(item: ListeningEventEntity)
+
+    @Query("SELECT * FROM listening_events ORDER BY occurredAt DESC LIMIT :limit")
+    suspend fun listeningEvents(limit: Int = 500): List<ListeningEventEntity>
+
+    @Query("SELECT COUNT(*) FROM listening_events WHERE eventType = :eventType")
+    suspend fun countListeningEvents(eventType: String): Int
+
+    @Query("DELETE FROM listening_events")
+    suspend fun clearListeningEvents()
+
+    @Insert
     suspend fun recordPlay(item: PlayHistoryEntity)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
@@ -261,7 +287,7 @@ interface LibraryDao {
 
 @Database(
     entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class, EqualizerSettingsEntity::class, LyricsCacheEntity::class, DownloadEntity::class, RecommendationCacheEntity::class, HomeShelfCacheEntity::class, com.parker.tunes.data.sources.AddonEntity::class, com.parker.tunes.data.sources.AddonSettingsEntity::class],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class LibraryDatabase : RoomDatabase() {
@@ -338,13 +364,22 @@ abstract class LibraryDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS listening_events (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, songId TEXT NOT NULL, eventType TEXT NOT NULL, occurredAt INTEGER NOT NULL, title TEXT NOT NULL DEFAULT '', artist TEXT NOT NULL DEFAULT '', coverUrl TEXT, positionMs INTEGER NOT NULL DEFAULT 0, durationMs INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'PLAYER')")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_listening_events_songId ON listening_events(songId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_listening_events_eventType ON listening_events(eventType)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_listening_events_occurredAt ON listening_events(occurredAt)")
+            }
+        }
+
         fun get(context: Context): LibraryDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     LibraryDatabase::class.java,
                     "parker_tunes.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12).build().also { INSTANCE = it }
             }
     }
 }
