@@ -209,7 +209,8 @@ fun ArtistProfileScreen(
                 }
             }
             if (loaded.topSongs.isEmpty() && loaded.albums.isEmpty() &&
-                loaded.singles.isEmpty() && loaded.relatedArtists.isEmpty()) {
+                loaded.singles.isEmpty() && loaded.recentReleases.isEmpty() &&
+                loaded.relatedArtists.isEmpty()) {
                 item { Text("No artist releases are available right now.", color = ArtistMuted,
                     modifier = Modifier.padding(22.dp)) }
             }
