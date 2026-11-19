@@ -558,7 +558,8 @@ fun ParkerTunesRoot() {
                     val artist = selectedArtist?.takeIf { it.id == browseId }
                     artist?.let {
                         ArtistProfileScreen(artist = it, api = api, onBack = { nav.popBackStack() }, onPlay = playSong,
-                            onAlbum = { album -> selectedAlbum = album; nav.navigate("album") })
+                            onAlbum = { album -> selectedAlbum = album; nav.navigate("album") },
+                            onArtist = { related -> selectedArtist = related; nav.navigate("artist/${Uri.encode(related.id)}") })
                     }
                 }
                 composable("album") {
