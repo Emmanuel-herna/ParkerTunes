@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.ComponentName
 import android.net.Uri
 import android.widget.Toast
+import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -23,6 +24,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -81,6 +83,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import coil.ImageLoader
+import coil.request.ImageRequest
+import androidx.palette.graphics.Palette
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -1225,6 +1230,68 @@ private fun AmLyricsWebView(
 }
 
 @Composable
+@Composable
+private fun rememberPlayerArtworkColors(imageUrl: String?): PlayerArtworkColors {
+    val context = LocalContext.current
+    var swatchColors by remember(imageUrl) { mutableStateOf<Pair<Int, Int>?>(null) }
+
+    LaunchedEffect(imageUrl) {
+        swatchColors = null
+        if (imageUrl.isNullOrBlank()) return@LaunchedEffect
+        try {
+            val request = ImageRequest.Builder(context)
+                .data(imageUrl)
+                .size(64, 64)
+                .allowHardware(false)
+                .build()
+            val result = ImageLoader(context).execute(request)
+            val bitmap = (result.drawable as? BitmapDrawable)?.bitmap ?: return@LaunchedEffect
+            val palette = withContext(Dispatchers.Default) {
+                Palette.from(bitmap).maximumColorCount(12).generate()
+            }
+            val background = palette.darkMutedSwatch?.rgb
+                ?: palette.darkVibrantSwatch?.rgb
+                ?: palette.dominantSwatch?.rgb
+            val accent = palette.vibrantSwatch?.rgb
+                ?: palette.lightVibrantSwatch?.rgb
+                ?: palette.mutedSwatch?.rgb
+            if (background != null && accent != null) {
+                swatchColors = background to accent
+            } else if (accent != null) {
+                swatchColors = accent to accent
+            }
+        } catch (_: Exception) {
+            // Keep the default player colours if artwork cannot be decoded.
+        }
+    }
+
+    val backgroundRgb = swatchColors?.first ?: 0xFF08080B.toInt()
+    val accentRgb = swatchColors?.second ?: 0xFFB69CFF.toInt()
+    val backgroundColor = Color(backgroundRgb)
+    val darkBackground = Color(
+        red = backgroundColor.red * 0.22f,
+        green = backgroundColor.green * 0.22f,
+        blue = backgroundColor.blue * 0.22f,
+        alpha = 1f
+    )
+    val animatedBackground by animateColorAsState(
+        targetValue = darkBackground,
+        animationSpec = tween(650, easing = FastOutSlowInEasing),
+        label = "playerArtworkBackground"
+    )
+    val animatedAccent by animateColorAsState(
+        targetValue = Color(accentRgb),
+        animationSpec = tween(650, easing = FastOutSlowInEasing),
+        label = "playerArtworkAccent"
+    )
+    return PlayerArtworkColors(animatedBackground, animatedAccent)
+}
+
+private data class PlayerArtworkColors(
+    val background: Color,
+    val accent: Color
+)
+
 private fun NowPlayingScreen(
     player: MediaController?,
     playerObserver: PlayerUiStateObserver?,
@@ -1247,6 +1314,7 @@ private fun NowPlayingScreen(
     val title = playerState.title
     val artist = playerState.artist
     val coverUrl = playerState.artworkUri
+    val artworkColors = rememberPlayerArtworkColors(coverUrl)
     val coverCandidates = remember(coverUrl, player?.currentMediaItem?.mediaId) {
         playerCoverCandidates(coverUrl, player?.currentMediaItem?.mediaId)
     }
@@ -1256,7 +1324,7 @@ private fun NowPlayingScreen(
     var seekValue by remember { mutableFloatStateOf(0f) }
     val shuffle = playerState.shuffleEnabled
     val repeat = playerState.repeatMode
-    val accent = Color(0xFFB69CFF)
+    val accent = artworkColors.accent
     val muted = Color(0xFF96939F)
     val scrollState = rememberScrollState()
     val dragAnimation = remember { Animatable(0f) }
@@ -1277,7 +1345,7 @@ private fun NowPlayingScreen(
                 scaleX = 1f - progress * 0.035f
                 scaleY = scaleX
             }
-            .background(Color(0xFF08080B))
+            .background(Brush.verticalGradient(listOf(artworkColors.background, Color(0xFF08080B))))
             .pointerInput(onBack, scrollState, density) {
                 val dismissThreshold = with(density) { 120.dp.toPx() }
                 val exitDistance = size.height.toFloat().coerceAtLeast(dismissThreshold * 2)
@@ -1363,23 +1431,29 @@ private fun NowPlayingScreen(
                 .clip(RoundedCornerShape(30.dp))
                 .background(
                     androidx.compose.ui.graphics.Brush.linearGradient(
-                        listOf(Color(0xFF33284A), Color(0xFF17151F), Color(0xFF282238))
+                        listOf(artworkColors.background.copy(alpha = 0.92f), Color(0xFF17151F), Color(0xFF282238))
                     )
                 ),
             contentAlignment = Alignment.Center
         ) {
-            if (coverCandidates.isNotEmpty() && coverCandidateIndex < coverCandidates.size) {
-                AsyncImage(
-                    model = coverCandidates[coverCandidateIndex],
-                    contentDescription = "Album artwork",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    onSuccess = { coverImageLoaded = true },
-                    onError = {
-                        coverImageLoaded = false
-                        if (coverCandidateIndex < coverCandidates.lastIndex) coverCandidateIndex++
-                    }
-                )
+            Crossfade(
+                targetState = coverCandidates.getOrNull(coverCandidateIndex),
+                animationSpec = tween(420, easing = FastOutSlowInEasing),
+                label = "playerArtworkCrossfade"
+            ) { imageUrl ->
+                if (imageUrl != null) {
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = "Album artwork",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        onSuccess = { coverImageLoaded = true },
+                        onError = {
+                            coverImageLoaded = false
+                            if (coverCandidateIndex < coverCandidates.lastIndex) coverCandidateIndex++
+                        }
+                    )
+                }
             }
             if (!coverImageLoaded) {
                 Icon(Icons.Default.Album, contentDescription = null,
