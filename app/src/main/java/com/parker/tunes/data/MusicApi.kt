@@ -270,7 +270,7 @@ class NewPipeMusicApi : MusicApi {
         val albums = playlistAlbums(albumItems.ifEmpty { searchedAlbumItems })
         val singleCandidates = playlistAlbums(singleItems.ifEmpty { searchedSingleItems })
         val singles = singleCandidates.filter { release ->
-            Regex("""\\b(single|ep)\\b""", RegexOption.IGNORE_CASE)
+            Regex("""\b(single|ep)\b""", RegexOption.IGNORE_CASE)
                 .containsMatchIn(release.title)
         }.distinctBy { it.id }
         val recent = (albums + singleCandidates)
