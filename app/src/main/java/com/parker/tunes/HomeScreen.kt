@@ -73,6 +73,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -149,14 +150,30 @@ fun HomeScreen(
     var newReleases by remember { mutableStateOf<List<Song>>(emptyList()) }
     var trending by remember { mutableStateOf<List<Song>>(emptyList()) }
     var discoveryLoaded by remember { mutableStateOf(false) }
-    LaunchedEffect(api) {
+    var isRefreshing by remember { mutableStateOf(false) }
+
+    suspend fun loadHomeMusicSections() {
         coroutineScope {
-            val discoveryTask = async { runCatching { api.getMoodSongs("discover new music") }.getOrDefault(emptyList()) }
-            val releasesTask = async { runCatching { api.getMoodSongs("new music releases") }.getOrDefault(emptyList()) }
-            val trendingTask = async { runCatching { api.getTrending() }.getOrDefault(emptyList()) }
-            discovery = discoveryTask.await().distinctBy { it.id }.take(5)
-            newReleases = releasesTask.await().distinctBy { it.id }.take(5)
-            trending = trendingTask.await().distinctBy { it.id }.take(5)
+            val discoveryTask = async {
+                withTimeoutOrNull(20_000L) { api.getMoodSongs("discover new music") }
+            }
+            val releasesTask = async {
+                withTimeoutOrNull(20_000L) { api.getMoodSongs("new music releases") }
+            }
+            val trendingTask = async {
+                withTimeoutOrNull(20_000L) { api.getTrending() }
+            }
+
+            discoveryTask.await()?.let { discovery = it.distinctBy { song -> song.id }.take(5) }
+            releasesTask.await()?.let { newReleases = it.distinctBy { song -> song.id }.take(5) }
+            trendingTask.await()?.let { trending = it.distinctBy { song -> song.id }.take(5) }
+        }
+    }
+
+    LaunchedEffect(api) {
+        try {
+            loadHomeMusicSections()
+        } finally {
             discoveryLoaded = true
         }
     }
@@ -172,14 +189,20 @@ fun HomeScreen(
     }
 
     PullToRefreshBox(
-        isRefreshing = false,
-        onRefresh = { scope.launch {
-            discoveryLoaded = false
-            discovery = runCatching { api.getMoodSongs("discover new music") }.getOrDefault(emptyList()).distinctBy { it.id }.take(5)
-            newReleases = runCatching { api.getMoodSongs("new music releases") }.getOrDefault(emptyList()).distinctBy { it.id }.take(5)
-            trending = runCatching { api.getTrending() }.getOrDefault(emptyList()).distinctBy { it.id }.take(5)
-            discoveryLoaded = true
-        } },
+        isRefreshing = isRefreshing,
+        onRefresh = {
+            if (!isRefreshing) {
+                scope.launch {
+                    isRefreshing = true
+                    try {
+                        loadHomeMusicSections()
+                    } finally {
+                        isRefreshing = false
+                        discoveryLoaded = true
+                    }
+                }
+            }
+        },
         modifier = Modifier.fillMaxSize()
     ) {
         LazyColumn(
