@@ -93,6 +93,8 @@ fun HomeScreen(
     val favoritesFlow = remember(dao) { dao.favorites().flowOn(Dispatchers.IO) }
     val recent by recentFlow.collectAsState(initial = emptyList())
     val favorites by favoritesFlow.collectAsState(initial = emptyList())
+    val listeningEvents by remember(dao) { dao.observeListeningEvents().flowOn(Dispatchers.IO) }
+        .collectAsState(initial = emptyList())
     var historyReady by remember(dao) { mutableStateOf(false) }
     val latestTrack = recent.firstOrNull()
     val recentHistoryKey = remember(recent) { recent.map { it.id } }
@@ -106,7 +108,7 @@ fun HomeScreen(
         withContext(Dispatchers.IO) { dao.recentlyPlayed().first() }
         historyReady = true
     }
-    LaunchedEffect(historyReady, recentHistoryKey, favorites) {
+    LaunchedEffect(historyReady, recentHistoryKey, favorites, listeningEvents) {
         if (historyReady) {
             val history = withContext(Dispatchers.IO) { dao.historySnapshot() }
             // Use the visible recent-play rows as a safety net if the snapshot
@@ -122,8 +124,7 @@ fun HomeScreen(
             }
             // Build Music DNA only from this device's local events and favourites.
             // No listening data is uploaded or shared with other listeners.
-            val localEvents = withContext(Dispatchers.IO) { dao.listeningEvents(1000) }
-            recommendationViewModel.onMusicSignals(localEvents, favorites)
+            recommendationViewModel.onMusicSignals(listeningEvents, favorites)
             // Preserve play frequency while also allowing favourites to seed radio
             // when a listener has saved music but little recorded history.
             recommendationViewModel.onListeningHistory(
