@@ -30,12 +30,15 @@ data class MusicTasteProfile(
         val unique = candidates.filter { it.id.isNotBlank() && it.id !in excludedSongIds }
             .distinctBy { it.id }
         if (unique.isEmpty()) return emptyList()
-        if (!isPersonalized) return unique.take(limit.coerceAtLeast(0))
-
         val diversity = diversityPercent.coerceIn(0, 100) / 100.0
-        val affinityWeight = 0.66 * (1.0 - diversity * 0.65)
-        val repetitionWeight = 0.16 + diversity * 0.34 + if (reduceSimilarMusic) 0.22 else 0.0
-        val discoveryWeight = 0.12 + diversity * 0.28
+        if (!isPersonalized && diversityPercent == 50 && !reduceSimilarMusic) {
+            return unique.take(limit.coerceAtLeast(0))
+        }
+        val diversityOffset = (diversity - 0.5) * 2.0
+        val affinityWeight = 0.66 * (1.0 - diversityOffset * 0.325)
+        val repetitionWeight = (0.16 + diversityOffset * 0.17).coerceAtLeast(0.02) +
+            if (reduceSimilarMusic) 0.22 else 0.0
+        val discoveryWeight = (0.12 + diversityOffset * 0.14).coerceAtLeast(0.02)
         val maxAffinity = (artistAffinity.values.maxOrNull() ?: 0.0).coerceAtLeast(1.0)
         val recentPosition = recentArtistOrder.withIndex().associate { it.value to it.index }
         val remaining = unique.toMutableList()
@@ -51,7 +54,7 @@ data class MusicTasteProfile(
                 val repetitionPenalty = (selectedArtists[artist] ?: 0) * repetitionWeight
                 val originalOrder = (unique.indexOfFirst { it.id == song.id }).coerceAtLeast(0)
                 val discoveryPrior = discoveryWeight / (originalOrder + 1)
-                affinity * affinityWeight + favoriteBoost * (1.0 - diversity * 0.45) + recentBoost + discoveryPrior - repetitionPenalty
+                affinity * affinityWeight + favoriteBoost * (1.0 - diversityOffset * 0.45) + recentBoost + discoveryPrior - repetitionPenalty
             } ?: break
             remaining.remove(next)
             selected += next
