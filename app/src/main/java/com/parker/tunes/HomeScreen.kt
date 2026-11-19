@@ -1,6 +1,11 @@
 package com.parker.tunes
 
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -45,9 +50,8 @@ import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
-import coil.ImageLoader
 import coil.compose.AsyncImage
-import coil.disk.DiskCache
+import coil.imageLoader
 import com.parker.tunes.data.HomeShelfCacheEntity
 import com.parker.tunes.data.LibraryDao
 import com.parker.tunes.data.MusicApi
@@ -85,12 +89,8 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val recommendationListState = rememberLazyListState()
-    val imageLoader = remember(context) {
-        ImageLoader.Builder(context).diskCache {
-            DiskCache.Builder().directory(context.cacheDir.resolve("parker-artwork"))
-                .maxSizePercent(0.025).build()
-        }.build()
-    }
+    // Reuse the application-wide Coil loader and its shared caches.
+    val imageLoader = context.imageLoader
 
     val recentFlow = remember(dao) { dao.recentlyPlayed().flowOn(Dispatchers.IO) }
     val favoritesFlow = remember(dao) { dao.favorites().flowOn(Dispatchers.IO) }
@@ -613,8 +613,16 @@ private fun RecommendationShelf(
 @Composable
 private fun RecommendationGridTile(song: Song, width: Dp, onClick: () -> Unit) {
     var artworkFailed by remember(song.coverUrl) { mutableStateOf(false) }
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.94f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "recommendationTilePress"
+    )
     Column(
-        Modifier.width(width).clickable(onClick = onClick),
+        Modifier.width(width).graphicsLayer { scaleX = scale; scaleY = scale }
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
@@ -654,7 +662,15 @@ private fun RecommendationGridTile(song: Song, width: Dp, onClick: () -> Unit) {
 
 @Composable
 private fun HomeSongCard(song: Song, onClick: () -> Unit, width: Dp) {
-    Column(Modifier.width(width).clickable(onClick = onClick),
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.94f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "homeSongPress"
+    )
+    Column(Modifier.width(width).graphicsLayer { scaleX = scale; scaleY = scale }
+        .clickable(interactionSource = interaction, indication = null, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(Modifier.size(width * 0.86f).clip(CircleShape)
