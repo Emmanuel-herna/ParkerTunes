@@ -257,9 +257,14 @@ fun HomeScreen(
             }
 
             item(key = "recently_played_feature") {
+                val featuredSong = latestTrack?.let {
+                    Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl)
+                } ?: recommendationState.songs.firstOrNull()
                 FeaturedRecentCard(
-                    song = latestTrack?.let { Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl) },
-                    onPlay = onPlay
+                    song = featuredSong,
+                    sectionLabel = if (latestTrack != null) "Recently played" else "Discover",
+                    onPlay = onPlay,
+                    onSearch = onSearch
                 )
             }
 
@@ -370,35 +375,68 @@ fun HomeScreen(
 }
 
 @Composable
-private fun FeaturedRecentCard(song: Song?, onPlay: (Song) -> Unit) {
+private fun FeaturedRecentCard(
+    song: Song?,
+    sectionLabel: String,
+    onPlay: (Song) -> Unit,
+    onSearch: () -> Unit
+) {
     Row(
         Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 5.dp)
             .height(178.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(Modifier.width(34.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
-            Text("Recently played", color = Color(0xFFE6E6E6), fontSize = 14.sp,
+            Text(sectionLabel, color = Color(0xFFE6E6E6), fontSize = 14.sp,
                 fontWeight = FontWeight.ExtraBold, maxLines = 1,
                 modifier = Modifier.graphicsLayer { rotationZ = -90f })
         }
         Box(Modifier.weight(1f).fillMaxHeight()) {
-            Box(Modifier.fillMaxWidth(0.91f).fillMaxHeight().align(Alignment.CenterStart)
-                )
-            Box(
-                Modifier.fillMaxWidth(0.78f).fillMaxHeight().align(Alignment.CenterStart)
-                    .clip(RoundedCornerShape(28.dp))
-                    
-                    .background(Color(0xFF171717))
-                    .then(if (song != null) Modifier.clickable { onPlay(song) } else Modifier),
+            Box(Modifier.fillMaxWidth(0.78f).fillMaxHeight().align(Alignment.CenterStart)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Color(0xFF171717))
+                .clickable { if (song != null) onPlay(song) else onSearch() },
                 contentAlignment = Alignment.Center
             ) {
-                if (song?.coverUrl?.isNotBlank() == true) {
-                    AsyncImage(model = song.coverUrl, contentDescription = song.title,
+                if (!song?.coverUrl.isNullOrBlank()) {
+                    AsyncImage(model = song?.coverUrl, contentDescription = song?.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(28.dp)))
+                    Box(Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC000000)))
+                    ))
+                    Column(
+                        Modifier.align(Alignment.BottomStart).padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(song?.title.orEmpty(), color = Color.White, fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(song?.artist?.ifBlank { "Unknown artist" }.orEmpty(),
+                            color = Color(0xFFD0D0D0), fontSize = 12.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 } else {
-                    Icon(Icons.Default.History, contentDescription = null,
-                        tint = Color(0xFF777777), modifier = Modifier.size(42.dp))
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            if (song != null) Icons.Default.MusicNote else Icons.Default.Explore,
+                            contentDescription = null, tint = Color(0xFFBDBDBD),
+                            modifier = Modifier.size(38.dp)
+                        )
+                        Text(
+                            if (song != null) song.title else "Discover something new",
+                            color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            if (song != null) song.artist.ifBlank { "Tap to play" }
+                            else "Explore music picked for you",
+                            color = Color(0xFFAAAAAA), fontSize = 11.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
@@ -514,13 +552,6 @@ private fun RecommendationShelf(
                                         width = cardWidth,
                                         onClick = { onPlay(songs[index]) }
                                     )
-                                } else {
-                                    Box(Modifier.width(cardWidth).aspectRatio(1f), contentAlignment = Alignment.Center) {
-                                        Box(Modifier.fillMaxWidth(0.94f).aspectRatio(1f)
-                                            .clip(CircleShape)
-                                            
-                                            .background(Color(0xFF111111)))
-                                    }
                                 }
                             }
                         }
@@ -559,25 +590,43 @@ private fun RecommendationShelf(
 
 @Composable
 private fun RecommendationGridTile(song: Song, width: Dp, onClick: () -> Unit) {
-    Box(
-        Modifier.width(width).aspectRatio(1f).clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
+    var artworkFailed by remember(song.coverUrl) { mutableStateOf(false) }
+    Column(
+        Modifier.width(width).clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Box(
             Modifier.fillMaxWidth(0.94f).aspectRatio(1f)
                 .clip(CircleShape)
-                
                 .background(Color(0xFF111111)),
             contentAlignment = Alignment.Center
         ) {
-            if (!song.coverUrl.isNullOrBlank()) {
-                AsyncImage(model = song.coverUrl, contentDescription = "${song.title} cover",
-                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
+            if (!song.coverUrl.isNullOrBlank() && !artworkFailed) {
+                AsyncImage(
+                    model = song.coverUrl,
+                    contentDescription = "${song.title} cover",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(CircleShape),
+                    onError = { artworkFailed = true }
+                )
             } else {
                 Icon(Icons.Default.MusicNote, contentDescription = null,
                     tint = Color(0xFFBDBDBD), modifier = Modifier.size(30.dp))
             }
         }
+        Text(
+            song.title.ifBlank { "Unknown track" },
+            color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp)
+        )
+        Text(
+            song.artist.ifBlank { "Unknown artist" },
+            color = Color(0xFF8F8F8F), fontSize = 10.sp,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp)
+        )
     }
 }
 
