@@ -121,10 +121,13 @@ import java.io.File
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val savedRate = getSharedPreferences("parker_tunes_settings", MODE_PRIVATE)
-            .getInt("preferred_refresh_rate", 0)
-        applyPreferredRefreshRate(this, savedRate)
         setContent { ParkerTunesTheme { ParkerTunesRoot() } }
+        // Wait until the decor view is attached so its supported display modes are available.
+        window.decorView.post {
+            val savedRate = getSharedPreferences("parker_tunes_settings", MODE_PRIVATE)
+                .getInt("preferred_refresh_rate", 0)
+            applyPreferredRefreshRate(this, savedRate)
+        }
     }
 }
 
