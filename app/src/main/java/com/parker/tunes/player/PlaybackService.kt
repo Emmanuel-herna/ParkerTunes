@@ -14,6 +14,12 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.SilenceSkippingAudioProcessor
+import androidx.media3.exoplayer.audio.AudioSink
+import com.parker.tunes.data.SettingsRepository
+import kotlinx.coroutines.flow.collect
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.parker.tunes.ParkerTunesApp
@@ -36,6 +42,9 @@ class PlaybackService : MediaSessionService() {
     private val lastItemByPlayer = mutableMapOf<ExoPlayer, androidx.media3.common.MediaItem?>()
     private val qualifiedTracks = mutableSetOf<String>()
     private var autoplayResolving = false
+    private val silenceProcessors = mutableListOf<SilenceSkippingAudioProcessor>()
+    private val autoplayAttemptedSongIds = mutableSetOf<String>()
+    private val settingsPrefs by lazy { getSharedPreferences("parker_tunes_settings", MODE_PRIVATE) }
     private val favoriteCommand = SessionCommand(ACTION_FAVORITE, Bundle.EMPTY)
     private val skipNextCommand = SessionCommand(ACTION_SKIP_NEXT, Bundle.EMPTY)
 
@@ -121,20 +130,84 @@ class PlaybackService : MediaSessionService() {
             initialActive = active,
             spare = spare,
             session = session,
-            preferences = getSharedPreferences("parker_tunes_settings", MODE_PRIVATE),
+            preferences = settingsPrefs,
             onActivePlayerChanged = { nowActive ->
                 effects.attach(nowActive.audioSessionId)
                 WidgetProvider.update(this, nowActive)
             }
         )
+        observePlaybackSettings(active, spare)
+        serviceScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(3_000L)
+                val player = mediaSession?.player as? ExoPlayer ?: continue
+                if (!player.isPlaying || player.repeatMode == Player.REPEAT_MODE_ONE) continue
+                val duration = player.duration
+                if (duration <= 0L || duration == C.TIME_UNSET) continue
+                val remaining = duration - player.currentPosition
+                val hasNext = player.currentMediaItemIndex in 0 until (player.mediaItemCount - 1)
+                if (!hasNext && remaining in 1L..45_000L) maybeAppendRelated(player)
+            }
+        }
         WidgetProvider.update(this, active)
     }
 
-    private fun buildPlayer(audioAttributes: AudioAttributes): ExoPlayer =
-        ExoPlayer.Builder(this)
+    private fun buildPlayer(audioAttributes: AudioAttributes): ExoPlayer {
+        val silenceProcessor = SilenceSkippingAudioProcessor().apply {
+            setEnabled(settingsPrefs.getBoolean("skip_silence", false))
+        }
+        silenceProcessors += silenceProcessor
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: android.content.Context,
+                enableFloatOutput: Boolean,
+                enableAudioOutputPlaybackParams: Boolean
+            ): AudioSink {
+                return DefaultAudioSink.Builder(context)
+                    .setAudioProcessors(arrayOf(silenceProcessor))
+                    .build()
+            }
+        }
+        return ExoPlayer.Builder(this, renderersFactory)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .build()
+    }
+
+    private fun observePlaybackSettings(active: ExoPlayer, spare: ExoPlayer) {
+        val repository = SettingsRepository(this)
+        serviceScope.launch {
+            repository.crossfadeSeconds.collect { seconds ->
+                settingsPrefs.edit().putInt("crossfade_seconds", seconds).apply()
+                crossfadeController?.updateCrossfadeSeconds(seconds)
+            }
+        }
+        serviceScope.launch {
+            repository.automix.collect { enabled ->
+                settingsPrefs.edit().putBoolean("automix", enabled).apply()
+            }
+        }
+        serviceScope.launch {
+            repository.autoplaySimilar.collect { enabled ->
+                settingsPrefs.edit().putBoolean("autoplay_similar", enabled).apply()
+            }
+        }
+        serviceScope.launch {
+            repository.gaplessPlayback.collect { enabled ->
+                settingsPrefs.edit().putBoolean("gapless_playback", enabled).apply()
+                active.pauseAtEndOfMediaItems = !enabled
+                spare.pauseAtEndOfMediaItems = !enabled
+            }
+        }
+        serviceScope.launch {
+            repository.skipSilence.collect { enabled ->
+                settingsPrefs.edit().putBoolean("skip_silence", enabled).apply()
+                silenceProcessors.forEach { processor ->
+                    runCatching { processor.setEnabled(enabled) }
+                }
+            }
+        }
+    }
 
     private fun observePlayer(player: ExoPlayer, effects: EqualizerManager) {
         if (!observedPlayers.add(player)) return
@@ -270,14 +343,16 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun maybeAppendRelated(player: ExoPlayer) {
-        val prefs = getSharedPreferences("parker_tunes_settings", MODE_PRIVATE)
-        if (!prefs.getBoolean("smart_autoplay", true) || autoplayResolving ||
+        val prefs = settingsPrefs
+        if (!prefs.getBoolean("autoplay_similar", true) || autoplayResolving ||
             player.repeatMode != Player.REPEAT_MODE_OFF ||
             player.currentMediaItemIndex < 0 ||
             player.currentMediaItemIndex < player.mediaItemCount - 1
         ) return
         val current = player.currentMediaItem ?: return
         val songId = current.mediaId.takeIf { it.isNotBlank() } ?: return
+        if (!autoplayAttemptedSongIds.add(songId)) return
+        if (autoplayAttemptedSongIds.size > 64) autoplayAttemptedSongIds.clear()
         autoplayResolving = true
         serviceScope.launch {
             try {
@@ -329,7 +404,10 @@ class PlaybackService : MediaSessionService() {
                 val mediaItems = withContext(Dispatchers.IO) {
                     additions.mapNotNull { song ->
                         runCatching {
-                            val stream = app.musicApi.getStreamUrl(song.id)
+                            val stream = app.musicApi.getStreamUrl(
+                                song.id,
+                                settingsPrefs.getString("audio_quality", "Auto") ?: "Auto"
+                            )
                             if (stream.isBlank()) null else androidx.media3.common.MediaItem.Builder()
                                 .setMediaId(song.id)
                                 .setUri(stream)
