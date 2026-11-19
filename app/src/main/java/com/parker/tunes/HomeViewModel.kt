@@ -36,15 +36,23 @@ class HomeViewModel(private val api: MusicApi) {
     private var activeLoad: Job? = null
     private var loadMoreJob: Job? = null
     private var musicProfile: MusicTasteProfile = MusicTasteProfile.EMPTY
+    private var discoveryDiversity: Int = 50
+    private var reduceSimilarMusic: Boolean = false
 
     /** Rebuild the private taste profile from this device's listening signals. */
-    fun onMusicSignals(events: List<ListeningEventEntity>, favorites: List<FavoriteEntity>) {
-        musicProfile = MusicTasteProfile.build(events, favorites)
+    fun onMusicSignals(
+        events: List<ListeningEventEntity>, favorites: List<FavoriteEntity>,
+        personalizationEnabled: Boolean = true, diversity: Int = 50, reduceSimilar: Boolean = false
+    ) {
+        musicProfile = if (personalizationEnabled) MusicTasteProfile.build(events, favorites) else MusicTasteProfile.EMPTY
+        discoveryDiversity = diversity.coerceIn(0, 100)
+        reduceSimilarMusic = reduceSimilar
         val current = mutableState.value.songs
-        if (current.isNotEmpty()) {
-            mutableState.update { it.copy(songs = musicProfile.rank(current, historyIds)) }
-        }
+        if (current.isNotEmpty()) mutableState.update { it.copy(songs = rank(current)) }
     }
+
+    private fun rank(candidates: List<Song>): List<Song> =
+        musicProfile.rank(candidates, historyIds, diversityPercent = discoveryDiversity, reduceSimilarMusic = reduceSimilarMusic)
 
     fun onListeningHistory(history: List<Song>) {
         val cleaned = history.filter { it.id.isNotBlank() }
@@ -119,7 +127,7 @@ class HomeViewModel(private val api: MusicApi) {
                         .filter(::isUsableRecommendation)
                     recommendations = merge(recommendations, discovery)
                 }
-                recommendations = musicProfile.rank(recommendations, historyIds)
+                recommendations = rank(recommendations)
                 mutableState.update {
                     it.copy(songs = recommendations, loading = false)
                 }
@@ -151,7 +159,7 @@ class HomeViewModel(private val api: MusicApi) {
                     val related = api.getRelatedSongs(seed.id, seed.title, seed.artist)
                     mutableState.update { current ->
                         val combined = merge(current.songs, related)
-                        current.copy(songs = musicProfile.rank(combined, historyIds))
+                        current.copy(songs = rank(combined))
                     }
                     if (mutableState.value.songs.size > before) break
                 }
