@@ -69,7 +69,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import dev.chrisbanes.haze.ExperimentalHazeApi
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.haze
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -462,7 +461,7 @@ fun ParkerTunesRoot() {
                 NavHost(
                     navController = nav,
                     startDestination = "home",
-                    modifier = Modifier.fillMaxSize().haze(state = hazeState)
+                    modifier = Modifier.fillMaxSize()
                 ) {
                 composable("home") {
                     HomeScreen(
