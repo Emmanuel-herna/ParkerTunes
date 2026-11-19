@@ -248,7 +248,7 @@ fun HomeScreen(
                         onClick = onSettings,
                         modifier = Modifier.size(38.dp).clip(CircleShape)
                             .background(Color(0xFFB8B8B8).copy(alpha = 0.10f))
-                            .border(1.dp, Color.White.copy(alpha = 0.28f), CircleShape)
+                            
                     ) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings",
                             tint = Color(0xFFD9D9D9), modifier = Modifier.size(23.dp))
@@ -383,11 +383,11 @@ private fun FeaturedRecentCard(song: Song?, onPlay: (Song) -> Unit) {
         }
         Box(Modifier.weight(1f).fillMaxHeight()) {
             Box(Modifier.fillMaxWidth(0.91f).fillMaxHeight().align(Alignment.CenterStart)
-                .border(1.dp, Color.White.copy(alpha = 0.48f), RoundedCornerShape(28.dp)))
+                )
             Box(
                 Modifier.fillMaxWidth(0.78f).fillMaxHeight().align(Alignment.CenterStart)
                     .clip(RoundedCornerShape(28.dp))
-                    .border(1.5.dp, Color(0xFFD0D0D0), RoundedCornerShape(28.dp))
+                    
                     .background(Color(0xFF171717))
                     .then(if (song != null) Modifier.clickable { onPlay(song) } else Modifier),
                 contentAlignment = Alignment.Center
@@ -417,7 +417,7 @@ private fun ContinueListeningCard(song: Song, onPlay: (Song) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(13.dp)
     ) {
         Box(Modifier.size(76.dp).clip(CircleShape)
-            .border(1.dp, Color(0xFF777777), CircleShape)
+            
             .background(Color(0xFF151515)), contentAlignment = Alignment.Center) {
             if (!song.coverUrl.isNullOrBlank()) {
                 AsyncImage(song.coverUrl, contentDescription = song.title,
@@ -518,7 +518,7 @@ private fun RecommendationShelf(
                                     Box(Modifier.width(cardWidth).aspectRatio(1f), contentAlignment = Alignment.Center) {
                                         Box(Modifier.fillMaxWidth(0.94f).aspectRatio(1f)
                                             .clip(CircleShape)
-                                            .border(1.dp, Color.White.copy(alpha = 0.52f), CircleShape)
+                                            
                                             .background(Color(0xFF111111)))
                                     }
                                 }
@@ -566,7 +566,7 @@ private fun RecommendationGridTile(song: Song, width: Dp, onClick: () -> Unit) {
         Box(
             Modifier.fillMaxWidth(0.94f).aspectRatio(1f)
                 .clip(CircleShape)
-                .border(1.5.dp, Color(0xFFD0D0D0), CircleShape)
+                
                 .background(Color(0xFF111111)),
             contentAlignment = Alignment.Center
         ) {
@@ -587,7 +587,7 @@ private fun HomeSongCard(song: Song, onClick: () -> Unit, width: Dp) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(Modifier.size(width * 0.86f).clip(CircleShape)
-            .border(1.dp, Color(0xFF777777), CircleShape)
+            
             .background(Color(0xFF151515)), contentAlignment = Alignment.Center) {
             if (song.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null,
                 tint = Color(0xFFBDBDBD), modifier = Modifier.size(34.dp))
