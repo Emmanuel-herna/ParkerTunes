@@ -74,6 +74,7 @@ fun SongOptionsSheet(
     var mainVisible by remember { mutableStateOf(true) }
     var infoVisible by remember { mutableStateOf(false) }
     var playlistPickerVisible by remember { mutableStateOf(false) }
+    var overflowExpanded by remember { mutableStateOf(false) }
     var createPlaylistVisible by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
     var favorite by remember(song.id, isFavorite) { mutableStateOf(isFavorite) }
@@ -148,8 +149,34 @@ fun SongOptionsSheet(
                         Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Toggle favorite",
                             tint = if (favorite) Color(0xFFFF6B91) else Color.White.copy(alpha = 0.82f))
                     }
-                    IconButton(onClick = { playlistPickerVisible = true }) {
-                        Icon(Icons.Default.MoreHoriz, "More song actions", tint = Color.White.copy(alpha = 0.75f))
+                    Box {
+                        IconButton(onClick = { overflowExpanded = true }) {
+                            Icon(Icons.Default.MoreHoriz, "More song actions", tint = Color.White.copy(alpha = 0.75f))
+                        }
+                        DropdownMenu(expanded = overflowExpanded, onDismissRequest = { overflowExpanded = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Share") },
+                                leadingIcon = { Icon(Icons.Default.Share, null) },
+                                onClick = {
+                                    overflowExpanded = false
+                                    perform(SongAction.Share)
+                                    closeOptions()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Song info") },
+                                leadingIcon = { Icon(Icons.Default.Info, null) },
+                                onClick = {
+                                    overflowExpanded = false
+                                    perform(SongAction.ShowInfo)
+                                    scope.launch {
+                                        sheetState.hide()
+                                        mainVisible = false
+                                        infoVisible = true
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
 
