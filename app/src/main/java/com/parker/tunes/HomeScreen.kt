@@ -125,11 +125,13 @@ fun HomeScreen(
             // Build Music DNA only from this device's local events and favourites.
             // No listening data is uploaded or shared with other listeners.
             recommendationViewModel.onMusicSignals(listeningEvents, favorites)
-            // Preserve play frequency while also allowing favourites to seed radio
-            // when a listener has saved music but little recorded history.
-            recommendationViewModel.onListeningHistory(
-                (historySongs + recentSongs + favoriteSongs).distinctBy { it.id }
-            )
+            // Keep repeated history rows so artist frequency reflects actual plays.
+            // Recent rows are only a fallback when the full snapshot is empty; favourites
+            // seed the profile without duplicating songs already represented in history.
+            val historyIds = historySongs.map { it.id }.toSet()
+            val recommendationSeeds = historySongs.ifEmpty { recentSongs } +
+                favoriteSongs.filterNot { it.id in historyIds }
+            recommendationViewModel.onListeningHistory(recommendationSeeds)
         }
     }
     LaunchedEffect(recommendationListState) {
