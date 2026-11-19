@@ -67,6 +67,8 @@ import com.parker.tunes.data.SpotifyMetadataProvider
 import com.parker.tunes.player.isLikelyMix
 import com.parker.tunes.data.PlaylistEntity
 import com.parker.tunes.data.PlaylistTrackEntity
+import com.parker.tunes.data.FavoriteEntity
+import dev.chrisbanes.haze.HazeState
 import com.parker.tunes.model.Album
 import com.parker.tunes.model.Artist
 import com.parker.tunes.model.SearchResult
@@ -137,7 +139,8 @@ fun SearchScreen(
     onArtist: (Artist) -> Unit,
     onAlbum: (Album) -> Unit,
     downloads: SongDownloadManager,
-    onLowStorage: () -> Unit
+    onLowStorage: () -> Unit,
+    hazeState: HazeState
 ) {
     val recentVm: RecentSearchesViewModel = viewModel(
         key = "recent-searches-${System.identityHashCode(dao)}",
@@ -147,6 +150,8 @@ fun SearchScreen(
     val savedDownloads by remember(dao) { dao.downloads().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
     val downloadProgress by downloads.progress.collectAsState()
     val playlists by remember(dao) { dao.playlists().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
+    val favorites by remember(dao) { dao.favorites().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
+    val glassIntensity by settingsRepository.glassIntensity.collectAsState(initial = 55)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val spotifyProvider = remember { SpotifyMetadataProvider() }
@@ -453,25 +458,67 @@ fun SearchScreen(
                             )
                         }
                         items(results.songs, key = { it.id }) { song ->
+                            val songDownload = savedDownloads.firstOrNull { it.songId == song.id }
                             SearchResultRow(
                                 song = song,
-                                download = savedDownloads.firstOrNull { it.songId == song.id },
+                                download = songDownload,
                                 progress = downloadProgress[song.id],
                                 playlists = playlists,
-                                onQueue = onQueue,
-                                onAddToPlaylist = { playlist ->
-                                    scope.launch(Dispatchers.IO) {
-                                        val existing = dao.playlistTracksSnapshot(playlist.id)
-                                        if (existing.none { it.songId == song.id }) {
-                                            dao.addTrack(PlaylistTrackEntity(playlist.id, song.id, existing.size, song.title, song.artist))
+                                isFavorite = favorites.any { it.songId == song.id },
+                                glassIntensity = glassIntensity,
+                                hazeState = hazeState,
+                                onAction = { action ->
+                                    when (action) {
+                                        SongAction.Play -> onPlay(song)
+                                        SongAction.PlayNext -> onQueue(song, true)
+                                        SongAction.AddToQueue -> onQueue(song, false)
+                                        SongAction.Download -> when (songDownload?.status) {
+                                            DownloadEntity.STATUS_COMPLETE -> scope.launch(Dispatchers.IO) { downloads.remove(song.id) }
+                                            DownloadEntity.STATUS_DOWNLOADING -> downloads.cancel(song.id)
+                                            else -> if (downloads.hasLowStorage()) onLowStorage() else downloads.enqueue(song)
                                         }
+                                        SongAction.ToggleFavorite -> scope.launch(Dispatchers.IO) {
+                                            if (dao.isFavorite(song.id)) dao.removeFavorite(song.id)
+                                            else dao.addFavorite(FavoriteEntity(songId = song.id, title = song.title, artist = song.artist, coverUrl = song.coverUrl))
+                                        }
+                                        is SongAction.AddToPlaylist -> scope.launch(Dispatchers.IO) {
+                                            val existing = dao.playlistTracksSnapshot(action.playlistId)
+                                            if (existing.none { it.songId == song.id }) {
+                                                dao.addTrack(PlaylistTrackEntity(action.playlistId, song.id, existing.size, song.title, song.artist))
+                                            }
+                                        }
+                                        SongAction.GoToArtist -> scope.launch {
+                                            runCatching { withContext(Dispatchers.IO) { api.search(song.artist).artists.firstOrNull() } }
+                                                .onSuccess { artist -> if (artist != null) onArtist(artist) }
+                                        }
+                                        SongAction.GoToAlbum -> scope.launch {
+                                            val albumQuery = song.album?.takeIf { it.isNotBlank() } ?: song.title
+                                            runCatching { withContext(Dispatchers.IO) { api.search(albumQuery).albums.firstOrNull() } }
+                                                .onSuccess { album -> if (album != null) onAlbum(album) }
+                                        }
+                                        SongAction.StartRadio -> scope.launch {
+                                            runCatching { withContext(Dispatchers.IO) { api.getRelatedSongs(song.id, song.title, song.artist) } }
+                                                .onSuccess { related -> related.forEach { onQueue(it, false) } }
+                                        }
+                                        SongAction.Share -> {
+                                            val link = song.spotifyUrl?.takeIf { it.isNotBlank() }
+                                                ?: "https://music.youtube.com/watch?v=\${song.id}"
+                                            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                                type = "text/plain"
+                                                putExtra(android.content.Intent.EXTRA_TEXT, "\${song.title} · \${song.artist}\\n$link")
+                                            }
+                                            runCatching { context.startActivity(android.content.Intent.createChooser(shareIntent, "Share song")) }
+                                        }
+                                        SongAction.ShowInfo, SongAction.Remove -> Unit
                                     }
                                 },
-                                onDownload = {
-                                    if (downloads.hasLowStorage()) onLowStorage() else downloads.enqueue(song)
+                                onCreatePlaylist = { name ->
+                                    scope.launch(Dispatchers.IO) {
+                                        val playlist = PlaylistEntity(id = java.util.UUID.randomUUID().toString(), name = name)
+                                        dao.savePlaylist(playlist)
+                                        dao.addTrack(PlaylistTrackEntity(playlist.id, song.id, 0, song.title, song.artist))
+                                    }
                                 },
-                                onCancelDownload = { downloads.cancel(song.id) },
-                                onRemoveDownload = { scope -> scope.launch(Dispatchers.IO) { downloads.remove(song.id) } },
                                 onClick = {
                                     recentVm.recordFirstResult(query, song)
                                     onPlay(song)
@@ -501,17 +548,15 @@ private fun SearchResultRow(
     download: DownloadEntity?,
     progress: Int?,
     playlists: List<PlaylistEntity>,
-    onQueue: (Song, Boolean) -> Unit,
-    onAddToPlaylist: (PlaylistEntity) -> Unit,
-    onDownload: () -> Unit,
-    onCancelDownload: () -> Unit,
-    onRemoveDownload: (kotlinx.coroutines.CoroutineScope) -> Unit,
+    isFavorite: Boolean,
+    glassIntensity: Int,
+    hazeState: HazeState,
+    onAction: (SongAction) -> Unit,
+    onCreatePlaylist: (String) -> Unit,
     onClick: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    var menuExpanded by remember(song.id) { mutableStateOf(false) }
-    var showPlaylistDialog by remember(song.id) { mutableStateOf(false) }
+    var showOptions by remember(song.id) { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().height(66.dp).clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
@@ -523,16 +568,9 @@ private fun SearchResultRow(
             else AsyncImage(model = song.coverUrl, contentDescription = "Song cover",
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             if (progress != null || download?.status == DownloadEntity.STATUS_DOWNLOADING) {
-                if (progress == null) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(30.dp), color = SearchAccent, strokeWidth = 3.dp
-                    )
-                } else {
-                    CircularProgressIndicator(
-                        progress = { progress.coerceIn(0, 100) / 100f },
-                        modifier = Modifier.size(30.dp), color = SearchAccent, strokeWidth = 3.dp
-                    )
-                }
+                if (progress == null) CircularProgressIndicator(modifier = Modifier.size(30.dp), color = SearchAccent, strokeWidth = 3.dp)
+                else CircularProgressIndicator(progress = { progress.coerceIn(0, 100) / 100f },
+                    modifier = Modifier.size(30.dp), color = SearchAccent, strokeWidth = 3.dp)
             } else if (download?.status == DownloadEntity.STATUS_COMPLETE) {
                 Icon(Icons.Default.CheckCircle, "Downloaded", tint = SearchAccent,
                     modifier = Modifier.align(Alignment.BottomEnd).size(19.dp))
@@ -548,82 +586,33 @@ private fun SearchResultRow(
                     modifier = Modifier.weight(1f, fill = false)
                 )
                 if (!song.spotifyUrl.isNullOrBlank()) {
-                    Text(
-                        "Spotify ↗",
-                        color = Color(0xFF1DB954),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
+                    Text("Spotify ↗", color = Color(0xFF1DB954), fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(start = 7.dp).clickable {
-                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(song.spotifyUrl))) }
-                        }
-                    )
+                            runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(song.spotifyUrl))) }
+                        })
                 }
             }
         }
-        Box {
-            IconButton(onClick = { menuExpanded = true }) {
-                Icon(Icons.Default.MoreVert, "Song options", tint = SearchMuted)
-            }
-            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                DropdownMenuItem(text = { Text("Play next") }, onClick = {
-                    menuExpanded = false
-                    onQueue(song, true)
-                })
-                DropdownMenuItem(text = { Text("Add to queue") }, onClick = {
-                    menuExpanded = false
-                    onQueue(song, false)
-                })
-                DropdownMenuItem(text = { Text("Add to playlist") }, onClick = {
-                    menuExpanded = false
-                    showPlaylistDialog = true
-                })
-                Divider()
-                when (download?.status) {
-                    DownloadEntity.STATUS_COMPLETE -> DropdownMenuItem(
-                        text = { Text("Remove download") },
-                        leadingIcon = { Icon(Icons.Default.Delete, null) },
-                        onClick = { menuExpanded = false; onRemoveDownload(scope) }
-                    )
-                    DownloadEntity.STATUS_DOWNLOADING -> DropdownMenuItem(
-                        text = { Text("Cancel download") },
-                        leadingIcon = { Icon(Icons.Default.Close, null) },
-                        onClick = { menuExpanded = false; onCancelDownload() }
-                    )
-                    DownloadEntity.STATUS_FAILED -> DropdownMenuItem(
-                        text = { Text("Retry download") },
-                        leadingIcon = { Icon(Icons.Default.Download, null) },
-                        onClick = { menuExpanded = false; onDownload() }
-                    )
-                    else -> DropdownMenuItem(
-                        text = { Text("Download") },
-                        leadingIcon = { Icon(Icons.Default.Download, null) },
-                        onClick = { menuExpanded = false; onDownload() }
-                    )
-                }
-            }
+        IconButton(onClick = { showOptions = true }) {
+            Icon(Icons.Default.MoreVert, "Song options", tint = SearchMuted)
         }
         Box(Modifier.padding(start = 2.dp).size(24.dp).clip(CircleShape).background(SearchAccent)
             .clickable(onClick = onClick), contentAlignment = Alignment.Center) {
             Icon(Icons.Default.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(19.dp))
         }
     }
-    if (showPlaylistDialog) {
-        AlertDialog(
-            onDismissRequest = { showPlaylistDialog = false },
-            title = { Text("Add to playlist") },
-            text = {
-                if (playlists.isEmpty()) Text("Create a playlist in your Library first.")
-                else Column {
-                    playlists.forEach { playlist ->
-                        TextButton(onClick = {
-                            onAddToPlaylist(playlist)
-                            showPlaylistDialog = false
-                        }, modifier = Modifier.fillMaxWidth()) { Text(playlist.name) }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { showPlaylistDialog = false }) { Text("Close") }
-            }
+    if (showOptions) {
+        SongOptionsSheet(
+            song = song,
+            source = SongOptionsSource.SEARCH,
+            onAction = onAction,
+            hazeState = hazeState,
+            glassIntensity = glassIntensity,
+            isFavorite = isFavorite,
+            playlists = playlists,
+            downloadStatus = download?.status,
+            onCreatePlaylist = onCreatePlaylist,
+            onDismiss = { showOptions = false }
         )
     }
 }

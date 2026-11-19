@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import dev.chrisbanes.haze.ExperimentalHazeApi
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -461,7 +462,7 @@ fun ParkerTunesRoot() {
                 NavHost(
                     navController = nav,
                     startDestination = "home",
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize().haze(state = hazeState)
                 ) {
                 composable("home") {
                     HomeScreen(
@@ -493,7 +494,7 @@ fun ParkerTunesRoot() {
                     MoodResultsScreen(mood = mood, api = api, onBack = { nav.popBackStack() }, onPlay = playSong)
                 }
                 composable("search") {
-                    SearchScreen(api = api, dao = dao, settingsRepository = settingsRepository, downloads = app.downloads, onLowStorage = { scope.launch { snackbarHostState.showSnackbar("Low storage · free up at least 200 MB first.") } }, onPlay = playSong, onQueue = queueSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist/${Uri.encode(it.id)}") }, onAlbum = { album -> selectedAlbum = album; nav.navigate("album") })
+                    SearchScreen(api = api, dao = dao, settingsRepository = settingsRepository, downloads = app.downloads, onLowStorage = { scope.launch { snackbarHostState.showSnackbar("Low storage · free up at least 200 MB first.") } }, onPlay = playSong, onQueue = queueSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist/${Uri.encode(it.id)}") }, onAlbum = { album -> selectedAlbum = album; nav.navigate("album") }, hazeState = hazeState)
                 }
                 composable("artist/{browseId}") { entry ->
                     val browseId = Uri.decode(entry.arguments?.getString("browseId").orEmpty())
