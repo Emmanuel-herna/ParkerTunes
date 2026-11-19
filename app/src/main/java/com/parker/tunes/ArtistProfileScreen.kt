@@ -5,6 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -231,17 +234,25 @@ fun ArtistProfileScreen(
                             modifier = Modifier.weight(1f))
                         TextButton(onClick = { expandedSection = null }) { Text("Close", color = ArtistAccent) }
                     }
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        contentPadding = PaddingValues(bottom = 18.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         when (expandedSection) {
                             "songs" -> items(data.topSongs, key = { it.id }) { song ->
-                                Row(Modifier.fillMaxWidth().clickable { onPlay(song) }.padding(6.dp),
-                                    verticalAlignment = Alignment.CenterVertically) {
-                                    ArtistCover(song.coverUrl, song.title, Modifier.size(52.dp))
-                                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                                        Text(song.title, color = Color.White, maxLines = 1)
-                                        Text(song.artist, color = ArtistMuted, fontSize = 12.sp)
-                                    }
-                                    Icon(Icons.Default.PlayArrow, null, tint = ArtistAccent)
+                                Column(
+                                    Modifier.fillMaxWidth().clickable { onPlay(song) }
+                                        .clip(RoundedCornerShape(12.dp)).background(ArtistPanel).padding(10.dp)
+                                ) {
+                                    ArtistCover(song.coverUrl, song.title,
+                                        Modifier.fillMaxWidth().height(132.dp))
+                                    Text(song.title, color = Color.White, maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(top = 8.dp))
+                                    Text(song.artist, color = ArtistMuted, fontSize = 12.sp,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                             "albums", "singles", "recent" -> {
@@ -251,24 +262,34 @@ fun ArtistProfileScreen(
                                     else -> data.recentReleases
                                 }
                                 items(list, key = { it.id }) { album ->
-                                    Row(Modifier.fillMaxWidth().clickable { onAlbum(album) }.padding(6.dp),
-                                        verticalAlignment = Alignment.CenterVertically) {
-                                        ArtistCover(album.coverUrl, album.title, Modifier.size(56.dp))
-                                        Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                                            Text(album.title, color = Color.White, maxLines = 2)
-                                            Text(if (album.year.isNotBlank()) album.year else "Album",
-                                                color = ArtistMuted, fontSize = 12.sp)
-                                        }
+                                    Column(
+                                        Modifier.fillMaxWidth().clickable { onAlbum(album) }
+                                            .clip(RoundedCornerShape(12.dp)).background(ArtistPanel).padding(10.dp)
+                                    ) {
+                                        ArtistCover(album.coverUrl, album.title,
+                                            Modifier.fillMaxWidth().height(132.dp))
+                                        Text(album.title, color = Color.White, maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(top = 8.dp))
+                                        Text(if (album.year.isNotBlank()) album.year else "Album",
+                                            color = ArtistMuted, fontSize = 12.sp)
                                     }
                                 }
                             }
                             else -> items(data.relatedArtists, key = { it.id }) { related ->
-                                Row(Modifier.fillMaxWidth().clickable { expandedSection = null; onArtist(related) }
-                                    .padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(
+                                    Modifier.fillMaxWidth().clickable {
+                                        expandedSection = null
+                                        onArtist(related)
+                                    }.clip(RoundedCornerShape(12.dp)).background(ArtistPanel).padding(12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
                                     AsyncImage(model = related.avatarUrl, contentDescription = related.name,
-                                        modifier = Modifier.size(54.dp).clip(CircleShape), contentScale = ContentScale.Crop)
-                                    Text(related.name, color = Color.White,
-                                        modifier = Modifier.padding(start = 12.dp))
+                                        modifier = Modifier.size(112.dp).clip(CircleShape),
+                                        contentScale = ContentScale.Crop)
+                                    Text(related.name, color = Color.White, maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(top = 8.dp))
                                 }
                             }
                         }
