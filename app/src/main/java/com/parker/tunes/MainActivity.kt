@@ -551,11 +551,13 @@ fun ParkerTunesRoot() {
                     MoodResultsScreen(mood = mood, api = api, onBack = { nav.popBackStack() }, onPlay = playSong)
                 }
                 composable("search") {
-                    SearchScreen(api = api, dao = dao, settingsRepository = settingsRepository, downloads = app.downloads, onLowStorage = { scope.launch { snackbarHostState.showSnackbar("Low storage · free up at least 200 MB first.") } }, onPlay = playSong, onQueue = queueSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist") })
+                    SearchScreen(api = api, dao = dao, settingsRepository = settingsRepository, downloads = app.downloads, onLowStorage = { scope.launch { snackbarHostState.showSnackbar("Low storage · free up at least 200 MB first.") } }, onPlay = playSong, onQueue = queueSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist/${Uri.encode(it.id)}") })
                 }
-                composable("artist") {
-                    selectedArtist?.let { artist ->
-                        ArtistProfileScreen(artist = artist, api = api, onBack = { nav.popBackStack() }, onPlay = playSong,
+                composable("artist/{browseId}") { entry ->
+                    val browseId = Uri.decode(entry.arguments?.getString("browseId").orEmpty())
+                    val artist = selectedArtist?.takeIf { it.id == browseId }
+                    artist?.let {
+                        ArtistProfileScreen(artist = it, api = api, onBack = { nav.popBackStack() }, onPlay = playSong,
                             onAlbum = { album -> selectedAlbum = album; nav.navigate("album") })
                     }
                 }
