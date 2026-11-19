@@ -439,7 +439,7 @@ class NewPipeMusicApi : MusicApi {
         }
 
         collect(json)
-        found.distinctBy { it.id }
+        return found.distinctBy { it.id }
     }
 
     private fun parseDurationSeconds(value: String): Long {
