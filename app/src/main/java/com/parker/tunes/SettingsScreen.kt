@@ -133,67 +133,67 @@ fun SettingsScreen(
         item { Text("Settings", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp)) }
 
         item { SettingsSection("PLAYBACK") }
-        item { SettingRow(Icons.Default.AutoAwesome, "Automix", "Beat-matched crossfade · Stage 2 alignment TODO", if (automix) "On" else "Off", { scope.launch { repository.setAutomix(!automix) } }, toggle = automix) }
-        item { SettingRow(Icons.Default.Tune, "Crossfade", if (crossfade == 0) "Crossfade between tracks" else "Equal-power transition", listOf(0,3,6,10).let { values -> when(crossfade) { 0 -> "Off"; 3 -> "3 s"; 6 -> "6 s"; 10 -> "10 s"; else -> "Off" } }, { scope.launch { repository.setCrossfadeSeconds(when(crossfade) { 0 -> 3; 3 -> 6; 6 -> 10; else -> 0 }); settingsPrefs.edit().putInt("crossfade_seconds", when(crossfade) { 0 -> 3; 3 -> 6; 6 -> 10; else -> 0 }).apply() } }) }
-        item { SettingRow(Icons.Default.AllInclusive, "Gapless playback", "Avoid pauses between queued tracks", if (gapless) "On" else "Off", { scope.launch { repository.setGaplessPlayback(!gapless) } }, toggle = gapless) }
-        item { SettingRow(Icons.Default.Radio, "Autoplay similar songs", "Continue with related music", if (autoplay) "On" else "Off", { scope.launch { repository.setAutoplaySimilar(!autoplay) } }, toggle = autoplay) }
-        item { SettingRow(Icons.Default.ContentCut, "Skip silence", "Skip quiet sections in tracks", if (skipSilence) "On" else "Off", { scope.launch { repository.setSkipSilence(!skipSilence) } }, toggle = skipSilence) }
-        item { SettingRow(Icons.Default.HighQuality, "Audio quality", "Preferred streaming quality", quality, { sheet = "quality" }) }
-        item { SettingRow(Icons.Default.PlayCircle, "Resume where you left off", "Continue from your last position", if (resume) "On" else "Off", { scope.launch { repository.setResumePlayback(!resume) } }, toggle = resume) }
+        item { SettingRow(Icons.Default.AutoAwesome, "Automix", "Beat-matched crossfade · Stage 2 alignment TODO", if (automix) "On" else "Off", { scope.launch { repository.setAutomix(!automix) } }, toggle = automix, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Tune, "Crossfade", if (crossfade == 0) "Crossfade between tracks" else "Equal-power transition", listOf(0,3,6,10).let { values -> when(crossfade) { 0 -> "Off"; 3 -> "3 s"; 6 -> "6 s"; 10 -> "10 s"; else -> "Off" } }, { scope.launch { repository.setCrossfadeSeconds(when(crossfade) { 0 -> 3; 3 -> 6; 6 -> 10; else -> 0 }); settingsPrefs.edit().putInt("crossfade_seconds", when(crossfade) { 0 -> 3; 3 -> 6; 6 -> 10; else -> 0 }).apply() } }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.AllInclusive, "Gapless playback", "Avoid pauses between queued tracks", if (gapless) "On" else "Off", { scope.launch { repository.setGaplessPlayback(!gapless) } }, toggle = gapless, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Radio, "Autoplay similar songs", "Continue with related music", if (autoplay) "On" else "Off", { scope.launch { repository.setAutoplaySimilar(!autoplay) } }, toggle = autoplay, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.ContentCut, "Skip silence", "Skip quiet sections in tracks", if (skipSilence) "On" else "Off", { scope.launch { repository.setSkipSilence(!skipSilence) } }, toggle = skipSilence, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.HighQuality, "Audio quality", "Preferred streaming quality", quality, { sheet = "quality" }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.PlayCircle, "Resume where you left off", "Continue from your last position", if (resume) "On" else "Off", { scope.launch { repository.setResumePlayback(!resume) } }, toggle = resume, reduceMotion = reduceMotion) }
 
         item { SettingsSection("MUSIC INTELLIGENCE") }
-        item { SettingRow(Icons.Default.AutoAwesome, "Personalize recommendations", "Use your on-device listening signals", if (personalization) "On" else "Off", { scope.launch { repository.setRecommendationPersonalization(!personalization) } }, toggle = personalization) }
-        item { SettingRow(Icons.Default.Explore, "Reduce similar music", "Favor variety over repeating familiar artists", if (reduceSimilar) "On" else "Off", { scope.launch { repository.setReduceSimilarMusic(!reduceSimilar) } }, toggle = reduceSimilar) }
-        item { SettingRow(Icons.Default.Tune, "Discovery diversity", "Balance familiar music and new artists", diversity.toString() + "%", { sheet = "discovery_diversity" }) }
-        item { SettingRow(Icons.Default.History, "View listening activity", "See recommendation signals stored on this device", "View", { scope.launch { activityItems = withContext(kotlinx.coroutines.Dispatchers.IO) { dao.listeningEvents(100) }; showActivity = true } }) }
-        item { SettingRow(Icons.Default.DeleteSweep, "Reset Music DNA", "Clear local listening signals; keep favorites and play history", "Reset", { confirmClearActivity = true }) }
+        item { SettingRow(Icons.Default.AutoAwesome, "Personalize recommendations", "Use your on-device listening signals", if (personalization) "On" else "Off", { scope.launch { repository.setRecommendationPersonalization(!personalization) } }, toggle = personalization, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Explore, "Reduce similar music", "Favor variety over repeating familiar artists", if (reduceSimilar) "On" else "Off", { scope.launch { repository.setReduceSimilarMusic(!reduceSimilar) } }, toggle = reduceSimilar, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Tune, "Discovery diversity", "Balance familiar music and new artists", diversity.toString() + "%", { sheet = "discovery_diversity" }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.History, "View listening activity", "See recommendation signals stored on this device", "View", { scope.launch { activityItems = withContext(kotlinx.coroutines.Dispatchers.IO) { dao.listeningEvents(100) }; showActivity = true } }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.DeleteSweep, "Reset Music DNA", "Clear local listening signals; keep favorites and play history", "Reset", { confirmClearActivity = true }, reduceMotion = reduceMotion) }
 
         item { SettingsSection("SOUND") }
-        item { SettingRow(Icons.Default.Equalizer, "Equalizer", "Presets and frequency controls", "Open", onOpenEqualizer) }
-        item { SettingRow(Icons.Default.GraphicEq, "Bass Boost", null, if (bass) "On" else "Off", { scope.launch { repository.setBassBoost(!bass) } }, toggle = bass) }
-        item { SettingRow(Icons.Default.SurroundSound, "Virtualizer", null, if (virtualizer) "On" else "Off", { scope.launch { repository.setVirtualizer(!virtualizer) } }, toggle = virtualizer) }
-        item { SettingRow(Icons.Default.VolumeUp, "Sound Check", "Loudness normalization · requires audio session integration", if (soundCheck) "On" else "Off", { scope.launch { repository.setSoundCheck(!soundCheck) } }, toggle = soundCheck) }
-        item { SettingRow(Icons.Default.SurroundSound, "Spatial Audio", "Uses the device virtualizer when available", if (virtualizer) "On" else "Off", { scope.launch { repository.setVirtualizer(!virtualizer) } }, toggle = virtualizer) }
-        item { SettingRow(Icons.Default.Headphones, "Silence in audio", "Headphones recommended · effects vary by device", "Info", { sheet = "silence" }) }
+        item { SettingRow(Icons.Default.Equalizer, "Equalizer", "Presets and frequency controls", "Open", onOpenEqualizer, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.GraphicEq, "Bass Boost", null, if (bass) "On" else "Off", { scope.launch { repository.setBassBoost(!bass) } }, toggle = bass, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.SurroundSound, "Virtualizer", null, if (virtualizer) "On" else "Off", { scope.launch { repository.setVirtualizer(!virtualizer) } }, toggle = virtualizer, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.VolumeUp, "Sound Check", "Loudness normalization · requires audio session integration", if (soundCheck) "On" else "Off", { scope.launch { repository.setSoundCheck(!soundCheck) } }, toggle = soundCheck, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.SurroundSound, "Spatial Audio", "Uses the device virtualizer when available", if (virtualizer) "On" else "Off", { scope.launch { repository.setVirtualizer(!virtualizer) } }, toggle = virtualizer, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Headphones, "Silence in audio", "Headphones recommended · effects vary by device", "Info", { sheet = "silence" }, reduceMotion = reduceMotion) }
 
         item { SettingsSection("NOW PLAYING") }
-        item { SettingRow(Icons.Default.MusicNote, "Synced lyrics", "Show timed lyrics when available", if (lyrics) "On" else "Off", { scope.launch { repository.setSyncedLyrics(!lyrics) } }, toggle = lyrics) }
-        item { SettingRow(Icons.Default.LibraryMusic, "Lyrics sources", "${sources.split(',').count { it.isNotBlank() }} sources enabled", "${sources.split(',').count { it.isNotBlank() }} sources on", { sheet = "sources" }) }
-        item { SettingRow(Icons.Default.Animation, "Motion artwork", "Animated artwork background · experimental", if (motion) "On" else "Off", { scope.launch { repository.setMotionArtwork(!motion) } }, toggle = motion) }
-        item { SettingRow(Icons.Default.QueueMusic, "Show queue button", null, if (queueButton) "On" else "Off", { scope.launch { repository.setShowQueueButton(!queueButton) } }, toggle = queueButton) }
-        item { SettingRow(Icons.Default.Speed, "Stats for nerds", "Codec, bitrate and sample-rate overlay · UI pending", if (nerds) "On" else "Off", { scope.launch { repository.setStatsForNerds(!nerds) } }, toggle = nerds) }
+        item { SettingRow(Icons.Default.MusicNote, "Synced lyrics", "Show timed lyrics when available", if (lyrics) "On" else "Off", { scope.launch { repository.setSyncedLyrics(!lyrics) } }, toggle = lyrics, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.LibraryMusic, "Lyrics sources", "${sources.split(',').count { it.isNotBlank() }} sources enabled", "${sources.split(',').count { it.isNotBlank() }} sources on", { sheet = "sources" }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Animation, "Motion artwork", "Animated artwork background · experimental", if (motion) "On" else "Off", { scope.launch { repository.setMotionArtwork(!motion) } }, toggle = motion, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.QueueMusic, "Show queue button", null, if (queueButton) "On" else "Off", { scope.launch { repository.setShowQueueButton(!queueButton) } }, toggle = queueButton, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Speed, "Stats for nerds", "Codec, bitrate and sample-rate overlay · UI pending", if (nerds) "On" else "Off", { scope.launch { repository.setStatsForNerds(!nerds) } }, toggle = nerds, reduceMotion = reduceMotion) }
 
         item { SettingsSection("DISPLAY") }
-        item { SettingRow(Icons.Default.Speed, "Refresh rate", "Choose the display smoothness ParkerTunes requests", refreshRateLabel, { sheet = "refresh_rate" }) }
-        item { SettingRow(Icons.Default.Palette, "Accent color", "Choose ParkerTunes highlight color", accent.replaceFirstChar { it.uppercase() }, { sheet = "theme" }) }
-        item { SettingRow(Icons.Default.DarkMode, "AMOLED black", "Use pure black surfaces", if (amoled) "On" else "Off", { scope.launch { repository.setAmoledBlack(!amoled) } }, toggle = amoled) }
-        item { SettingRow(Icons.Default.Wallpaper, "Player background", null, playerBackground, { sheet = "background" }) }
-        item { SettingRow(Icons.Default.FormatSize, "Interface size", "Adjust text and controls", "$size%", { sheet = "size" }) }
-        item { SettingRow(Icons.Default.Animation, "Reduce motion", null, if (reduceMotion) "On" else "Off", { scope.launch { repository.setReduceMotion(!reduceMotion) } }, toggle = reduceMotion) }
-        item { SettingRow(Icons.Default.BlurOn, "Reduce transparency", "Reduce blur and translucent layers", if (reduceTransparency) "On" else "Off", { scope.launch { repository.setReduceTransparency(!reduceTransparency) } }, toggle = reduceTransparency) }
+        item { SettingRow(Icons.Default.Speed, "Refresh rate", "Choose the display smoothness ParkerTunes requests", refreshRateLabel, { sheet = "refresh_rate" }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Palette, "Accent color", "Choose ParkerTunes highlight color", accent.replaceFirstChar { it.uppercase() }, { sheet = "theme" }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.DarkMode, "AMOLED black", "Use pure black surfaces", if (amoled) "On" else "Off", { scope.launch { repository.setAmoledBlack(!amoled) } }, toggle = amoled, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Wallpaper, "Player background", null, playerBackground, { sheet = "background" }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.FormatSize, "Interface size", "Adjust text and controls", "$size%", { sheet = "size" }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Animation, "Reduce motion", null, if (reduceMotion) "On" else "Off", { scope.launch { repository.setReduceMotion(!reduceMotion) } }, toggle = reduceMotion, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.BlurOn, "Reduce transparency", "Reduce blur and translucent layers", if (reduceTransparency) "On" else "Off", { scope.launch { repository.setReduceTransparency(!reduceTransparency) } }, toggle = reduceTransparency, reduceMotion = reduceMotion) }
 
         item { SettingsSection("NOTIFICATIONS") }
-        item { SettingRow(Icons.Default.Lock, "Show on lockscreen", null, if (lockscreen) "On" else "Off", { scope.launch { repository.setLockscreen(!lockscreen) } }, toggle = lockscreen) }
-        item { SettingRow(Icons.Default.Album, "Show album art", null, if (albumArt) "On" else "Off", { scope.launch { repository.setShowAlbumArt(!albumArt) } }, toggle = albumArt) }
-        item { SettingRow(Icons.Default.Expand, "Expandable playback controls", null, if (expandControls) "On" else "Off", { scope.launch { repository.setExpandableControls(!expandControls) } }, toggle = expandControls) }
+        item { SettingRow(Icons.Default.Lock, "Show on lockscreen", null, if (lockscreen) "On" else "Off", { scope.launch { repository.setLockscreen(!lockscreen) } }, toggle = lockscreen, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Album, "Show album art", null, if (albumArt) "On" else "Off", { scope.launch { repository.setShowAlbumArt(!albumArt) } }, toggle = albumArt, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Expand, "Expandable playback controls", null, if (expandControls) "On" else "Off", { scope.launch { repository.setExpandableControls(!expandControls) } }, toggle = expandControls, reduceMotion = reduceMotion) }
 
         item { SettingsSection("CONNECTIONS") }
-        item { SettingRow(Icons.Default.Sync, "Scrobbling", "Last.fm and ListenBrainz", if (lastFm || listenBrainz) "Configured" else "Set up", { sheet = "scrobble" }) }
-        item { SettingRow(Icons.Default.MusicNote, "Spotify metadata", "Search fallback and album artwork", "Configure", { sheet = "spotify" }) }
+        item { SettingRow(Icons.Default.Sync, "Scrobbling", "Last.fm and ListenBrainz", if (lastFm || listenBrainz) "Configured" else "Set up", { sheet = "scrobble" }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.MusicNote, "Spotify metadata", "Search fallback and album artwork", "Configure", { sheet = "spotify" }, reduceMotion = reduceMotion) }
 
         item { SettingsSection("LIBRARY & STORAGE") }
-        item { SettingRow(Icons.Default.Download, "Downloads", "Manage offline library", "Open", onOpenDownloads) }
-        item { SettingRow(Icons.Default.Delete, "Clear cache", "Image and temporary cache", "Clear", { confirmClear = true }) }
-        item { SettingRow(Icons.Default.Backup, "Backup library", "Export playlists, favorites and history as JSON", "Export", { export.launch("ParkerTunes-backup.json") }) }
-        item { SettingRow(Icons.Default.Restore, "Restore library", "Merge a JSON backup", "Import", { import.launch(arrayOf("application/json", "text/*")) }) }
+        item { SettingRow(Icons.Default.Download, "Downloads", "Manage offline library", "Open", onOpenDownloads, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Delete, "Clear cache", "Image and temporary cache", "Clear", { confirmClear = true }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Backup, "Backup library", "Export playlists, favorites and history as JSON", "Export", { export.launch("ParkerTunes-backup.json") }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Restore, "Restore library", "Merge a JSON backup", "Import", { import.launch(arrayOf("application/json", "text/*")) }, reduceMotion = reduceMotion) }
         item { SettingsSection("ABOUT") }
-        item { SettingRow(Icons.Default.SystemUpdate, "Software update", "Check GitHub releases for a newer build", "Check", { status = "Update checking is not connected yet." }) }
-        item { SettingRow(Icons.Default.Info, "Version", "ParkerTunes release", "1.0.1 (build 12)", {}) }
-        item { SettingRow(Icons.Default.Code, "GitHub", "View source code", "Open", { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Emmanuel-herna/ParkerTunes"))) } }) }
-        item { SettingRow(Icons.Default.Description, "License", "GPL-3.0", "View", { sheet = "license" }) }
-        item { SettingRow(Icons.Default.Share, "Rate & share", "Share ParkerTunes", "Share", { runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "ParkerTunes — https://github.com/Emmanuel-herna/ParkerTunes"), "Share ParkerTunes")) } }) }
+        item { SettingRow(Icons.Default.SystemUpdate, "Software update", "Check GitHub releases for a newer build", "Check", { status = "Update checking is not connected yet." }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Info, "Version", "ParkerTunes release", "1.0.1 (build 12)", {}, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Code, "GitHub", "View source code", "Open", { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Emmanuel-herna/ParkerTunes"))) } }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Description, "License", "GPL-3.0", "View", { sheet = "license" }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Share, "Rate & share", "Share ParkerTunes", "Share", { runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "ParkerTunes — https://github.com/Emmanuel-herna/ParkerTunes"), "Share ParkerTunes")) } }, reduceMotion = reduceMotion) }
         item { Text("Search metadata & artwork © Spotify. Spotify is a trademark of Spotify AB. ParkerTunes is not affiliated with Spotify.", color = SettingsMuted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 10.dp)) }
-        item { SettingRow(Icons.Default.Favorite, "Made by", "ParkerTunes · Built with BitChord as reference", "", {}) }
+        item { SettingRow(Icons.Default.Favorite, "Made by", "ParkerTunes · Built with BitChord as reference", "", {}, reduceMotion = reduceMotion) }
         item { status?.let { Text(it, color = SettingsMuted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp)) } }
     }
 
@@ -379,13 +379,13 @@ private fun SettingsSection(title: String) {
 @Composable
 private fun SettingRow(
     icon: ImageVector, title: String, subtitle: String?, value: String,
-    onClick: () -> Unit, toggle: Boolean? = null
+    onClick: () -> Unit, toggle: Boolean? = null, reduceMotion: Boolean = false
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.975f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        targetValue = if (pressed) 0.94f else 1f,
+        animationSpec = if (reduceMotion) tween(durationMillis = 80) else spring(dampingRatio = 0.08f, stiffness = 650f),
         label = "settingRowPress"
     )
     Row(
