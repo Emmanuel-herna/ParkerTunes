@@ -30,6 +30,7 @@ import coil.compose.AsyncImage
 import com.parker.tunes.data.DownloadEntity
 import com.parker.tunes.data.PlaylistEntity
 import com.parker.tunes.model.Song
+import kotlinx.coroutines.launch
 import dev.chrisbanes.haze.ExperimentalHazeApi
 import dev.chrisbanes.haze.HazeState
 
@@ -87,6 +88,14 @@ fun SongOptionsSheet(
         when (action) {
             SongAction.ToggleFavorite -> favorite = !favorite
             else -> Unit
+        }
+    }
+
+    fun closeOptions() {
+        scope.launch {
+            sheetState.hide()
+            mainVisible = false
+            onDismiss()
         }
     }
 
@@ -165,7 +174,7 @@ fun SongOptionsSheet(
 
                 Spacer(Modifier.height(18.dp))
                 SongOptionsGroup("Playback") {
-                    SongOptionsRow(Icons.Default.PlayArrow, "Play") { perform(SongAction.Play); mainVisible = false; onDismiss() }
+                    SongOptionsRow(Icons.Default.PlayArrow, "Play") { perform(SongAction.Play); closeOptions() }
                 }
                 SongOptionsDivider()
                 SongOptionsGroup("Save") {
@@ -178,17 +187,20 @@ fun SongOptionsSheet(
                 }
                 SongOptionsDivider()
                 SongOptionsGroup("Explore") {
-                    SongOptionsRow(Icons.Default.Person, "Go to artist") { perform(SongAction.GoToArtist); mainVisible = false; onDismiss() }
-                    SongOptionsRow(Icons.Default.Album, "Go to album") { perform(SongAction.GoToAlbum); mainVisible = false; onDismiss() }
-                    SongOptionsRow(Icons.Default.Radio, "Start radio") { perform(SongAction.StartRadio); mainVisible = false; onDismiss() }
+                    SongOptionsRow(Icons.Default.Person, "Go to artist") { perform(SongAction.GoToArtist); closeOptions() }
+                    SongOptionsRow(Icons.Default.Album, "Go to album") { perform(SongAction.GoToAlbum); closeOptions() }
+                    SongOptionsRow(Icons.Default.Radio, "Start radio") { perform(SongAction.StartRadio); closeOptions() }
                 }
                 SongOptionsDivider()
                 SongOptionsGroup("Other") {
-                    SongOptionsRow(Icons.Default.Share, "Share") { perform(SongAction.Share); mainVisible = false; onDismiss() }
+                    SongOptionsRow(Icons.Default.Share, "Share") { perform(SongAction.Share); closeOptions() }
                     SongOptionsRow(Icons.Default.Info, "Song info") {
                         perform(SongAction.ShowInfo)
-                        mainVisible = false
-                        infoVisible = true
+                        scope.launch {
+                            sheetState.hide()
+                            mainVisible = false
+                            infoVisible = true
+                        }
                     }
                 }
                 if (source != SongOptionsSource.SEARCH) {
@@ -196,8 +208,7 @@ fun SongOptionsSheet(
                     SongOptionsRow(Icons.Default.Delete, if (source == SongOptionsSource.QUEUE) "Remove from queue" else "Remove from playlist",
                         tint = Color(0xFFFF6B6B)) {
                         perform(SongAction.Remove)
-                        mainVisible = false
-                        onDismiss()
+                        closeOptions()
                     }
                 }
             }
