@@ -55,8 +55,8 @@ class AddonMusicApi(
         client.stream(sourceId, source.baseUrl, trackId, StreamRequest.Best, false, settings)
     }
 
-    override suspend fun getStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
-        if (!songId.startsWith("src:")) return@withContext youtube.getStreamUrl(songId)
+    override suspend fun getStreamUrl(songId: String, quality: String): String = withContext(Dispatchers.IO) {
+        if (!songId.startsWith("src:")) return@withContext youtube.getStreamUrl(songId, quality)
         getAddonStream(songId)?.url.orEmpty()
     }
 

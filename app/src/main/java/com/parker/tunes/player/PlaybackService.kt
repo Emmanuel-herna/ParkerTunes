@@ -200,6 +200,11 @@ class PlaybackService : MediaSessionService() {
             }
         }
         serviceScope.launch {
+            repository.audioQuality.collect { quality ->
+                settingsPrefs.edit().putString("audio_quality", quality).apply()
+            }
+        }
+        serviceScope.launch {
             repository.skipSilence.collect { enabled ->
                 settingsPrefs.edit().putBoolean("skip_silence", enabled).apply()
                 silenceProcessors.forEach { processor ->

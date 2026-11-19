@@ -92,9 +92,14 @@ class CrossfadeController(
         if (seconds <= 0 && fading) finishFade()
     }
 
+    private fun configuredCrossfadeSeconds(): Int {
+        val manual = preferences.getInt("crossfade_seconds", 0).coerceIn(0, 12)
+        return if (preferences.getBoolean("automix", false)) maxOf(manual, 4) else manual
+    }
+
     private fun tick() {
         if (fading) {
-            val fadeMs = preferences.getInt("crossfade_seconds", 0).coerceIn(0, 12) * 1_000L
+            val fadeMs = configuredCrossfadeSeconds() * 1_000L
             if (fadeMs <= 0L) {
                 finishFade()
                 return
@@ -108,7 +113,7 @@ class CrossfadeController(
         }
 
         if (!active.isPlaying || active.repeatMode == Player.REPEAT_MODE_ONE) return
-        val fadeMs = preferences.getInt("crossfade_seconds", 0).coerceIn(0, 12) * 1_000L
+        val fadeMs = configuredCrossfadeSeconds() * 1_000L
         if (fadeMs <= 0L) return
         if (incoming.playbackState != Player.STATE_READY) return
 
@@ -138,7 +143,7 @@ class CrossfadeController(
             active.seekToNextMediaItem()
             return
         }
-        val fadeMs = preferences.getInt("crossfade_seconds", 0).coerceIn(0, 12) * 1_000L
+        val fadeMs = configuredCrossfadeSeconds() * 1_000L
         val currentDuration = active.duration.takeUnless { it == C.TIME_UNSET || it <= 0L }
         val nextDuration = incoming.duration.takeUnless { it == C.TIME_UNSET || it <= 0L }
         val currentSong = active.currentMediaItem?.mediaMetadata?.toRuleSong(currentDuration)

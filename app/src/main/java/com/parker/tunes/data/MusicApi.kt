@@ -46,7 +46,7 @@ interface MusicApi {
     suspend fun getTrending(): List<Song>
     suspend fun getArtistProfile(artist: Artist): ArtistProfile
     suspend fun getAlbumTracks(albumId: String): List<Song>
-    suspend fun getStreamUrl(songId: String): String
+    suspend fun getStreamUrl(songId: String, quality: String = "Auto"): String
     suspend fun getLyrics(title: String, artist: String): Lyrics? = null
     suspend fun getLyrics(songId: String): String?
     suspend fun getCoverArt(songId: String): String?
@@ -580,10 +580,11 @@ class NewPipeMusicApi : MusicApi {
         songs
     }
 
-    override suspend fun getStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
+    override suspend fun getStreamUrl(songId: String, quality: String): String = withContext(Dispatchers.IO) {
         val videoId = extractVideoId(songId) ?: songId.trim()
         if (videoId.isBlank()) return@withContext ""
-        synchronized(cacheLock) { streamCache[videoId] }?.let { return@withContext it }
+        val cacheKey = "$videoId|${quality.lowercase()}"
+        synchronized(cacheLock) { streamCache[cacheKey] }?.let { return@withContext it }
 
         try {
             NewPipeRuntime.ensureInitialized()
@@ -591,24 +592,18 @@ class NewPipeMusicApi : MusicApi {
             val extractor = ServiceList.YouTube.getStreamExtractor(videoUrl) as YoutubeStreamExtractor
             extractor.fetchPage()
 
-            val selectedStream = extractor.audioStreams
-                .filter { stream ->
-                    val suffix = stream.format?.suffix?.lowercase()
-                    suffix == "m4a" || suffix == "webm"
-                }
-                .sortedWith(
-                    compareByDescending<AudioStream> { it.averageBitrate }
-                        .thenBy {
-                            when (it.format?.suffix?.lowercase()) {
-                                "m4a" -> 0
-                                "webm" -> 1
-                                else -> 2
-                            }
-                        }
-                )
-                .firstOrNull()
+            val streams = extractor.audioStreams.filter { stream ->
+                val suffix = stream.format?.suffix?.lowercase()
+                (suffix == "m4a" || suffix == "webm") && stream.averageBitrate > 0
+            }
+            val selectedStream = when (quality.trim().lowercase()) {
+                "low" -> streams.minByOrNull { it.averageBitrate }
+                "medium" -> streams.minByOrNull { kotlin.math.abs(it.averageBitrate - 128_000) }
+                "high" -> streams.maxByOrNull { it.averageBitrate }
+                else -> streams.maxByOrNull { it.averageBitrate }
+            } ?: streams.maxByOrNull { it.averageBitrate }
             selectedStream?.content.orEmpty().also { url ->
-                if (url.isNotBlank()) synchronized(cacheLock) { streamCache[videoId] = url }
+                if (url.isNotBlank()) synchronized(cacheLock) { streamCache[cacheKey] = url }
             }
         } catch (cancelled: CancellationException) {
             throw cancelled

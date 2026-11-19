@@ -120,6 +120,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -382,7 +383,7 @@ fun ParkerTunesRoot() {
                                 withContext(Dispatchers.IO) { api.getAddonStream(song.id) }
                             } else null
                             if (addonStream != null) Uri.parse(addonStream.url) to addonStream.format.mimeType
-                            else Uri.parse(withContext(Dispatchers.IO) { api.getStreamUrl(song.id) }) to null
+                            else Uri.parse(withContext(Dispatchers.IO) { api.getStreamUrl(song.id, settingsRepository.audioQuality.first()) }) to null
                         }
                     }
                     if (resolvingSongId == song.id) {
