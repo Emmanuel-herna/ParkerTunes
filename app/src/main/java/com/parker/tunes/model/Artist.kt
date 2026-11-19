@@ -19,10 +19,14 @@ data class Album(
 data class ArtistProfile(
     val artist: Artist,
     val topSongs: List<Song> = emptyList(),
-    val albums: List<Album> = emptyList()
+    val albums: List<Album> = emptyList(),
+    val singles: List<Album> = emptyList(),
+    val recentReleases: List<Album> = emptyList(),
+    val relatedArtists: List<Artist> = emptyList()
 )
 
 data class SearchResult(
     val songs: List<Song> = emptyList(),
-    val artists: List<Artist> = emptyList()
+    val artists: List<Artist> = emptyList(),
+    val albums: List<Album> = emptyList()
 )
