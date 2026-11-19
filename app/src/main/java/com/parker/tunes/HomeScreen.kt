@@ -54,6 +54,7 @@ import com.parker.tunes.data.MusicApi
 import com.parker.tunes.data.SettingsRepository
 import com.parker.tunes.data.home.*
 import com.parker.tunes.model.Song
+import com.parker.tunes.recommendation.AdaptiveHomeFeed
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
@@ -345,8 +346,11 @@ fun HomeScreen(
                     }
                 }
                 is UiState.Success -> {
-                    if (state.data.isNotEmpty()) {
-                        items(state.data, key = { shelf ->
+                    val adaptiveShelves = remember(state.data, recommendationState.topArtists, discoveryDiversity) {
+                        AdaptiveHomeFeed.rank(state.data, recommendationState.topArtists, discoveryDiversity)
+                    }
+                    if (adaptiveShelves.isNotEmpty()) {
+                        items(adaptiveShelves, key = { shelf ->
                             "shelf_" + shelf.title + "_" +
                                 (shelf.items.firstOrNull()?.videoId ?: shelf.items.firstOrNull()?.browseId.orEmpty())
                         }) { shelf ->
