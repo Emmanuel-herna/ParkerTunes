@@ -42,7 +42,7 @@ data class PlayHistoryEntity(
     @ColumnInfo(defaultValue = "0") val playDurationMs: Long = 0L
 )
 
-@Entity(tableName = "listening_events")
+@Entity(tableName = "listening_events", indices = [Index(value = ["songId"]), Index(value = ["eventType"]), Index(value = ["occurredAt"])])
 data class ListeningEventEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val songId: String,
