@@ -266,21 +266,32 @@ class NewPipeMusicApi : MusicApi {
         } else emptyList()
         // Related artists are exposed as channel tabs by some artist/channel pages.
         val relatedItems = loadTab(listOf("artist", "related", "channel", "channels"))
+        val searchedRelatedItems = if (relatedItems.isEmpty()) runCatching {
+            val handler = YoutubeSearchQueryHandlerFactory.getInstance().fromQuery(
+                "${artist.name} similar artists",
+                listOf(YoutubeSearchQueryHandlerFactory.MUSIC_ARTISTS),
+                ""
+            )
+            val extractor = YoutubeMusicSearchExtractor(ServiceList.YouTube, handler)
+            extractor.fetchPage()
+            extractor.initialPage.items
+        }.getOrDefault(emptyList()) else emptyList()
 
         val albums = playlistAlbums(albumItems.ifEmpty { searchedAlbumItems })
-        val singleCandidates = playlistAlbums(singleItems.ifEmpty { searchedSingleItems })
-        val singles = singleCandidates.filter { release ->
-            Regex("""\b(single|ep)\b""", RegexOption.IGNORE_CASE)
-                .containsMatchIn(release.title)
-        }.distinctBy { it.id }
-        val recent = (albums + singleCandidates)
+        val releaseItems = singleItems.ifEmpty { searchedSingleItems }
+        val singles = releaseItems.filterIsInstance<PlaylistInfoItem>()
+            .filter { item ->
+                Regex("""\b(single|ep)\b""", RegexOption.IGNORE_CASE)
+                    .containsMatchIn(item.name.orEmpty() + " " + item.description?.content.orEmpty())
+            }.let(::playlistAlbums)
+        val recent = (albums + playlistAlbums(releaseItems))
             .distinctBy { it.id }
             .sortedWith(
                 compareByDescending<Album> { it.year.toIntOrNull() ?: 0 }
                     .thenBy { it.title.lowercase() }
             )
             .take(30)
-        val related = relatedItems.filterIsInstance<ChannelInfoItem>()
+        val related = (relatedItems.ifEmpty { searchedRelatedItems }).filterIsInstance<ChannelInfoItem>()
             .mapNotNull(::toArtist).filterNot { it.id == artist.id }
             .distinctBy { it.id }.take(20)
 
