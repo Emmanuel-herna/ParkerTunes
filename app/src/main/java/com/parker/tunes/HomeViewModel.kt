@@ -2,6 +2,9 @@ package com.parker.tunes
 
 import com.parker.tunes.data.MusicApi
 import com.parker.tunes.model.Song
+import com.parker.tunes.data.FavoriteEntity
+import com.parker.tunes.data.ListeningEventEntity
+import com.parker.tunes.recommendation.MusicTasteProfile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +35,16 @@ class HomeViewModel(private val api: MusicApi) {
     private var artistQueue: ArrayDeque<Song> = ArrayDeque()
     private var activeLoad: Job? = null
     private var loadMoreJob: Job? = null
+    private var musicProfile: MusicTasteProfile = MusicTasteProfile.EMPTY
+
+    /** Rebuild the private taste profile from this device's listening signals. */
+    fun onMusicSignals(events: List<ListeningEventEntity>, favorites: List<FavoriteEntity>) {
+        musicProfile = MusicTasteProfile.build(events, favorites)
+        val current = mutableState.value.songs
+        if (current.isNotEmpty()) {
+            mutableState.update { it.copy(songs = musicProfile.rank(current, historyIds)) }
+        }
+    }
 
     fun onListeningHistory(history: List<Song>) {
         val cleaned = history.filter { it.id.isNotBlank() }
@@ -106,6 +119,7 @@ class HomeViewModel(private val api: MusicApi) {
                         .filter(::isUsableRecommendation)
                     recommendations = merge(recommendations, discovery)
                 }
+                recommendations = musicProfile.rank(recommendations, historyIds)
                 mutableState.update {
                     it.copy(songs = recommendations, loading = false)
                 }
@@ -136,7 +150,8 @@ class HomeViewModel(private val api: MusicApi) {
                     val before = mutableState.value.songs.size
                     val related = api.getRelatedSongs(seed.id, seed.title, seed.artist)
                     mutableState.update { current ->
-                        current.copy(songs = merge(current.songs, related))
+                        val combined = merge(current.songs, related)
+                        current.copy(songs = musicProfile.rank(combined, historyIds))
                     }
                     if (mutableState.value.songs.size > before) break
                 }
