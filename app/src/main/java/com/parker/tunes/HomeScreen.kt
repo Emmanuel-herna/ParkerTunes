@@ -61,6 +61,8 @@ import com.parker.tunes.data.home.*
 import com.parker.tunes.model.Song
 import com.parker.tunes.recommendation.AdaptiveHomeFeed
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -218,7 +220,11 @@ fun HomeScreen(
                         loadingMore = false,
                         listState = rememberLazyListState(),
                         onPlay = onPlay,
-                        onLongPress = { song -> }
+                        onLongPress = { },
+                        onQueue = onQueue,
+                        onDownload = downloads::enqueue,
+                        isFavorite = { it.id in favoriteIds },
+                        onFavorite = toggleFavorite
                     )
                 }
             }
@@ -265,6 +271,130 @@ fun HomeScreen(
                 }
             }
         }
+    }
+}
+
+
+@Composable
+private fun QuickPicksSection(
+    songs: List<Song>, loading: Boolean, onPlay: (Song) -> Unit,
+    onQueue: (Song, Boolean) -> Unit, onDownload: (Song) -> Unit,
+    isFavorite: (Song) -> Boolean, onFavorite: (Song) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 5.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Text("Quick Picks", Modifier.weight(1f), color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+            TextButton(onClick = {
+                songs.firstOrNull()?.let(onPlay)
+                songs.drop(1).forEach { onQueue(it, false) }
+            }, enabled = songs.isNotEmpty()) { Text("Play all") }
+        }
+        if (songs.isEmpty()) {
+            Text(if (loading) "Finding songs for you…" else "Your quick picks will appear here.",
+                Modifier.padding(horizontal = 18.dp, vertical = 12.dp), color = Color(0xFF999999), fontSize = 13.sp)
+        } else songs.take(5).forEachIndexed { index, song ->
+            QuickPickRow(index + 1, song, onPlay, onQueue, onDownload, isFavorite, onFavorite)
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun QuickPickRow(
+    number: Int, song: Song, onPlay: (Song) -> Unit, onQueue: (Song, Boolean) -> Unit,
+    onDownload: (Song) -> Unit, isFavorite: (Song) -> Boolean, onFavorite: (Song) -> Unit
+) {
+    var menu by remember(song.id) { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 5.dp)
+        .clip(RoundedCornerShape(12.dp))
+        .combinedClickable(onClick = { onPlay(song) }, onLongClick = { menu = true })
+        .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(number.toString(), Modifier.width(23.dp), color = Color(0xFF888888), fontSize = 12.sp)
+        Box(Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF171717)),
+            contentAlignment = Alignment.Center) {
+            if (song.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = Color.LightGray)
+            else AsyncImage(model = song.coverUrl, contentDescription = song.title,
+                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(song.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(song.artist.ifBlank { "Unknown artist" }, color = Color(0xFF999999), fontSize = 12.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Box {
+            TextButton(onClick = { menu = true }, contentPadding = PaddingValues(horizontal = 7.dp)) {
+                Text("⋮", color = Color.White, fontSize = 21.sp)
+            }
+            SongActionMenu(menu, { menu = false }, song, onPlay, onQueue, onDownload,
+                isFavorite(song)) { onFavorite(song) }
+        }
+    }
+}
+
+@Composable
+private fun SongShelfSection(
+    title: String, songs: List<Song>, currentSongId: String?,
+    onPlay: (Song) -> Unit, onQueue: (Song, Boolean) -> Unit, onDownload: (Song) -> Unit,
+    isFavorite: (Song) -> Boolean, onFavorite: (Song) -> Unit, emptyMessage: String? = null
+) {
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp)) {
+        HomeSectionHeading(title)
+        if (songs.isEmpty()) {
+            if (emptyMessage != null) Text(emptyMessage, Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                color = Color(0xFF888888), fontSize = 12.sp)
+        } else LazyRow(contentPadding = PaddingValues(horizontal = 18.dp),
+            horizontalArrangement = Arrangement.spacedBy(13.dp)) {
+            items(songs.take(5), key = { title + "_" + it.id }) { song ->
+                ActionSongCard(song, currentSongId == song.id, onPlay, onQueue, onDownload,
+                    isFavorite(song)) { onFavorite(song) }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ActionSongCard(
+    song: Song, playing: Boolean, onPlay: (Song) -> Unit, onQueue: (Song, Boolean) -> Unit,
+    onDownload: (Song) -> Unit, favorite: Boolean, onFavorite: (Song) -> Unit
+) {
+    var menu by remember(song.id) { mutableStateOf(false) }
+    Column(Modifier.width(132.dp).combinedClickable(
+        onClick = { onPlay(song) }, onLongClick = { menu = true }
+    ), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.size(132.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFF171717)),
+            contentAlignment = Alignment.Center) {
+            if (song.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null,
+                tint = Color.LightGray, modifier = Modifier.size(30.dp))
+            else AsyncImage(model = song.coverUrl, contentDescription = song.title,
+                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            if (playing) PlayingBars(Modifier.align(Alignment.BottomEnd).padding(6.dp))
+            SongActionMenu(menu, { menu = false }, song, onPlay, onQueue, onDownload, favorite) {
+                onFavorite(song)
+            }
+        }
+        Text(song.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(song.artist.ifBlank { "Unknown artist" }, color = Color(0xFF999999), fontSize = 10.sp,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun SongActionMenu(
+    expanded: Boolean, dismiss: () -> Unit, song: Song, onPlay: (Song) -> Unit,
+    onQueue: (Song, Boolean) -> Unit, onDownload: (Song) -> Unit,
+    favorite: Boolean, onFavorite: () -> Unit
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = dismiss) {
+        DropdownMenuItem(text = { Text("Play") }, onClick = { dismiss(); onPlay(song) })
+        DropdownMenuItem(text = { Text("Play next") }, onClick = { dismiss(); onQueue(song, true) })
+        DropdownMenuItem(text = { Text("Add to queue") }, onClick = { dismiss(); onQueue(song, false) })
+        DropdownMenuItem(text = { Text("Download") }, onClick = { dismiss(); onDownload(song) })
+        DropdownMenuItem(text = { Text(if (favorite) "Remove from favorites" else "Add to favorites") },
+            onClick = { dismiss(); onFavorite() })
     }
 }
 
@@ -408,7 +538,9 @@ private fun HomeSectionHeading(title: String, subtitle: String? = null) {
 @Composable
 private fun RecommendationShelf(
     songs: List<Song>, loading: Boolean, loadingMore: Boolean,
-    listState: androidx.compose.foundation.lazy.LazyListState, onPlay: (Song) -> Unit
+    listState: androidx.compose.foundation.lazy.LazyListState, onPlay: (Song) -> Unit,
+    onLongPress: (Song) -> Unit, onQueue: (Song, Boolean) -> Unit,
+    onDownload: (Song) -> Unit, isFavorite: (Song) -> Boolean, onFavorite: (Song) -> Unit
 ) {
     if (songs.isEmpty() && !loading) {
         Text(if (loading) "Finding music based on your listening…" else "No close matches yet. Keep listening to build your radio.",
@@ -444,7 +576,12 @@ private fun RecommendationShelf(
                                     RecommendationGridTile(
                                         song = songs[index],
                                         width = cardWidth,
-                                        onClick = { onPlay(songs[index]) }
+                                        onClick = { onPlay(songs[index]) },
+                                        onLongPress = onLongPress,
+                                        onQueue = onQueue,
+                                        onDownload = onDownload,
+                                        favorite = isFavorite(songs[index]),
+                                        onFavorite = { onFavorite(songs[index]) }
                                     )
                                 }
                             }
@@ -482,8 +619,13 @@ private fun RecommendationShelf(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun RecommendationGridTile(song: Song, width: Dp, onClick: () -> Unit) {
+private fun RecommendationGridTile(
+    song: Song, width: Dp, onClick: () -> Unit, onLongPress: (Song) -> Unit,
+    onQueue: (Song, Boolean) -> Unit, onDownload: (Song) -> Unit,
+    favorite: Boolean, onFavorite: () -> Unit
+) {
     var artworkFailed by remember(song.coverUrl) { mutableStateOf(false) }
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -492,9 +634,10 @@ private fun RecommendationGridTile(song: Song, width: Dp, onClick: () -> Unit) {
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
         label = "recommendationTilePress"
     )
+    var menu by remember(song.id) { mutableStateOf(false) }
     Column(
         Modifier.width(width).graphicsLayer { scaleX = scale; scaleY = scale }
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = { menu = true }),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
@@ -516,6 +659,8 @@ private fun RecommendationGridTile(song: Song, width: Dp, onClick: () -> Unit) {
                 Icon(Icons.Default.MusicNote, contentDescription = null,
                     tint = Color(0xFFBDBDBD), modifier = Modifier.size(30.dp))
             }
+            SongActionMenu(menu, { menu = false }, song, { onPlay(song) }, onQueue,
+                onDownload, favorite, onFavorite)
         }
         Text(
             song.title.ifBlank { "Unknown track" },
