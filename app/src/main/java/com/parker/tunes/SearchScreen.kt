@@ -67,6 +67,7 @@ import com.parker.tunes.data.SpotifyMetadataProvider
 import com.parker.tunes.player.isLikelyMix
 import com.parker.tunes.data.PlaylistEntity
 import com.parker.tunes.data.PlaylistTrackEntity
+import com.parker.tunes.model.Album
 import com.parker.tunes.model.Artist
 import com.parker.tunes.model.SearchResult
 import com.parker.tunes.model.Song
