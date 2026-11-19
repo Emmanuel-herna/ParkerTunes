@@ -1292,6 +1292,7 @@ private data class PlayerArtworkColors(
     val accent: Color
 )
 
+@Composable
 private fun NowPlayingScreen(
     player: MediaController?,
     playerObserver: PlayerUiStateObserver?,
@@ -1619,9 +1620,13 @@ private fun NowPlayingScreen(
         if (title.isNotBlank()) {
             Box(
                 Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Color(0xFF111015))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(accent.copy(alpha = 0.14f), Color(0xFF121018), Color(0xFF0D0C11))
+                        )
+                    )
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 AmLyricsWebView(
                     trackId = player?.currentMediaItem?.mediaId.orEmpty(),
@@ -1631,7 +1636,7 @@ private fun NowPlayingScreen(
                     currentTimeMs = position,
                     isPlaying = playing,
                     onSeek = { timestamp -> player?.seekTo(timestamp) },
-                    modifier = Modifier.fillMaxWidth().height(280.dp)
+                    modifier = Modifier.fillMaxWidth().height(320.dp)
                 )
                 IconButton(
                     onClick = { lyricsExpanded = true },
@@ -1653,7 +1658,12 @@ private fun NowPlayingScreen(
                 properties = DialogProperties(usePlatformDefaultWidth = false)
             ) {
                 Column(
-                    Modifier.fillMaxSize().background(Color(0xFF08080B))
+                    Modifier.fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(accent.copy(alpha = 0.16f), Color(0xFF100E16), Color(0xFF08080B))
+                            )
+                        )
                         .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
                 ) {
                     Row(
