@@ -490,7 +490,7 @@ fun ParkerTunesRoot() {
         Scaffold(
             modifier = if (currentRoute == "home") Modifier.padding(8.dp)
                 .clip(RoundedCornerShape(28.dp))
-                .border(1.dp, Color.White.copy(alpha = 0.42f), RoundedCornerShape(28.dp)) else Modifier,
+                 else Modifier,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
@@ -516,7 +516,7 @@ fun ParkerTunesRoot() {
                                         Color(0xFF777777).copy(alpha = 0.10f),
                                         Color.Black.copy(alpha = 0.58f)
                                     )))
-                                    .border(1.dp, Color.White.copy(alpha = 0.30f), RoundedCornerShape(22.dp))
+                                    
                                     .padding(horizontal = 5.dp, vertical = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -526,9 +526,7 @@ fun ParkerTunesRoot() {
                                     Column(
                                         Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(17.dp))
                                             .background(if (active) Color.White.copy(alpha = 0.15f) else Color.Transparent)
-                                            .border(if (active) 1.dp else 0.dp,
-                                                if (active) Color.White.copy(alpha = 0.22f) else Color.Transparent,
-                                                RoundedCornerShape(17.dp))
+                                            
                                             .clickable {
                                                 selectedTab = item
                                                 nav.navigate(when (item) { "Home" -> "home"; "Explore" -> "explore"; "Library" -> "library"; else -> "together" }) {
@@ -557,7 +555,7 @@ fun ParkerTunesRoot() {
                                 .background(Brush.verticalGradient(listOf(
                                     Color.White.copy(alpha = 0.18f), Color.Black.copy(alpha = 0.60f)
                                 )))
-                                .border(1.dp, Color.White.copy(alpha = 0.32f), CircleShape)
+                                
                                 .clickable {
                                     selectedTab = "Search"
                                     nav.navigate("search") { launchSingleTop = true }
