@@ -188,7 +188,6 @@ fun SongOptionsSheet(
                     SongOptionsRow(Icons.Default.Info, "Song info") {
                         perform(SongAction.ShowInfo)
                         mainVisible = false
-                        onDismiss()
                         infoVisible = true
                     }
                 }
@@ -256,7 +255,10 @@ fun SongOptionsSheet(
 
     if (infoVisible) {
         ModalBottomSheet(
-            onDismissRequest = { infoVisible = false },
+            onDismissRequest = {
+                infoVisible = false
+                onDismiss()
+            },
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
             containerColor = MaterialTheme.colorScheme.surface,
             scrimColor = Color.Black.copy(alpha = 0.28f)
