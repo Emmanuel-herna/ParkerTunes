@@ -502,10 +502,10 @@ fun SearchScreen(
                                         }
                                         SongAction.Share -> {
                                             val link = song.spotifyUrl?.takeIf { it.isNotBlank() }
-                                                ?: "https://music.youtube.com/watch?v=\${song.id}"
+                                                ?: "https://music.youtube.com/watch?v=" + song.id + ""
                                             val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                                                 type = "text/plain"
-                                                putExtra(android.content.Intent.EXTRA_TEXT, "\${song.title} · \${song.artist}\\n$link")
+                                                putExtra(android.content.Intent.EXTRA_TEXT, "" + song.title + " · " + song.artist + "\n" + link + "")
                                             }
                                             runCatching { context.startActivity(android.content.Intent.createChooser(shareIntent, "Share song")) }
                                         }
