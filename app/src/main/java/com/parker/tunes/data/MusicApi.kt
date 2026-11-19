@@ -117,7 +117,21 @@ class NewPipeMusicApi : MusicApi {
                 .mapNotNull(::toArtist)
                 .distinctBy { it.id }
 
-            SearchResult(songs = songs, artists = artists).also { combined ->
+            val albums = runCatching {
+                val albumHandler = factory.fromQuery(
+                    cleanedQuery, listOf(YoutubeSearchQueryHandlerFactory.MUSIC_ALBUMS), ""
+                )
+                val albumExtractor = YoutubeMusicSearchExtractor(ServiceList.YouTube, albumHandler)
+                albumExtractor.fetchPage()
+                albumExtractor.initialPage.items.filterIsInstance<PlaylistInfoItem>()
+                    .mapNotNull { item ->
+                        val id = item.url?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                        Album(id, item.name.orEmpty(), item.thumbnails.firstOrNull()?.url,
+                            item.streamCount.coerceAtLeast(0L))
+                    }.distinctBy { it.id }.take(20)
+            }.getOrDefault(emptyList())
+
+            SearchResult(songs = songs, artists = artists, albums = albums).also { combined ->
                 synchronized(cacheLock) {
                     resultCache[cleanedQuery] = combined
                     sessions[cleanedQuery] = SearchSession(songsExtractor, songsPage.nextPage)
@@ -200,31 +214,41 @@ class NewPipeMusicApi : MusicApi {
                 .take(20)
         }.getOrDefault(emptyList())
 
-        val albums = runCatching {
-            val albumTab = profileInfo?.tabs?.firstOrNull { tab ->
-                tab.contentFilters.any { it.contains("album", ignoreCase = true) } ||
-                    tab.url.contains("/albums", ignoreCase = true)
-            }
-            if (albumTab == null) emptyList() else {
-                val extractor = ServiceList.YouTube.getChannelTabExtractor(albumTab)
+        suspend fun loadTab(keywords: List<String>): List<org.schabi.newpipe.extractor.InfoItem> =
+            runCatching {
+                val tab = profileInfo?.tabs?.firstOrNull { candidate ->
+                    val descriptor = (candidate.contentFilters.joinToString(" ") + " " + candidate.url)
+                    keywords.any { descriptor.contains(it, ignoreCase = true) }
+                } ?: return@runCatching emptyList()
+                val extractor = ServiceList.YouTube.getChannelTabExtractor(tab)
                 extractor.fetchPage()
-                extractor.initialPage.items.filterIsInstance<PlaylistInfoItem>()
-                    .mapNotNull { item ->
-                        val albumId = item.url?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                        Album(
-                            id = albumId,
-                            title = item.name.orEmpty(),
-                            coverUrl = item.thumbnails.firstOrNull()?.url,
-                            trackCount = item.streamCount.coerceAtLeast(0L),
-                            year = ""
-                        )
-                    }
-                    .distinctBy { it.id }
-                    .take(30)
-            }
-        }.getOrDefault(emptyList())
+                extractor.initialPage.items
+            }.getOrDefault(emptyList())
 
-        ArtistProfile(artist = resolvedArtist, topSongs = topSongs, albums = albums)
+        fun playlistAlbums(items: List<org.schabi.newpipe.extractor.InfoItem>): List<Album> =
+            items.filterIsInstance<PlaylistInfoItem>().mapNotNull { item ->
+                val id = item.url?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                Album(id, item.name.orEmpty(), item.thumbnails.firstOrNull()?.url,
+                    item.streamCount.coerceAtLeast(0L))
+            }.distinctBy { it.id }.take(30)
+
+        val albumItems = loadTab(listOf("album"))
+        val singleItems = loadTab(listOf("single", "ep"))
+        val relatedItems = loadTab(listOf("artist", "related"))
+        val albums = playlistAlbums(albumItems)
+        val singles = playlistAlbums(singleItems)
+        val recent = (albums + singles).distinctBy { it.id }.take(30)
+        val related = relatedItems.filterIsInstance<ChannelInfoItem>()
+            .mapNotNull(::toArtist).distinctBy { it.id }.take(20)
+
+        ArtistProfile(
+            artist = resolvedArtist,
+            topSongs = topSongs,
+            albums = albums,
+            singles = singles,
+            recentReleases = recent,
+            relatedArtists = related
+        )
     }
 
     override suspend fun getAlbumTracks(albumId: String): List<Song> = withContext(Dispatchers.IO) {
