@@ -51,6 +51,7 @@ class SettingsRepository(context: Context) {
     val recommendationPersonalization: Flow<Boolean> = bool(Keys.recommendationPersonalization, true)
     val reduceSimilarMusic: Flow<Boolean> = bool(Keys.reduceSimilarMusic, false)
     val discoveryDiversity: Flow<Int> = int(Keys.discoveryDiversity, 50)
+    val glassIntensity: Flow<Int> = int(Keys.glassIntensity, 55)
     val spotifyClientId: Flow<String> = string(Keys.spotifyClientId, "")
     val spotifyClientSecret: Flow<String> = string(Keys.spotifyClientSecret, "")
 
@@ -86,6 +87,7 @@ class SettingsRepository(context: Context) {
     suspend fun setRecommendationPersonalization(v:Boolean)=put(Keys.recommendationPersonalization,v)
     suspend fun setReduceSimilarMusic(v:Boolean)=put(Keys.reduceSimilarMusic,v)
     suspend fun setDiscoveryDiversity(v:Int)=put(Keys.discoveryDiversity,v.coerceIn(0,100))
+    suspend fun setGlassIntensity(v:Int)=put(Keys.glassIntensity,v.coerceIn(0,100))
     suspend fun setSpotifyClientId(v:String)=put(Keys.spotifyClientId,v.trim())
     suspend fun setSpotifyClientSecret(v:String)=put(Keys.spotifyClientSecret,v.trim())
 
@@ -124,6 +126,7 @@ class SettingsRepository(context: Context) {
         val recommendationPersonalization=booleanPreferencesKey("recommendation_personalization")
         val reduceSimilarMusic=booleanPreferencesKey("reduce_similar_music")
         val discoveryDiversity=intPreferencesKey("discovery_diversity")
+        val glassIntensity=intPreferencesKey("glass_intensity")
         val spotifyClientId=stringPreferencesKey("spotify_client_id")
         val spotifyClientSecret=stringPreferencesKey("spotify_client_secret")
     }

@@ -66,6 +66,9 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import dev.chrisbanes.haze.ExperimentalHazeApi
+import dev.chrisbanes.haze.HazeState
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -157,6 +160,7 @@ internal fun applyPreferredRefreshRate(activity: Activity, requestedRate: Int) {
     }
 }
 
+@OptIn(ExperimentalHazeApi::class)
 @Composable
 fun ParkerTunesRoot() {
     val context = LocalContext.current
@@ -184,6 +188,11 @@ fun ParkerTunesRoot() {
     var selectedTab by remember { mutableStateOf("Home") }
     val settingsPrefs = remember { context.getSharedPreferences("parker_tunes_settings", android.content.Context.MODE_PRIVATE) }
     val settingsRepository = remember(context) { com.parker.tunes.data.SettingsRepository(context) }
+    val hazeState = remember { HazeState() }
+    val glassIntensity by settingsRepository.glassIntensity.collectAsState(initial = 55)
+    val glassFraction = glassIntensity.coerceIn(0, 100) / 100f
+    val glassBlurRadius = (4f + 36f * glassFraction).dp
+    val glassTintAlpha = 0.08f + 0.37f * glassFraction
     val selectedAccent by settingsRepository.accentColor.collectAsState(initial = "purple")
     val useAmoledBlack by settingsRepository.amoledBlack.collectAsState(initial = true)
     val liveAccent = when (selectedAccent) {
@@ -446,85 +455,14 @@ fun ParkerTunesRoot() {
             modifier = Modifier,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             containerColor = MaterialTheme.colorScheme.background,
-            bottomBar = {
-                AnimatedVisibility(
-                    visible = currentRoute != "nowplaying",
-                    enter = fadeIn() + slideInVertically { it / 3 },
-                    exit = fadeOut() + slideOutVertically { it / 3 }
+            contentWindowInsets = WindowInsets(0)
+        ) { _ ->
+            Box(Modifier.fillMaxSize()) {
+                NavHost(
+                    navController = nav,
+                    startDestination = "home",
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    Column(Modifier.fillMaxWidth().background(Color.Black).padding(bottom = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        AnimatedVisibility(visible = playerState.hasItem, enter = fadeIn(), exit = fadeOut()) {
-                            MiniPlayer(title = currentTitle, artist = currentArtist, coverUrl = playerState.artworkUri,
-                                playing = isPlaying, onClick = { nav.navigate("nowplaying") },
-                                onPlayPause = { controller?.let { if (it.isPlaying) it.pause() else it.play() } },
-                                onNext = { controller?.sendCustomCommand(SessionCommand("com.parker.tunes.action.SKIP_NEXT", Bundle.EMPTY), Bundle.EMPTY) })
-                        }
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Row(
-                                Modifier.weight(1f).height(68.dp).clip(RoundedCornerShape(22.dp))
-                                    .background(Brush.verticalGradient(listOf(
-                                        Color.White.copy(alpha = 0.17f),
-                                        Color(0xFF777777).copy(alpha = 0.10f),
-                                        Color.Black.copy(alpha = 0.58f)
-                                    )))
-                                    
-                                    .padding(horizontal = 5.dp, vertical = 5.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                listOf("Home", "Explore", "Library", "Together").forEach { item ->
-                                    val active = selectedTab == item
-                                    val itemAccent = if (item == "Together") Color(0xFFFF4D5A) else Color.White
-                                    Column(
-                                        Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(17.dp))
-                                            .background(if (active) Color.White.copy(alpha = 0.15f) else Color.Transparent)
-                                            
-                                            .clickable {
-                                                selectedTab = item
-                                                nav.navigate(when (item) { "Home" -> "home"; "Explore" -> "explore"; "Library" -> "library"; else -> "together" }) {
-                                                    launchSingleTop = true
-                                                }
-                                            }.padding(vertical = 5.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(
-                                            when (item) { "Home" -> Icons.Default.Home; "Explore" -> Icons.Default.Explore
-                                                "Library" -> Icons.Default.LibraryBooks; else -> Icons.Default.Groups },
-                                            contentDescription = item,
-                                            tint = if (active) itemAccent else Color(0xFF888888),
-                                            modifier = Modifier.size(21.dp)
-                                        )
-                                        Text(
-                                            item.uppercase(), color = if (active) itemAccent else Color(0xFF888888),
-                                            fontSize = 10.sp, maxLines = 1, softWrap = false,
-                                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
-                                        )
-                                    }
-                                }
-                            }
-                            Box(Modifier.size(56.dp).clip(CircleShape)
-                                .background(Brush.verticalGradient(listOf(
-                                    Color.White.copy(alpha = 0.18f), Color.Black.copy(alpha = 0.60f)
-                                )))
-                                
-                                .clickable {
-                                    selectedTab = "Search"
-                                    nav.navigate("search") { launchSingleTop = true }
-                                }, contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Search, "Search", tint = Color.White, modifier = Modifier.size(24.dp))
-                            }
-                        }
-                    }
-                }
-            }
-        ) { padding ->
-            NavHost(
-                navController = nav,
-                startDestination = "home",
-                modifier = Modifier.padding(padding)
-            ) {
                 composable("home") {
                     HomeScreen(
                         dao = dao, api = api, player = controller, onPlay = playSong,
@@ -543,7 +481,8 @@ fun ParkerTunesRoot() {
                             } else if (item.videoId != null) {
                                 playSong(Song(item.videoId, item.title, item.subtitle.orEmpty(), item.thumbnailUrl))
                             }
-                        }
+                        },
+                        hazeState = hazeState
                     )
                 }
                 composable("explore") {
@@ -620,6 +559,87 @@ fun ParkerTunesRoot() {
                         onOpenEqualizer = { nav.navigate("equalizer") },
                         onBack = { nav.popBackStack() }
                     )
+                }
+                }
+                AnimatedVisibility(
+                    visible = currentRoute != "nowplaying",
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    enter = fadeIn() + slideInVertically { it / 3 },
+                    exit = fadeOut() + slideOutVertically { it / 3 }
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        AnimatedVisibility(visible = playerState.hasItem, enter = fadeIn(), exit = fadeOut()) {
+                            MiniPlayer(
+                                title = currentTitle,
+                                artist = currentArtist,
+                                coverUrl = playerState.artworkUri,
+                                playing = isPlaying,
+                                onClick = { nav.navigate("nowplaying") },
+                                onPlayPause = { controller?.let { if (it.isPlaying) it.pause() else it.play() } },
+                                onNext = { controller?.sendCustomCommand(SessionCommand("com.parker.tunes.action.SKIP_NEXT", Bundle.EMPTY), Bundle.EMPTY) },
+                                hazeState = hazeState,
+                                blurRadius = glassBlurRadius,
+                                tintAlpha = glassTintAlpha
+                            )
+                        }
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                Modifier.weight(1f).height(68.dp)
+                                    .liquidGlass(hazeState, glassBlurRadius, glassTintAlpha, RoundedCornerShape(22.dp))
+                                    .padding(horizontal = 5.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                listOf("Home", "Explore", "Library", "Together").forEach { item ->
+                                    val active = selectedTab == item
+                                    val itemAccent = if (item == "Together") Color(0xFFFF4D5A) else Color.White
+                                    Column(
+                                        Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(17.dp))
+                                            .background(if (active) Color.White.copy(alpha = 0.22f) else Color.Transparent)
+                                            .then(if (active) Modifier.border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(17.dp)) else Modifier)
+                                            .clickable {
+                                                selectedTab = item
+                                                nav.navigate(when (item) { "Home" -> "home"; "Explore" -> "explore"; "Library" -> "library"; else -> "together" }) {
+                                                    launchSingleTop = true
+                                                }
+                                            }.padding(vertical = 5.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            when (item) { "Home" -> Icons.Default.Home; "Explore" -> Icons.Default.Explore
+                                                "Library" -> Icons.Default.LibraryBooks; else -> Icons.Default.Groups },
+                                            contentDescription = item,
+                                            tint = if (active) itemAccent else Color(0xFF888888),
+                                            modifier = Modifier.size(21.dp)
+                                        )
+                                        Text(
+                                            item.uppercase(), color = if (active) itemAccent else Color(0xFF888888),
+                                            fontSize = 10.sp, maxLines = 1, softWrap = false,
+                                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
+                            Box(
+                                Modifier.size(56.dp)
+                                    .liquidGlass(hazeState, glassBlurRadius, glassTintAlpha, CircleShape)
+                                    .clickable {
+                                        selectedTab = "Search"
+                                        nav.navigate("search") { launchSingleTop = true }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Search, "Search", tint = Color.White, modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -893,7 +913,8 @@ private fun HomeListenAgainRow(
 @Composable
 private fun MiniPlayer(
     title: String, artist: String, coverUrl: String?, playing: Boolean,
-    onClick: () -> Unit, onPlayPause: () -> Unit, onNext: () -> Unit
+    onClick: () -> Unit, onPlayPause: () -> Unit, onNext: () -> Unit,
+    hazeState: HazeState, blurRadius: Dp, tintAlpha: Float
 ) {
     val miniDrag = remember { Animatable(0f) }
     val miniDragScope = rememberCoroutineScope()
@@ -906,8 +927,7 @@ private fun MiniPlayer(
                 scaleX = 1f - ((-miniDrag.value) / 150f).coerceIn(0f, 0.22f) * 0.025f
                 scaleY = scaleX
             }
-            .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xF01D1D1D))
+            .liquidGlass(hazeState, blurRadius, tintAlpha, RoundedCornerShape(24.dp))
             .pointerInput(onClick, density) {
                 var verticalDrag = 0f
                 val threshold = with(density) { 48.dp.toPx() }

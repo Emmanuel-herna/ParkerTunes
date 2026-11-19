@@ -108,6 +108,8 @@ fun SettingsScreen(
     val personalization by repository.recommendationPersonalization.collectAsState(initial = true)
     val reduceSimilar by repository.reduceSimilarMusic.collectAsState(initial = false)
     val diversity by repository.discoveryDiversity.collectAsState(initial = 50)
+    val savedGlassIntensity by repository.glassIntensity.collectAsState(initial = 55)
+    var glassIntensity by remember(savedGlassIntensity) { mutableIntStateOf(savedGlassIntensity) }
     val accentColor = SettingsAccents.firstOrNull { it.first == accent }?.second ?: SettingsAccents.first().second
 
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -165,6 +167,33 @@ fun SettingsScreen(
 
         item { SettingsSection("DISPLAY") }
         item { SettingRow(Icons.Default.Speed, "Refresh rate", "Choose the display smoothness ParkerTunes requests", refreshRateLabel, { sheet = "refresh_rate" }, reduceMotion = reduceMotion) }
+        item {
+            Column(
+                Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text("Glass intensity", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text("Adjust the blur and frosted tint on the mini player and bottom controls.", color = SettingsMuted, fontSize = 12.sp)
+                Slider(
+                    value = glassIntensity.toFloat(),
+                    onValueChange = { value ->
+                        val next = value.toInt().coerceIn(0, 100)
+                        glassIntensity = next
+                        scope.launch { repository.setGlassIntensity(next) }
+                    },
+                    valueRange = 0f..100f,
+                    steps = 99
+                )
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Subtle", color = SettingsMuted, fontSize = 11.sp)
+                    Spacer(Modifier.weight(1f))
+                    Text("$glassIntensity%", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.weight(1f))
+                    Text("Strong", color = SettingsMuted, fontSize = 11.sp)
+                }
+                GlassIntensityPreview(glassIntensity)
+            }
+        }
         item { SettingRow(Icons.Default.Palette, "Accent color", "Choose ParkerTunes highlight color", accent.replaceFirstChar { it.uppercase() }, { sheet = "theme" }, reduceMotion = reduceMotion) }
         item { SettingRow(Icons.Default.DarkMode, "AMOLED black", "Use pure black surfaces", if (amoled) "On" else "Off", { scope.launch { repository.setAmoledBlack(!amoled) } }, toggle = amoled, reduceMotion = reduceMotion) }
         item { SettingRow(Icons.Default.Wallpaper, "Player background", null, playerBackground, { sheet = "background" }, reduceMotion = reduceMotion) }

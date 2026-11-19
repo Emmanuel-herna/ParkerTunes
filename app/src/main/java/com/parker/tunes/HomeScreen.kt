@@ -47,6 +47,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.ExperimentalHazeApi
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -73,7 +76,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeApi::class)
 @Composable
 fun HomeScreen(
     dao: LibraryDao,
@@ -87,7 +90,8 @@ fun HomeScreen(
     homeApi: YtMusicHomeApi,
     settingsRepository: SettingsRepository,
     downloads: com.parker.tunes.data.SongDownloadManager,
-    onOpenPlaylist: (ShelfItem, HomeShelf) -> Unit
+    onOpenPlaylist: (ShelfItem, HomeShelf) -> Unit,
+    hazeState: HazeState
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -180,8 +184,8 @@ fun HomeScreen(
     ) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().background(Color.Black),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 132.dp),
+            modifier = Modifier.fillMaxSize().background(Color.Black).haze(state = hazeState),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 196.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             item(key = "home_top_bar") {
