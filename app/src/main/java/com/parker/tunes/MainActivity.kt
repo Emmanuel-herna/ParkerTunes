@@ -423,7 +423,7 @@ fun ParkerTunesRoot() {
                         else {
                             val addonStream = if (api is AddonMusicApi) api.getAddonStream(song.id) else null
                             if (addonStream != null) Uri.parse(addonStream.url) to addonStream.format.mimeType
-                            else Uri.parse(api.getStreamUrl(song.id)) to null
+                            else Uri.parse(api.getStreamUrl(song.id, settingsRepository.audioQuality.first())) to null
                         }
                     }
                     val metadata = MediaMetadata.Builder().setTitle(song.title).setArtist(song.artist)
