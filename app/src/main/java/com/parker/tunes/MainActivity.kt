@@ -71,6 +71,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -1255,52 +1258,49 @@ private fun NowPlayingScreen(
             }
             .background(Color(0xFF08080B))
             .pointerInput(onBack, scrollState, density) {
-                var totalDrag = 0f
                 val dismissThreshold = with(density) { 120.dp.toPx() }
                 val exitDistance = size.height.toFloat().coerceAtLeast(dismissThreshold * 2)
-                detectVerticalDragGestures(
-                    onVerticalDrag = { change, dragAmount ->
-                        if ((scrollState.value == 0 && dragAmount > 0f) ||
-                            (totalDrag > 0f && dragAmount != 0f)) {
-                            totalDrag = (totalDrag + dragAmount).coerceAtLeast(0f)
+                awaitEachGesture {
+                    val down = awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = PointerEventPass.Initial
+                    )
+                    var lastY = down.position.y
+                    var totalDrag = 0f
+                    var dismissGesture = false
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        val delta = change.position.y - lastY
+                        lastY = change.position.y
+
+                        // Observe before verticalScroll: at the top, take over downward drags
+                        // so the full player can reliably collapse into the mini-player.
+                        if ((delta > 0f && scrollState.value == 0) || dismissGesture) {
+                            dismissGesture = true
+                            totalDrag = (totalDrag + delta).coerceAtLeast(0f)
                             change.consume()
                             dragScope.launch { dragAnimation.snapTo(totalDrag) }
                         }
-                    },
-                    onDragEnd = {
-                        val shouldDismiss = totalDrag > dismissThreshold
-                        totalDrag = 0f
-                        dragScope.launch {
-                            if (shouldDismiss) {
-                                dragAnimation.animateTo(
-                                    exitDistance,
-                                    tween(240, easing = FastOutSlowInEasing)
-                                )
-                                onBack()
-                            } else {
-                                dragAnimation.animateTo(
-                                    0f,
-                                    spring(
-                                        dampingRatio = Spring.DampingRatioNoBouncy,
-                                        stiffness = Spring.StiffnessMediumLow
-                                    )
-                                )
-                            }
-                        }
-                    },
-                    onDragCancel = {
-                        totalDrag = 0f
-                        dragScope.launch {
-                            dragAnimation.animateTo(
-                                0f,
-                                spring(
-                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                    stiffness = Spring.StiffnessMediumLow
-                                )
+                    } while (event.changes.any { it.id == down.id && it.pressed })
+
+                    val shouldDismiss = dismissGesture && totalDrag > dismissThreshold
+                    if (shouldDismiss) {
+                        dragAnimation.animateTo(
+                            exitDistance,
+                            tween(240, easing = FastOutSlowInEasing)
+                        )
+                        onBack()
+                    } else {
+                        dragAnimation.animateTo(
+                            0f,
+                            spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMediumLow
                             )
-                        }
+                        )
                     }
-                )
+                }
             }
             .verticalScroll(scrollState)
             .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 28.dp),
