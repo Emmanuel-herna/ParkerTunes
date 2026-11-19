@@ -27,6 +27,8 @@ import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.util.LinkedHashMap
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaType
 import org.json.JSONArray
 
 data class LyricLine(val timeMs: Long, val text: String)
@@ -306,14 +308,144 @@ class NewPipeMusicApi : MusicApi {
     }
 
     override suspend fun getAlbumTracks(albumId: String): List<Song> = withContext(Dispatchers.IO) {
-        val url = albumId.trim()
-        if (url.isBlank()) return@withContext emptyList()
-        runCatching {
+        val rawId = albumId.trim()
+        if (rawId.isBlank()) return@withContext emptyList()
+
+        val parsed = runCatching { Uri.parse(rawId) }.getOrNull()
+        val listId = parsed?.getQueryParameter("list")
+        val browseId = when {
+            rawId.startsWith("MPRE", ignoreCase = true) -> rawId
+            parsed?.lastPathSegment?.startsWith("MPRE", ignoreCase = true) == true ->
+                parsed.lastPathSegment.orEmpty()
+            else -> null
+        }
+
+        // YouTube Music album pages use browse IDs (MPRE...) rather than normal
+        // playlist IDs. Resolve those through the Music browse endpoint first.
+        if (!browseId.isNullOrBlank()) {
+            val musicTracks = loadYouTubeMusicAlbumTracks(browseId)
+            if (musicTracks.isNotEmpty()) return@withContext musicTracks
+        }
+
+        // Search results and older saved albums may contain a playlist URL/list ID.
+        val playlistUrl = when {
+            !listId.isNullOrBlank() -> "https://www.youtube.com/playlist?list=$listId"
+            rawId.startsWith("OLAK", ignoreCase = true) ||
+                rawId.startsWith("PL", ignoreCase = true) ||
+                rawId.startsWith("UU", ignoreCase = true) ->
+                "https://www.youtube.com/playlist?list=$rawId"
+            rawId.startsWith("http", ignoreCase = true) -> rawId
+            else -> "https://music.youtube.com/browse/$rawId"
+        }
+        try {
             NewPipeRuntime.ensureInitialized()
-            val extractor = ServiceList.YouTube.getPlaylistExtractor(url)
+            val extractor = ServiceList.YouTube.getPlaylistExtractor(playlistUrl)
             val info = PlaylistInfo.getInfo(extractor)
-            info.relatedItems.distinctBy { it.url }.mapNotNull(::toSong)
-        }.getOrDefault(emptyList())
+            info.relatedItems.distinctBy { it.url }.mapNotNull { item ->
+                (item as? StreamInfoItem)?.let(::toSong)
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            if (browseId.isNullOrBlank()) throw failure
+            emptyList()
+        }
+    }
+
+    private fun loadYouTubeMusicAlbumTracks(browseId: String): List<Song> {
+        val body = JSONObject().apply {
+            put("context", JSONObject().put("client", JSONObject()
+                .put("clientName", "WEB_REMIX")
+                .put("clientVersion", "1.20250101.01.00")))
+            put("browseId", browseId)
+        }.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+        val request = Request.Builder()
+            .url("https://music.youtube.com/youtubei/v1/browse?prettyPrint=false")
+            .post(body)
+            .header("Origin", "https://music.youtube.com")
+            .header("Referer", "https://music.youtube.com/")
+            .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36")
+            .header("Content-Type", "application/json")
+            .build()
+
+        val json = lyricsClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return emptyList()
+            JSONObject(response.body?.string().orEmpty())
+        }
+        val found = mutableListOf<Song>()
+
+        fun textFromRuns(value: JSONObject?): String {
+            val runs = value?.optJSONArray("runs") ?: return value?.optString("text").orEmpty()
+            return (0 until runs.length()).mapNotNull { index ->
+                runs.optJSONObject(index)?.optString("text")?.takeIf { it.isNotBlank() }
+            }.joinToString("").trim()
+        }
+
+        fun collect(node: Any?) {
+            when (node) {
+                is JSONObject -> {
+                    val renderer = node.optJSONObject("musicResponsiveListItemRenderer")
+                        ?: node.optJSONObject("playlistPanelVideoRenderer")
+                    if (renderer != null) {
+                        val videoId = renderer.optJSONObject("playlistItemData")?.optString("videoId")
+                            ?.takeIf { it.isNotBlank() }
+                            ?: renderer.optJSONObject("navigationEndpoint")
+                                ?.optJSONObject("watchEndpoint")?.optString("videoId")
+                                ?.takeIf { it.isNotBlank() }
+                        if (videoId != null) {
+                            val columns = renderer.optJSONArray("flexColumns")
+                            val title = if (columns != null && columns.length() > 0) {
+                                val column = columns.optJSONObject(0)
+                                    ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                                textFromRuns(column?.optJSONObject("text"))
+                            } else renderer.optString("title")
+                            val artist = if (columns != null && columns.length() > 1) {
+                                val column = columns.optJSONObject(1)
+                                    ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                                textFromRuns(column?.optJSONObject("text"))
+                                    .replace(Regex("\\s*[·•]\\s*.*$"), "").trim()
+                            } else renderer.optString("shortBylineText")
+                            val thumbnailContainer = renderer.optJSONObject("thumbnail")
+                            val thumbnailRenderer = thumbnailContainer
+                                ?.optJSONObject("musicThumbnailRenderer")
+                            val thumbnails = thumbnailRenderer?.optJSONObject("thumbnail")
+                                ?.optJSONArray("thumbnails")
+                                ?: thumbnailContainer?.optJSONArray("thumbnails")
+                            val cover = thumbnails?.let { array ->
+                                array.optJSONObject((array.length() - 1).coerceAtLeast(0))
+                                    ?.optString("url")?.takeIf { it.isNotBlank() }
+                            }
+                            val fixed = renderer.optJSONArray("fixedColumns")
+                            val durationText = fixed?.optJSONObject(0)
+                                ?.optJSONObject("musicResponsiveListItemFixedColumnRenderer")
+                                ?.optJSONObject("text")?.let(::textFromRuns).orEmpty()
+                            val duration = parseDurationSeconds(durationText)
+                            if (title.isNotBlank()) {
+                                found += Song(
+                                    id = videoId,
+                                    title = title,
+                                    artist = artist.ifBlank { "Unknown artist" },
+                                    coverUrl = cover ?: youtubeThumbnail(videoId),
+                                    durationSec = duration,
+                                )
+                            }
+                        }
+                    }
+                    val keys = node.keys()
+                    while (keys.hasNext()) collect(node.opt(keys.next()))
+                }
+                is JSONArray -> for (index in 0 until node.length()) collect(node.opt(index))
+            }
+        }
+
+        collect(json)
+        found.distinctBy { it.id }
+    }
+
+    private fun parseDurationSeconds(value: String): Long {
+        val parts = value.trim().split(":").mapNotNull { it.toLongOrNull() }
+        if (parts.isEmpty()) return 0L
+        return parts.fold(0L) { total, part -> total * 60L + part }
     }
 
     /**
