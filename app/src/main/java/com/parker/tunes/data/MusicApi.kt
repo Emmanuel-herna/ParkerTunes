@@ -232,6 +232,16 @@ class NewPipeMusicApi : MusicApi {
                 extractor.initialPage.items
             }.getOrDefault(emptyList())
 
+        suspend fun searchAlbumItems(query: String): List<org.schabi.newpipe.extractor.InfoItem> =
+            runCatching {
+                val handler = YoutubeSearchQueryHandlerFactory.getInstance().fromQuery(
+                    query, listOf(YoutubeSearchQueryHandlerFactory.MUSIC_ALBUMS), ""
+                )
+                val extractor = YoutubeMusicSearchExtractor(ServiceList.YouTube, handler)
+                extractor.fetchPage()
+                extractor.initialPage.items
+            }.getOrDefault(emptyList())
+
         fun playlistAlbums(items: List<org.schabi.newpipe.extractor.InfoItem>): List<Album> =
             items.filterIsInstance<PlaylistInfoItem>().mapNotNull { item ->
                 val id = item.url?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
@@ -246,12 +256,24 @@ class NewPipeMusicApi : MusicApi {
                 )
             }.distinctBy { it.id }.take(30)
 
-        val albumItems = loadTab(listOf("album"))
-        val singleItems = loadTab(listOf("single", "ep"))
-        val relatedItems = loadTab(listOf("artist", "related"))
-        val albums = playlistAlbums(albumItems)
-        val singles = playlistAlbums(singleItems)
-        val recent = (albums + singles)
+        // Some artist channels expose no release tabs through ChannelInfo.
+        // Fall back to YouTube Music's dedicated Albums search filter.
+        val albumItems = loadTab(listOf("album", "albums"))
+        val searchedAlbumItems = if (albumItems.isEmpty()) searchAlbumItems(artist.name) else emptyList()
+        val singleItems = loadTab(listOf("single", "singles", "ep"))
+        val searchedSingleItems = if (singleItems.isEmpty()) {
+            searchAlbumItems("${artist.name} singles EP")
+        } else emptyList()
+        // Related artists are exposed as channel tabs by some artist/channel pages.
+        val relatedItems = loadTab(listOf("artist", "related", "channel", "channels"))
+
+        val albums = playlistAlbums(albumItems.ifEmpty { searchedAlbumItems })
+        val singleCandidates = playlistAlbums(singleItems.ifEmpty { searchedSingleItems })
+        val singles = singleCandidates.filter { release ->
+            Regex("""\\b(single|ep)\\b""", RegexOption.IGNORE_CASE)
+                .containsMatchIn(release.title)
+        }.distinctBy { it.id }
+        val recent = (albums + singleCandidates)
             .distinctBy { it.id }
             .sortedWith(
                 compareByDescending<Album> { it.year.toIntOrNull() ?: 0 }
@@ -259,7 +281,8 @@ class NewPipeMusicApi : MusicApi {
             )
             .take(30)
         val related = relatedItems.filterIsInstance<ChannelInfoItem>()
-            .mapNotNull(::toArtist).distinctBy { it.id }.take(20)
+            .mapNotNull(::toArtist).filterNot { it.id == artist.id }
+            .distinctBy { it.id }.take(20)
 
         ArtistProfile(
             artist = resolvedArtist,
