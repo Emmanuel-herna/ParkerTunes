@@ -20,7 +20,8 @@ import kotlinx.coroutines.launch
 data class HomeRecommendationState(
     val songs: List<Song> = emptyList(),
     val loading: Boolean = true,
-    val loadingMore: Boolean = false
+    val loadingMore: Boolean = false,
+    val topArtists: List<String> = emptyList()
 )
 
 /** Builds recommendations from the listener's complete play history. */
@@ -33,6 +34,7 @@ class HomeViewModel(private val api: MusicApi) {
     private var historyKey: List<String> = emptyList()
     private var hasInitializedHistory = false
     private var artistQueue: ArrayDeque<Song> = ArrayDeque()
+    private var discoveryQueue: ArrayDeque<String> = ArrayDeque()
     private var activeLoad: Job? = null
     private var loadMoreJob: Job? = null
     private var musicProfile: MusicTasteProfile = MusicTasteProfile.EMPTY
@@ -48,11 +50,13 @@ class HomeViewModel(private val api: MusicApi) {
         discoveryDiversity = diversity.coerceIn(0, 100)
         reduceSimilarMusic = reduceSimilar
         val current = mutableState.value.songs
-        if (current.isNotEmpty()) mutableState.update { it.copy(songs = rank(current)) }
+        val topArtists = musicProfile.artistAffinity.entries.sortedByDescending { it.value }
+            .take(8).map { it.key }
+        mutableState.update { it.copy(topArtists = topArtists, songs = if (current.isNotEmpty()) rank(current) else current) }
     }
 
     private fun rank(candidates: List<Song>): List<Song> =
-        musicProfile.rank(candidates, historyIds, diversityPercent = discoveryDiversity, reduceSimilarMusic = reduceSimilarMusic)
+        musicProfile.rank(candidates, historyIds, limit = MAX_RECOMMENDATIONS, diversityPercent = discoveryDiversity, reduceSimilarMusic = reduceSimilarMusic)
 
     fun onListeningHistory(history: List<Song>) {
         val cleaned = history.filter { it.id.isNotBlank() }
@@ -66,16 +70,18 @@ class HomeViewModel(private val api: MusicApi) {
         if (cleaned.isEmpty()) {
             activeLoad?.cancel()
             artistQueue.clear()
+            discoveryQueue = ArrayDeque(DEFAULT_DISCOVERY_QUERIES)
             // A new listener should still see a useful discovery shelf immediately.
             // Once play history exists, the personalized artist radio replaces it.
             mutableState.update { it.copy(loading = true, loadingMore = false) }
             activeLoad = scope.launch {
                 try {
-                    val discovery = api.getTrending()
-                        .filter(::isUsableRecommendation)
-                        .distinctBy { it.id }
-                        .take(TARGET_INITIAL)
-                    mutableState.update { it.copy(songs = discovery, loading = false) }
+                    var discovery = api.getTrending().filter(::isUsableRecommendation)
+                    if (discovery.size < TARGET_INITIAL && discoveryQueue.isNotEmpty()) {
+                        val query = discoveryQueue.removeFirst()
+                        discovery = merge(discovery, api.getMoodSongs(query).filter(::isUsableRecommendation))
+                    }
+                    mutableState.update { it.copy(songs = rank(discovery), loading = false) }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
@@ -95,6 +101,7 @@ class HomeViewModel(private val api: MusicApi) {
         val artistSeeds = stats.values.sortedByDescending { it.first }
             .map { it.second }.distinctBy { it.artist.trim().lowercase() }
         artistQueue = ArrayDeque(artistSeeds.drop(INITIAL_ARTISTS))
+        discoveryQueue = ArrayDeque(DEFAULT_DISCOVERY_QUERIES)
 
         activeLoad?.cancel()
         mutableState.update { it.copy(loading = artistSeeds.isNotEmpty()) }
@@ -120,12 +127,16 @@ class HomeViewModel(private val api: MusicApi) {
                 }
 
                 var recommendations = merge(emptyList(), batches)
-                // Never leave Made for you blank just because artist-radio search
-                // returned no usable tracks. Global discovery is a last-resort fill.
-                if (recommendations.size < MIN_RECOMMENDATIONS) {
-                    val discovery = api.getTrending()
-                        .filter(::isUsableRecommendation)
-                    recommendations = merge(recommendations, discovery)
+                // Blend related-artist radio with broad discovery so the feed is not
+                // dominated by one source. These are search candidates, not claims
+                // that every result is a verified new release or hidden gem.
+                if (recommendations.size < TARGET_INITIAL) {
+                    recommendations = merge(recommendations, api.getTrending().filter(::isUsableRecommendation))
+                }
+                while (recommendations.size < TARGET_INITIAL && discoveryQueue.isNotEmpty()) {
+                    val query = discoveryQueue.removeFirst()
+                    recommendations = merge(recommendations,
+                        api.getMoodSongs(query).filter(::isUsableRecommendation))
                 }
                 recommendations = rank(recommendations)
                 mutableState.update {
@@ -149,16 +160,20 @@ class HomeViewModel(private val api: MusicApi) {
     }
 
     fun loadMore() {
-        if (artistQueue.isEmpty() || loadMoreJob?.isActive == true) return
+        if ((artistQueue.isEmpty() && discoveryQueue.isEmpty()) || loadMoreJob?.isActive == true) return
         loadMoreJob = scope.launch {
             mutableState.update { it.copy(loadingMore = true) }
             try {
-                while (artistQueue.isNotEmpty()) {
-                    val seed = artistQueue.removeFirst()
+                while (artistQueue.isNotEmpty() || discoveryQueue.isNotEmpty()) {
                     val before = mutableState.value.songs.size
-                    val related = api.getRelatedSongs(seed.id, seed.title, seed.artist)
+                    val additions = if (artistQueue.isNotEmpty()) {
+                        val seed = artistQueue.removeFirst()
+                        api.getRelatedSongs(seed.id, seed.title, seed.artist)
+                    } else {
+                        api.getMoodSongs(discoveryQueue.removeFirst())
+                    }
                     mutableState.update { current ->
-                        val combined = merge(current.songs, related)
+                        val combined = merge(current.songs, additions.filter(::isUsableRecommendation))
                         current.copy(songs = rank(combined))
                     }
                     if (mutableState.value.songs.size > before) break
@@ -204,6 +219,11 @@ class HomeViewModel(private val api: MusicApi) {
         const val INITIAL_ARTISTS = 4
         const val TARGET_INITIAL = 24
         const val MIN_RECOMMENDATIONS = 9
-        const val MAX_RECOMMENDATIONS = 60
+        const val MAX_RECOMMENDATIONS = 120
+        val DEFAULT_DISCOVERY_QUERIES = listOf(
+            "new music 2026",
+            "independent music 2026",
+            "popular songs 2026"
+        )
     }
 }
