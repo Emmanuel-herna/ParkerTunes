@@ -231,7 +231,8 @@ interface LibraryDao {
 
     @Query("SELECT * FROM listening_events ORDER BY occurredAt DESC LIMIT :limit")
     suspend fun listeningEvents(limit: Int = 500): List<ListeningEventEntity>
-\n    @Query("SELECT * FROM listening_events ORDER BY occurredAt DESC LIMIT 1000")
+
+    @Query("SELECT * FROM listening_events ORDER BY occurredAt DESC LIMIT 1000")
     fun observeListeningEvents(): Flow<List<ListeningEventEntity>>
 
     @Query("SELECT COUNT(*) FROM listening_events WHERE eventType = :eventType")
