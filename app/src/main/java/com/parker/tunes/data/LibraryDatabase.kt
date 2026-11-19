@@ -286,7 +286,7 @@ interface LibraryDao {
 }
 
 @Database(
-    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class, EqualizerSettingsEntity::class, LyricsCacheEntity::class, DownloadEntity::class, RecommendationCacheEntity::class, HomeShelfCacheEntity::class, com.parker.tunes.data.sources.AddonEntity::class, com.parker.tunes.data.sources.AddonSettingsEntity::class],
+    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, FavoriteEntity::class, PlayHistoryEntity::class, RecentSearchEntity::class, EqualizerSettingsEntity::class, LyricsCacheEntity::class, DownloadEntity::class, RecommendationCacheEntity::class, HomeShelfCacheEntity::class, ListeningEventEntity::class, com.parker.tunes.data.sources.AddonEntity::class, com.parker.tunes.data.sources.AddonSettingsEntity::class],
     version = 12,
     exportSchema = false
 )
