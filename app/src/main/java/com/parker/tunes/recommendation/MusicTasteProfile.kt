@@ -23,13 +23,19 @@ data class MusicTasteProfile(
     fun rank(
         candidates: List<Song>,
         excludedSongIds: Set<String>,
-        limit: Int = 60
+        limit: Int = 60,
+        diversityPercent: Int = 50,
+        reduceSimilarMusic: Boolean = false
     ): List<Song> {
         val unique = candidates.filter { it.id.isNotBlank() && it.id !in excludedSongIds }
             .distinctBy { it.id }
         if (unique.isEmpty()) return emptyList()
         if (!isPersonalized) return unique.take(limit.coerceAtLeast(0))
 
+        val diversity = diversityPercent.coerceIn(0, 100) / 100.0
+        val affinityWeight = 0.66 * (1.0 - diversity * 0.65)
+        val repetitionWeight = 0.16 + diversity * 0.34 + if (reduceSimilarMusic) 0.22 else 0.0
+        val discoveryWeight = 0.12 + diversity * 0.28
         val maxAffinity = (artistAffinity.values.maxOrNull() ?: 0.0).coerceAtLeast(1.0)
         val recentPosition = recentArtistOrder.withIndex().associate { it.value to it.index }
         val remaining = unique.toMutableList()
@@ -42,10 +48,10 @@ data class MusicTasteProfile(
                 val affinity = (artistAffinity[artist] ?: 0.0).coerceAtLeast(0.0) / maxAffinity
                 val favoriteBoost = if (artist in favoriteArtists) 0.22 else 0.0
                 val recentBoost = recentPosition[artist]?.let { (0.12 / (it + 1)).coerceAtMost(0.12) } ?: 0.0
-                val repetitionPenalty = (selectedArtists[artist] ?: 0) * 0.16
+                val repetitionPenalty = (selectedArtists[artist] ?: 0) * repetitionWeight
                 val originalOrder = (unique.indexOfFirst { it.id == song.id }).coerceAtLeast(0)
-                val discoveryPrior = 0.12 / (originalOrder + 1)
-                affinity * 0.66 + favoriteBoost + recentBoost + discoveryPrior - repetitionPenalty
+                val discoveryPrior = discoveryWeight / (originalOrder + 1)
+                affinity * affinityWeight + favoriteBoost * (1.0 - diversity * 0.45) + recentBoost + discoveryPrior - repetitionPenalty
             } ?: break
             remaining.remove(next)
             selected += next
