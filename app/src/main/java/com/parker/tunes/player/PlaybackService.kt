@@ -170,6 +170,7 @@ class PlaybackService : MediaSessionService() {
                         }
                     }
                     lastItemByPlayer[player] = mediaItem
+                    if (player.isPlaying) recordStartedTrack(player)
                     WidgetProvider.update(this@PlaybackService, player)
                 }
             }
