@@ -8,6 +8,8 @@ import androidx.media3.common.util.UnstableApi
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.parker.tunes.data.FavoriteEntity
+import com.parker.tunes.data.PlayHistoryEntity
+import com.parker.tunes.data.ListeningEventEntity
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -30,6 +32,9 @@ class PlaybackService : MediaSessionService() {
     private var crossfadeController: CrossfadeController? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val observedPlayers = mutableSetOf<ExoPlayer>()
+    private val startedTrackByPlayer = mutableMapOf<ExoPlayer, String>()
+    private val lastItemByPlayer = mutableMapOf<ExoPlayer, androidx.media3.common.MediaItem?>()
+    private val qualifiedTracks = mutableSetOf<String>()
     private var autoplayResolving = false
     private val favoriteCommand = SessionCommand(ACTION_FAVORITE, Bundle.EMPTY)
     private val skipNextCommand = SessionCommand(ACTION_SKIP_NEXT, Bundle.EMPTY)
@@ -142,7 +147,10 @@ class PlaybackService : MediaSessionService() {
                 if (mediaSession?.player === player) {
                     if (playbackState == Player.STATE_READY) effects.attach(player.audioSessionId)
                     WidgetProvider.update(this@PlaybackService, player)
-                    if (playbackState == Player.STATE_ENDED) handlePlaybackEnded(player)
+                    if (playbackState == Player.STATE_ENDED) {
+                        recordEvent(player, "PLAY_COMPLETED")
+                        handlePlaybackEnded(player)
+                    }
                 }
             }
 
@@ -150,7 +158,20 @@ class PlaybackService : MediaSessionService() {
                 mediaItem: androidx.media3.common.MediaItem?,
                 reason: Int
             ) {
-                if (mediaSession?.player === player) WidgetProvider.update(this@PlaybackService, player)
+                if (mediaSession?.player === player) {
+                    val previous = lastItemByPlayer[player]
+                    val previousId = previous?.mediaId.orEmpty()
+                    if (previousId.isNotBlank() && previousId != mediaItem?.mediaId) {
+                        if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                            recordEvent(player, "PLAY_COMPLETED", previous)
+                        } else if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK &&
+                            startedTrackByPlayer[player] == previousId) {
+                            recordEvent(player, "SKIPPED", previous)
+                        }
+                    }
+                    lastItemByPlayer[player] = mediaItem
+                    WidgetProvider.update(this@PlaybackService, player)
+                }
             }
 
             override fun onMediaMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
@@ -159,11 +180,63 @@ class PlaybackService : MediaSessionService() {
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (mediaSession?.player === player) {
-                    if (isPlaying) effects.attach(player.audioSessionId)
+                    if (isPlaying) {
+                        effects.attach(player.audioSessionId)
+                        recordStartedTrack(player)
+                    }
                     WidgetProvider.update(this@PlaybackService, player)
                 }
             }
         })
+        lastItemByPlayer[player] = player.currentMediaItem
+    }
+
+    private fun recordStartedTrack(player: ExoPlayer) {
+        if (mediaSession?.player !== player) return
+        val item = player.currentMediaItem ?: return
+        val songId = item.mediaId.takeIf { it.isNotBlank() } ?: return
+        if (startedTrackByPlayer[player] == songId) return
+        startedTrackByPlayer[player] = songId
+        val metadata = item.mediaMetadata
+        serviceScope.launch(Dispatchers.IO) {
+            val dao = (application as ParkerTunesApp).database.libraryDao()
+            dao.recordPlay(PlayHistoryEntity(
+                songId = songId,
+                title = metadata.title?.toString().orEmpty(),
+                artist = metadata.artist?.toString().orEmpty(),
+                coverUrl = metadata.artworkUri?.toString()
+            ))
+            dao.recordListeningEvent(ListeningEventEntity(
+                songId = songId,
+                eventType = "PLAY_STARTED",
+                title = metadata.title?.toString().orEmpty(),
+                artist = metadata.artist?.toString().orEmpty(),
+                coverUrl = metadata.artworkUri?.toString(),
+                durationMs = player.duration.takeIf { it > 0L } ?: 0L
+            ))
+        }
+        serviceScope.launch {
+            kotlinx.coroutines.delay(30_000L)
+            if (mediaSession?.player === player && player.isPlaying &&
+                player.currentMediaItem?.mediaId == songId && qualifiedTracks.add(songId)) {
+                recordEvent(player, "PLAY_QUALIFIED", item)
+            }
+        }
+    }
+
+    private fun recordEvent(player: ExoPlayer, eventType: String,
+        item: androidx.media3.common.MediaItem? = player.currentMediaItem) {
+        val songId = item?.mediaId?.takeIf { it.isNotBlank() } ?: return
+        val metadata = item.mediaMetadata
+        val position = if (player.currentMediaItem?.mediaId == songId) player.currentPosition.coerceAtLeast(0L) else 0L
+        val duration = if (player.currentMediaItem?.mediaId == songId) player.duration.takeIf { it > 0L } ?: 0L else 0L
+        serviceScope.launch(Dispatchers.IO) {
+            (application as ParkerTunesApp).database.libraryDao().recordListeningEvent(
+                ListeningEventEntity(songId=songId,eventType=eventType,title=metadata.title?.toString().orEmpty(),
+                    artist=metadata.artist?.toString().orEmpty(),coverUrl=metadata.artworkUri?.toString(),
+                    positionMs=position,durationMs=duration)
+            )
+        }
     }
 
     /**
