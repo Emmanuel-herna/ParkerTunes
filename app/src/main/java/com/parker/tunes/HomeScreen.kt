@@ -659,7 +659,7 @@ private fun RecommendationGridTile(
                 Icon(Icons.Default.MusicNote, contentDescription = null,
                     tint = Color(0xFFBDBDBD), modifier = Modifier.size(30.dp))
             }
-            SongActionMenu(menu, { menu = false }, song, { onPlay(song) }, onQueue,
+            SongActionMenu(menu, { menu = false }, song, { onClick() }, onQueue,
                 onDownload, favorite, onFavorite)
         }
         Text(
