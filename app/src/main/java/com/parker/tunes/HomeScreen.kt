@@ -196,13 +196,14 @@ fun HomeScreen(
                 ) {
                     Text("ParkerTunes", color = Color(0xFFD6C2B9), fontSize = 17.sp,
                         fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.4).sp)
-                    IconButton(
-                        onClick = onSettings,
-                        modifier = Modifier.size(38.dp).clip(CircleShape)
+                    Box(
+                        modifier = Modifier.size(34.dp).clip(CircleShape)
                             .background(Color(0xFFB8B8B8).copy(alpha = 0.10f))
+                            .clickable(onClick = onSettings),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings",
-                            tint = Color(0xFFD9D9D9), modifier = Modifier.size(23.dp))
+                            tint = Color(0xFFD9D9D9), modifier = Modifier.size(20.dp))
                     }
                 }
             }

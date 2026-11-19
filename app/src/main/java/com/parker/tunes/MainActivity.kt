@@ -562,7 +562,7 @@ fun ParkerTunesRoot() {
                 }
                 }
                 AnimatedVisibility(
-                    visible = currentRoute != "nowplaying",
+                    visible = currentRoute in setOf("home", "explore", "library", "together"),
                     modifier = Modifier.align(Alignment.BottomCenter),
                     enter = fadeIn() + slideInVertically { it / 3 },
                     exit = fadeOut() + slideOutVertically { it / 3 }

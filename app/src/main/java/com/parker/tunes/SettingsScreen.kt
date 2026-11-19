@@ -109,7 +109,11 @@ fun SettingsScreen(
     val reduceSimilar by repository.reduceSimilarMusic.collectAsState(initial = false)
     val diversity by repository.discoveryDiversity.collectAsState(initial = 50)
     val savedGlassIntensity by repository.glassIntensity.collectAsState(initial = 55)
-    var glassIntensity by remember(savedGlassIntensity) { mutableIntStateOf(savedGlassIntensity) }
+    var glassIntensity by remember { mutableIntStateOf(savedGlassIntensity) }
+    var glassIntensityDragging by remember { mutableStateOf(false) }
+    LaunchedEffect(savedGlassIntensity) {
+        if (!glassIntensityDragging) glassIntensity = savedGlassIntensity
+    }
     val accentColor = SettingsAccents.firstOrNull { it.first == accent }?.second ?: SettingsAccents.first().second
 
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -177,12 +181,14 @@ fun SettingsScreen(
                 Slider(
                     value = glassIntensity.toFloat(),
                     onValueChange = { value ->
-                        val next = value.toInt().coerceIn(0, 100)
-                        glassIntensity = next
-                        scope.launch { repository.setGlassIntensity(next) }
+                        glassIntensityDragging = true
+                        glassIntensity = value.toInt().coerceIn(0, 100)
                     },
-                    valueRange = 0f..100f,
-                    steps = 99
+                    onValueChangeFinished = {
+                        glassIntensityDragging = false
+                        scope.launch { repository.setGlassIntensity(glassIntensity) }
+                    },
+                    valueRange = 0f..100f
                 )
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Subtle", color = SettingsMuted, fontSize = 11.sp)
