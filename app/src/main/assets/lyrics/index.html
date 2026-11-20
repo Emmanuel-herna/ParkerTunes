@@ -104,6 +104,13 @@
           : undefined;
         element.paused = !track.playing;
         element.currentTime = Math.max(0, Number(track.positionMs) || 0);
+        // The player card follows playback; expanded lyrics become a readable,
+        // manually scrollable song sheet instead of pinning one line on screen.
+        element.noBlur = true;
+        if (track.readerMode) {
+          element.autoScroll = false;
+          element.setAttribute('reader-mode', '');
+        }
 
         element.addEventListener('line-click', event => {
           const timestamp = Number(event.detail && event.detail.timestamp);
