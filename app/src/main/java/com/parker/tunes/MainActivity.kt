@@ -1022,7 +1022,8 @@ private fun AmLyricsWebView(
     currentTimeMs: Long,
     isPlaying: Boolean,
     onSeek: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    readerMode: Boolean = false
 ) {
     val latestOnSeek by rememberUpdatedState(onSeek)
     val latestDuration by rememberUpdatedState(durationMs)
@@ -1035,6 +1036,7 @@ private fun AmLyricsWebView(
             .put("durationMs", durationMs.coerceAtLeast(0L))
             .put("positionMs", currentTimeMs.coerceAtLeast(0L))
             .put("playing", isPlaying)
+            .put("readerMode", readerMode)
             .toString()
     }
     val latestTrackJson by rememberUpdatedState(trackJson)
@@ -1702,7 +1704,8 @@ private fun NowPlayingScreen(
                         currentTimeMs = position,
                         isPlaying = playing,
                         onSeek = { timestamp -> player?.seekTo(timestamp) },
-                        modifier = Modifier.fillMaxWidth().weight(1f)
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        readerMode = true
                     )
                 }
             }
