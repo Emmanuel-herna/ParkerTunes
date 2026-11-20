@@ -354,7 +354,7 @@ private fun QuickPickRow(
         Box(Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF171717)),
             contentAlignment = Alignment.Center) {
             if (song.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = Color.LightGray)
-            else AsyncImage(model = optimizedHomeArtworkUrl(song.coverUrl, 192), contentDescription = song.title,
+            else AsyncImage(model = song.coverUrl, contentDescription = song.title,
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
         Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -409,7 +409,7 @@ private fun ActionSongCard(
             contentAlignment = Alignment.Center) {
             if (song.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null,
                 tint = Color.LightGray, modifier = Modifier.size(30.dp))
-            else AsyncImage(model = optimizedHomeArtworkUrl(song.coverUrl, 420), contentDescription = song.title,
+            else AsyncImage(model = song.coverUrl, contentDescription = song.title,
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             if (playing) PlayingBars(Modifier.align(Alignment.BottomEnd).padding(6.dp))
             SongActionMenu(menu, { menu = false }, song, onPlay, onQueue, onDownload,
@@ -522,7 +522,7 @@ private fun ContinueListeningCard(song: Song, onPlay: (Song) -> Unit) {
             
             .background(Color(0xFF151515)), contentAlignment = Alignment.Center) {
             if (!song.coverUrl.isNullOrBlank()) {
-                AsyncImage(optimizedHomeArtworkUrl(song.coverUrl, 420), contentDescription = song.title,
+                AsyncImage(song.coverUrl, contentDescription = song.title,
                     contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
             } else Icon(Icons.Default.Album, null, tint = Color.White, modifier = Modifier.size(34.dp))
         }
@@ -691,7 +691,7 @@ private fun RecommendationGridTile(
         ) {
             if (!song.coverUrl.isNullOrBlank() && !artworkFailed) {
                 AsyncImage(
-                    model = optimizedHomeArtworkUrl(song.coverUrl, 420),
+                    model = song.coverUrl,
                     contentDescription = "${song.title} cover",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize().clip(CircleShape),
@@ -737,7 +737,7 @@ private fun HomeSongCard(song: Song, onClick: () -> Unit, width: Dp, reduceMotio
             .background(Color(0xFF151515)), contentAlignment = Alignment.Center) {
             if (song.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null,
                 tint = Color(0xFFBDBDBD), modifier = Modifier.size(34.dp))
-            else AsyncImage(optimizedHomeArtworkUrl(song.coverUrl, 420), contentDescription = "${song.title} cover",
+            else AsyncImage(song.coverUrl, contentDescription = "${song.title} cover",
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
         }
         Text(song.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
