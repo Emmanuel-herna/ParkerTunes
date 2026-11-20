@@ -96,6 +96,30 @@ export const lyricsStyles = css`
     scroll-padding-block-start: var(--lyrics-scroll-padding-top);
   }
 
+  /* Expanded player lyrics: a readable song sheet, not the compact karaoke
+     focus layout. Playback highlighting remains active, but scrolling is
+     controlled by the listener so the page does not keep jumping to one line. */
+  :host([reader-mode]) .lyrics-container {
+    padding: 64px var(--am-lyrics-inline-padding) 36px;
+    scroll-padding-block-start: 24px;
+  }
+
+  :host([reader-mode]) .lyrics-line {
+    opacity: 1;
+    filter: none !important;
+    transform: none !important;
+    font-size: clamp(22px, 5.4vw, 29px);
+    margin-block-end: 18px;
+  }
+
+  :host([reader-mode]) .lyrics-line-container {
+    transform: none !important;
+  }
+
+  :host([reader-mode]) .lyrics-line.active {
+    color: var(--lyplus-text-primary);
+  }
+
   .lyrics-container::-webkit-scrollbar {
     display: none;
   }
