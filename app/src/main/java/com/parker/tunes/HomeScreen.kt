@@ -737,7 +737,7 @@ private fun HomeSongCard(song: Song, onClick: () -> Unit, width: Dp, reduceMotio
             .background(Color(0xFF151515)), contentAlignment = Alignment.Center) {
             if (song.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null,
                 tint = Color(0xFFBDBDBD), modifier = Modifier.size(34.dp))
-            else AsyncImage(song.coverUrl, contentDescription = "${song.title} cover",
+            else AsyncImage(optimizedHomeArtworkUrl(song.coverUrl, 420), contentDescription = "${song.title} cover",
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
         }
         Text(song.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
