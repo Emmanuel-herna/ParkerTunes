@@ -5,12 +5,6 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -416,17 +410,10 @@ private fun SettingRow(
     icon: ImageVector, title: String, subtitle: String?, value: String,
     onClick: () -> Unit, toggle: Boolean? = null, reduceMotion: Boolean = false
 ) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.94f else 1f,
-        animationSpec = if (reduceMotion) tween(durationMillis = 80) else spring(dampingRatio = 0.08f, stiffness = 650f),
-        label = "settingRowPress"
-    )
     Row(
-        Modifier.fillMaxWidth().height(56.dp).graphicsLayer { scaleX = scale; scaleY = scale }
+        Modifier.fillMaxWidth().height(56.dp)
             .clip(RoundedCornerShape(10.dp))
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .clickable(onClick = onClick)
             .padding(horizontal = 0.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
