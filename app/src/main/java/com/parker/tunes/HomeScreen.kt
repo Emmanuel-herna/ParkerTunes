@@ -354,7 +354,7 @@ private fun QuickPickRow(
         Box(Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF171717)),
             contentAlignment = Alignment.Center) {
             if (song.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = Color.LightGray)
-            else AsyncImage(model = song.coverUrl, contentDescription = song.title,
+            else AsyncImage(model = optimizedHomeArtworkUrl(song.coverUrl, 192), contentDescription = song.title,
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
         Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -409,7 +409,7 @@ private fun ActionSongCard(
             contentAlignment = Alignment.Center) {
             if (song.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null,
                 tint = Color.LightGray, modifier = Modifier.size(30.dp))
-            else AsyncImage(model = song.coverUrl, contentDescription = song.title,
+            else AsyncImage(model = optimizedHomeArtworkUrl(song.coverUrl, 420), contentDescription = song.title,
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             if (playing) PlayingBars(Modifier.align(Alignment.BottomEnd).padding(6.dp))
             SongActionMenu(menu, { menu = false }, song, onPlay, onQueue, onDownload,
@@ -522,7 +522,7 @@ private fun ContinueListeningCard(song: Song, onPlay: (Song) -> Unit) {
             
             .background(Color(0xFF151515)), contentAlignment = Alignment.Center) {
             if (!song.coverUrl.isNullOrBlank()) {
-                AsyncImage(song.coverUrl, contentDescription = song.title,
+                AsyncImage(optimizedHomeArtworkUrl(song.coverUrl, 420), contentDescription = song.title,
                     contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
             } else Icon(Icons.Default.Album, null, tint = Color.White, modifier = Modifier.size(34.dp))
         }
@@ -691,7 +691,7 @@ private fun RecommendationGridTile(
         ) {
             if (!song.coverUrl.isNullOrBlank() && !artworkFailed) {
                 AsyncImage(
-                    model = song.coverUrl,
+                    model = optimizedHomeArtworkUrl(song.coverUrl, 420),
                     contentDescription = "${song.title} cover",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize().clip(CircleShape),
@@ -903,6 +903,12 @@ private fun TrackContextMenu(
 }
 
 @Composable
+private fun optimizedHomeArtworkUrl(url: String?, sizePx: Int): String? {
+    if (url.isNullOrBlank()) return null
+    // YouTube image hosts support server-side resizing; leave other providers untouched.
+    return if (url.contains("ytimg.com") || url.contains("ggpht.com")) url.artworkAt(sizePx) else url
+}
+
 private fun HomeArtwork(
     url: String?, sizePx: Int, loader: ImageLoader,
     modifier: Modifier, scale: ContentScale
