@@ -902,13 +902,13 @@ private fun TrackContextMenu(
     }
 }
 
-@Composable
 private fun optimizedHomeArtworkUrl(url: String?, sizePx: Int): String? {
     if (url.isNullOrBlank()) return null
     // YouTube image hosts support server-side resizing; leave other providers untouched.
     return if (url.contains("ytimg.com") || url.contains("ggpht.com")) url.artworkAt(sizePx) else url
 }
 
+@Composable
 private fun HomeArtwork(
     url: String?, sizePx: Int, loader: ImageLoader,
     modifier: Modifier, scale: ContentScale
