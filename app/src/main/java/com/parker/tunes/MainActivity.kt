@@ -60,6 +60,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
@@ -1044,10 +1045,48 @@ private fun decodeNativeLyricsSnapshot(raw: String): NativeLyricsSnapshot {
                         endMs = endtime.takeIf { value -> value > timestamp }
                     )
                 }
+                val wordArray = item.optJSONArray("words")
+                val words = buildList {
+                    if (wordArray != null) {
+                        for (wordIndex in 0 until wordArray.length()) {
+                            val word = wordArray.optJSONObject(wordIndex) ?: continue
+                            val wordText = word.optString("text")
+                            if (wordText.isBlank()) continue
+                            val wordStart = word.optDouble("startMs", 0.0).toLong().coerceAtLeast(timestamp)
+                            val wordEnd = word.optDouble("endMs", 0.0).toLong()
+                                .takeIf { it > wordStart }
+                            val syllableArray = word.optJSONArray("syllables")
+                            val syllables = buildList {
+                                if (syllableArray != null) {
+                                    for (syllableIndex in 0 until syllableArray.length()) {
+                                        val syllable = syllableArray.optJSONObject(syllableIndex) ?: continue
+                                        add(
+                                            com.parker.tunes.core.lyrics.LyricsSyllable(
+                                                startMs = syllable.optDouble("startMs", 0.0).toLong(),
+                                                endMs = syllable.optDouble("endMs", 0.0).toLong(),
+                                                startChar = syllable.optInt("startChar", 0),
+                                                endChar = syllable.optInt("endChar", 0)
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                            add(
+                                com.parker.tunes.core.lyrics.LyricsWord(
+                                    startMs = wordStart,
+                                    text = wordText,
+                                    endMs = wordEnd,
+                                    syllables = syllables
+                                )
+                            )
+                        }
+                    }
+                }
                 add(
                     KaraokeLyricsLine(
                         timeMs = timestamp,
                         text = text,
+                        words = words,
                         background = backing,
                         opposite = item.optBoolean("oppositeTurn", false),
                         endMs = endtime.takeIf { it > timestamp }
@@ -1239,15 +1278,11 @@ private fun NativeLyricsList(
     val visibleLines = remember(lines) {
         lines.filter { it.text.isNotBlank() }.sortedBy { it.timeMs }
     }
-    val unsynced = remember(visibleLines) {
-        visibleLines.isNotEmpty() && visibleLines.all { it.timeMs <= 0L }
-    }
-    val activeIndex = remember(visibleLines, currentTimeMs, unsynced) {
-        when {
-            visibleLines.isEmpty() -> -1
-            unsynced -> 0
-            else -> visibleLines.indexOfLast { it.timeMs <= currentTimeMs }.coerceAtLeast(0)
-        }
+    val timedRows = remember(visibleLines) { VLine.of(visibleLines) }
+    val rowByOrigin = remember(timedRows) { timedRows.filterNot { it.isGap }.associateBy { it.origin } }
+    val activeIndex = remember(visibleLines, currentTimeMs) {
+        if (visibleLines.isEmpty()) -1
+        else visibleLines.indexOfLast { it.timeMs <= currentTimeMs }.coerceAtLeast(0)
     }
     val initialIndex = if (readerMode) {
         (activeIndex - 3).coerceAtLeast(0)
@@ -1265,8 +1300,6 @@ private fun NativeLyricsList(
     }
 
     LaunchedEffect(browsingByDrag, listState.isScrollInProgress, isPlaying) {
-        // Like BitChord, pause automatic following while the listener browses,
-        // then resume five seconds after their finger leaves the list.
         if (isPlaying && browsingByDrag && !listState.isScrollInProgress) {
             delay(5_000)
             browsingByDrag = false
@@ -1282,10 +1315,7 @@ private fun NativeLyricsList(
             } else {
                 -with(density) { 50.dp.roundToPx() }
             }
-            listState.animateScrollToItem(
-                index = activeIndex,
-                scrollOffset = scrollOffset
-            )
+            listState.animateScrollToItem(activeIndex, scrollOffset)
         }
     }
 
@@ -1315,21 +1345,86 @@ private fun NativeLyricsList(
             items = visibleLines,
             key = { index, line -> "${line.timeMs}-$index" }
         ) { index, line ->
-            val distance = if (activeIndex >= 0) kotlin.math.abs(index - activeIndex) else 3
+            val distance = if (activeIndex >= 0) index - activeIndex else 4
             val active = index == activeIndex
-            val alpha = if (readerMode) {
-                if (active) 1f else 0.78f
+            val upcoming = distance > 0
+            val targetBlur = when {
+                active -> 0f
+                upcoming && distance == 1 -> if (readerMode) 2.8f else 3.5f
+                upcoming && distance == 2 -> if (readerMode) 5.5f else 7f
+                upcoming -> if (readerMode) 7f else 9f
+                distance == -1 -> if (readerMode) 0.8f else 1.2f
+                else -> if (readerMode) 1.8f else 2.5f
+            }
+            val blurRadius by animateFloatAsState(
+                targetValue = targetBlur,
+                animationSpec = tween(520, easing = FastOutSlowInEasing),
+                label = "lyricsBlur"
+            )
+            val alpha by animateFloatAsState(
+                targetValue = when {
+                    active -> 1f
+                    upcoming && distance == 1 -> 0.78f
+                    upcoming && distance == 2 -> 0.48f
+                    upcoming -> 0.28f
+                    else -> if (readerMode) 0.72f else 0.42f
+                },
+                animationSpec = tween(480, easing = FastOutSlowInEasing),
+                label = "lyricsFade"
+            )
+            val scale by animateFloatAsState(
+                targetValue = if (active) 1f else if (readerMode) 0.985f else 0.97f,
+                animationSpec = spring(dampingRatio = 0.82f, stiffness = 260f),
+                label = "lyricsScale"
+            )
+            val timedLine = rowByOrigin[index]
+            val revealedChars = if (active && timedLine != null) {
+                timedLine.revealedChars(currentTimeMs).coerceIn(0f, line.text.length.toFloat())
+            } else if (index < activeIndex) {
+                line.text.length.toFloat()
             } else {
-                when (distance) {
-                    0 -> 1f
-                    1 -> 0.72f
-                    2 -> 0.48f
-                    else -> 0.28f
+                0f
+            }
+            val animatedText = remember(line.text, active, revealedChars) {
+                buildAnnotatedString {
+                    val split = revealedChars.toInt().coerceIn(0, line.text.length)
+                    val partial = revealedChars - split
+                    if (split > 0) {
+                        pushStyle(SpanStyle(color = Color.White))
+                        append(line.text.substring(0, split))
+                        pop()
+                    }
+                    if (partial > 0f && split < line.text.length) {
+                        pushStyle(SpanStyle(color = Color.White.copy(alpha = partial)))
+                        append(line.text.substring(split, split + 1))
+                        pop()
+                    }
+                    if (split + 1 < line.text.length) {
+                        pushStyle(
+                            SpanStyle(
+                                color = Color.White.copy(
+                                    alpha = if (active) 0.32f else 0.78f
+                                )
+                            )
+                        )
+                        append(line.text.substring(split + 1))
+                        pop()
+                    } else if (split == 0 && partial == 0f && line.text.isNotEmpty()) {
+                        pushStyle(SpanStyle(color = Color.White.copy(alpha = 0.78f)))
+                        append(line.text)
+                        pop()
+                    }
                 }
             }
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .blur(blurRadius.dp)
                     .clip(RoundedCornerShape(if (readerMode) 14.dp else 12.dp))
                     .clickable { onSeek(line.timeMs) }
                     .padding(
@@ -1339,8 +1434,8 @@ private fun NativeLyricsList(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = line.text,
-                    color = if (active) Color.White else Color.White.copy(alpha = alpha),
+                    text = animatedText,
+                    color = Color.White.copy(alpha = alpha),
                     fontSize = when {
                         readerMode && active -> 25.sp
                         readerMode -> 20.sp
