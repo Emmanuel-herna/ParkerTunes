@@ -84,7 +84,7 @@ fun HomeScreen(
     dao: LibraryDao,
     api: MusicApi,
     player: MediaController?,
-    onPlay: (Song) -> Unit,
+    onPlayFromQueue: (Song, List<Song>) -> Unit,
     onQueue: (Song, Boolean) -> Unit,
     onSettings: () -> Unit,
     onSearch: () -> Unit,
@@ -191,6 +191,16 @@ fun HomeScreen(
     }
 
     val favoriteIds = remember(favorites) { favorites.map { it.songId }.toSet() }
+    val recentQueue = remember(recent) {
+        recent.map { Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl) }
+    }
+    val mostPlayedQueue = remember(mostPlayed) {
+        mostPlayed.map { Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl) }
+    }
+    val favoriteQueue = remember(favorites) {
+        favorites.map { Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl) }
+    }
+    val madeForYouQueue = remember(recommendationState.songs) { recommendationState.songs.take(9) }
     val toggleFavorite: (Song) -> Unit = { song ->
         scope.launch(Dispatchers.IO) {
             if (dao.isFavorite(song.id)) dao.removeFavorite(song.id)
@@ -244,13 +254,11 @@ fun HomeScreen(
             }
 
             item(key = "recently_played_feature") {
-                val featuredSong = recent.firstOrNull()?.let {
-                    Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl)
-                }
+                val featuredSong = recentQueue.firstOrNull()
                 FeaturedRecentCard(
                     song = featuredSong,
                     sectionLabel = "Recently played",
-                    onPlay = onPlay,
+                    onPlay = { song -> onPlayFromQueue(song, recentQueue) },
                     onSearch = onSearch
                 )
             }
@@ -259,11 +267,11 @@ fun HomeScreen(
                 Column(Modifier.padding(top = 2.dp)) {
                     HomeSectionHeading("Made for you")
                     RecommendationShelf(
-                        songs = recommendationState.songs.take(9),
+                        songs = madeForYouQueue,
                         loading = recommendationState.loading,
                         loadingMore = false,
                         listState = rememberLazyListState(),
-                        onPlay = onPlay,
+                        onPlay = { song -> onPlayFromQueue(song, madeForYouQueue) },
                         onLongPress = { },
                         onQueue = onQueue,
                         onDownload = downloads::enqueue,
@@ -276,34 +284,37 @@ fun HomeScreen(
 
             if (recent.isNotEmpty()) {
                 item(key = "recently_played") {
-                    SongShelfSection("Recently played", recent.take(5).map {
-                        Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl)
-                    }, currentSongId, onPlay, onQueue, downloads::enqueue, { it.id in favoriteIds }, toggleFavorite)
+                    SongShelfSection("Recently played", recentQueue.take(5),
+                        currentSongId, { song -> onPlayFromQueue(song, recentQueue) },
+                        onQueue, downloads::enqueue, { it.id in favoriteIds }, toggleFavorite)
                 }
             }
 
             if (mostPlayed.isNotEmpty()) {
                 item(key = "heavy_rotation") {
-                    SongShelfSection("Heavy Rotation", mostPlayed.take(5).map {
-                        Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl)
-                    }, currentSongId, onPlay, onQueue, downloads::enqueue, { it.id in favoriteIds }, toggleFavorite)
+                    SongShelfSection("Heavy Rotation", mostPlayedQueue.take(5),
+                        currentSongId, { song -> onPlayFromQueue(song, mostPlayedQueue) },
+                        onQueue, downloads::enqueue, { it.id in favoriteIds }, toggleFavorite)
                 }
             }
 
             item(key = "daily_discovery") {
-                SongShelfSection("Daily Discovery", discovery, currentSongId, onPlay, onQueue,
+                SongShelfSection("Daily Discovery", discovery, currentSongId,
+                    { song -> onPlayFromQueue(song, discovery) }, onQueue,
                     downloads::enqueue, { it.id in favoriteIds }, toggleFavorite,
                     emptyMessage = if (discoveryLoaded) "No discovery results available right now." else "Finding something new…")
             }
 
             item(key = "new_releases") {
-                SongShelfSection("New Releases", newReleases, currentSongId, onPlay, onQueue,
+                SongShelfSection("New Releases", newReleases, currentSongId,
+                    { song -> onPlayFromQueue(song, newReleases) }, onQueue,
                     downloads::enqueue, { it.id in favoriteIds }, toggleFavorite,
                     emptyMessage = if (discoveryLoaded) "New release results aren't available right now." else "Loading new releases…")
             }
 
             item(key = "trending") {
-                SongShelfSection("All hits", trending, currentSongId, onPlay, onQueue,
+                SongShelfSection("All hits", trending, currentSongId,
+                    { song -> onPlayFromQueue(song, trending) }, onQueue,
                     downloads::enqueue, { it.id in favoriteIds }, toggleFavorite,
                     emptyMessage = if (discoveryLoaded) "Hit tracks aren't available right now." else "Loading the biggest hits…",
                     subtitle = "THE BIGGEST HITS OF ALL TIMES!")
@@ -311,9 +322,9 @@ fun HomeScreen(
 
             if (favorites.isNotEmpty()) {
                 item(key = "your_favorites") {
-                    SongShelfSection("Your Favorites", favorites.take(5).map {
-                        Song(it.songId, it.title, it.artist, it.coverUrl)
-                    }, currentSongId, onPlay, onQueue, downloads::enqueue, { true }, toggleFavorite)
+                    SongShelfSection("Your Favorites", favoriteQueue.take(5),
+                        currentSongId, { song -> onPlayFromQueue(song, favoriteQueue) },
+                        onQueue, downloads::enqueue, { true }, toggleFavorite)
                 }
             }
         }
