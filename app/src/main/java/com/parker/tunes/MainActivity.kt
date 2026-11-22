@@ -1529,26 +1529,6 @@ private fun NativeLyricsRow(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        if (!coverUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = coverUrl,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize().blur(42.dp).graphicsLayer { alpha = 0.42f },
-                contentScale = ContentScale.Crop
-            )
-        }
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    listOf(
-                        artworkColors.background.copy(alpha = 0.64f),
-                        Color(0xCC09080D),
-                        Color(0xFF08080B)
-                    )
-                )
-            )
-        )
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1724,6 +1704,26 @@ private fun NowPlayingScreen(
     }
     var nativeLyricsLoading by remember(currentLyricsTrackId) { mutableStateOf(true) }
 
+    Box(Modifier.fillMaxSize()) {
+        if (!coverUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = coverUrl,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().blur(42.dp).graphicsLayer { alpha = 0.42f },
+                contentScale = ContentScale.Crop
+            )
+        }
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    listOf(
+                        artworkColors.background.copy(alpha = 0.64f),
+                        Color(0xCC09080D),
+                        Color(0xFF08080B)
+                    )
+                )
+            )
+        )
     Column(
         modifier = Modifier
             .fillMaxSize()
