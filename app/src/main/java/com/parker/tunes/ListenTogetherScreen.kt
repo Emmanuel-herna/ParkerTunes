@@ -16,7 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import androidx.credentials.CustomCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import androidx.compose.ui.Alignment
@@ -88,12 +88,15 @@ fun ListenTogetherScreen(client:ListenTogetherClient,player:MediaController?,api
                             try {
                                 withTimeout(30_000L) {
                                 signInStage="Opening Google account chooser…"
-                                val option=GetGoogleIdOption.Builder()
-                                    .setServerClientId(context.getString(R.string.default_web_client_id))
-                                    .setFilterByAuthorizedAccounts(false)
-                                    .setAutoSelectEnabled(false)
+                                // This is an explicit button tap, so use Google's dedicated
+                                // sign-in option to show the account chooser even when no
+                                // previously-authorized account is available for auto sign-in.
+                                val option=GetSignInWithGoogleOption.Builder(
+                                    context.getString(R.string.default_web_client_id)
+                                ).build()
+                                val request=GetCredentialRequest.Builder()
+                                    .addCredentialOption(option)
                                     .build()
-                                val request=GetCredentialRequest.Builder().addCredentialOption(option).build()
                                 val result=CredentialManager.create(context).getCredential(context,request)
                                 signInStage="Completing Firebase authentication…"
                                 val credential=result.credential
