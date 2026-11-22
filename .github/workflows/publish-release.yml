@@ -108,14 +108,15 @@ jobs:
         env:
           RELEASE_VERSION: ${{ inputs.version_name }}
           RELEASE_NOTES: ${{ inputs.release_notes }}
-          RELEASE_VERSION_CODE: ${{ env.RELEASE_VERSION_CODE }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
         run: |
           python3 - <<'PY'
           import json
           import os
+          major, minor, patch = map(int, os.environ["RELEASE_VERSION"].split("."))
+          version_code = major * 10000 + minor * 100 + patch
           manifest = {
-              "versionCode": int(os.environ["RELEASE_VERSION_CODE"]),
+              "versionCode": version_code,
               "versionName": os.environ["RELEASE_VERSION"],
               "apkUrl": "https://github.com/Emmanuel-herna/ParkerTunes/releases/latest/download/ParkerTunes.apk",
               "sha256": os.environ["APK_SHA256"],
