@@ -8,7 +8,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** JSON backup/restore for ParkerTunes library and local preferences. */
+/** JSON backup/restore for Plyra library and local preferences. */
 class BackupManager(
     context: Context,
     private val dao: LibraryDao,
@@ -72,7 +72,7 @@ class BackupManager(
     suspend fun importFrom(uri: Uri): Int = withContext(Dispatchers.IO) {
         val input = resolver.openInputStream(uri) ?: error("Could not open the backup file.")
         val root = JSONObject(input.bufferedReader().use { it.readText() })
-        require(root.optString("format") == "ParkerTunesBackup") { "This is not a ParkerTunes backup." }
+        require(root.optString("format") == "ParkerTunesBackup") { "This is not a Plyra backup." }
         require(root.optInt("version") in 1..1) { "This backup version is not supported." }
         var imported = 0
 
