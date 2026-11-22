@@ -1,0 +1,146 @@
+name: Publish ParkerTunes release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "Release version (for example 1.0.1)"
+        required: true
+        type: string
+        default: "1.0.1"
+      release_notes:
+        description: "What changed in this release"
+        required: true
+        type: string
+        default: "Performance improvements, fixes and refinements."
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Build, sign and publish APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Node.js and build lyrics assets
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build lyrics web assets
+        run: |
+          npm install --prefix lyrics-web --no-audit --no-fund
+          npm run build --prefix lyrics-web
+          test -s app/src/main/assets/lyrics/am-lyrics.js
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Validate version and prepare signing key
+        shell: bash
+        env:
+          RELEASE_VERSION: \${{ inputs.version_name }}
+          ANDROID_KEYSTORE_BASE64: \${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: \${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must use MAJOR.MINOR.PATCH format, such as 1.0.1." >&2
+            exit 1
+          fi
+          if [[ -z "$ANDROID_KEYSTORE_BASE64" || -z "$ANDROID_KEYSTORE_PASSWORD" ]]; then
+            echo "Stable signing secrets are required before publishing updates." >&2
+            echo "Configure ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD in repository Actions secrets." >&2
+            exit 1
+          fi
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$RELEASE_VERSION"
+          if (( MINOR > 99 || PATCH > 99 )); then
+            echo "MINOR and PATCH must each be between 0 and 99." >&2
+            exit 1
+          fi
+          VERSION_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          if (( VERSION_CODE < 2 || VERSION_CODE > 2100000000 )); then
+            echo "Calculated Android versionCode is outside the supported range." >&2
+            exit 1
+          fi
+          KEYSTORE="$RUNNER_TEMP/parkertunes-ci.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          test -s "$KEYSTORE"
+          echo "PARKERTUNES_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          echo "PARKERTUNES_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "PARKERTUNES_VERSION_NAME=$RELEASE_VERSION" >> "$GITHUB_ENV"
+          echo "PARKERTUNES_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "RELEASE_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+
+      - name: Build signed release APK
+        run: gradle --no-daemon :app:assembleRelease
+
+      - name: Verify APK signature and calculate SHA-256
+        id: apk
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose "$APK"
+          "$APKSIGNER" verify --print-certs "$APK"
+          SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "### Release APK SHA-256" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`$SHA256\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create update manifest
+        env:
+          RELEASE_VERSION: \${{ inputs.version_name }}
+          RELEASE_NOTES: \${{ inputs.release_notes }}
+          RELEASE_VERSION_CODE: \${{ env.RELEASE_VERSION_CODE }}
+          APK_SHA256: \${{ steps.apk.outputs.sha256 }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          manifest = {
+              "versionCode": int(os.environ["RELEASE_VERSION_CODE"]),
+              "versionName": os.environ["RELEASE_VERSION"],
+              "apkUrl": "https://github.com/Emmanuel-herna/ParkerTunes/releases/latest/download/ParkerTunes.apk",
+              "sha256": os.environ["APK_SHA256"],
+              "releaseNotes": os.environ["RELEASE_NOTES"],
+          }
+          with open("latest.json", "w", encoding="utf-8") as output:
+              json.dump(manifest, output, ensure_ascii=False, indent=2)
+          PY
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: \${{ github.token }}
+          RELEASE_VERSION: \${{ inputs.version_name }}
+          RELEASE_NOTES: \${{ inputs.release_notes }}
+        run: |
+          set -euo pipefail
+          TAG="v$RELEASE_VERSION"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK#ParkerTunes.apk" "latest.json#latest.json" --clobber
+            gh release edit "$TAG" --title "ParkerTunes $RELEASE_VERSION" --notes "$RELEASE_NOTES"
+          else
+            gh release create "$TAG" "$APK#ParkerTunes.apk" "latest.json#latest.json" \
+              --title "ParkerTunes $RELEASE_VERSION" --notes "$RELEASE_NOTES"
+          fi
+          echo "### Published release" >> "$GITHUB_STEP_SUMMARY"
+          echo "Version: $RELEASE_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://github.com/Emmanuel-herna/ParkerTunes/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
