@@ -1061,9 +1061,8 @@ private fun AmLyricsWebView(
         }
     }
 
-    Column(modifier = modifier) {
     AndroidView(
-        modifier = Modifier.fillMaxWidth().weight(1f),
+        modifier = modifier,
         factory = { context ->
             val assetLoader = WebViewAssetLoader.Builder()
                 .addPathHandler(
@@ -1230,7 +1229,6 @@ private fun AmLyricsWebView(
             ) { result -> Log.d("ParkerLyricsWeb", "Updated track delivery: $result") }
         }
     )
-    }
 }
 
 @Composable
@@ -1620,7 +1618,7 @@ private fun NowPlayingScreen(
                 tint = muted)
         }
 
-        if (title.isNotBlank()) {
+        if (title.isNotBlank() && !lyricsExpanded) {
             Box(
                 Modifier.fillMaxWidth()
                     .clip(RoundedCornerShape(22.dp))
@@ -1639,7 +1637,7 @@ private fun NowPlayingScreen(
                     currentTimeMs = position,
                     isPlaying = playing,
                     onSeek = { timestamp -> player?.seekTo(timestamp) },
-                    modifier = Modifier.fillMaxWidth().height(320.dp)
+                    modifier = Modifier.fillMaxWidth().height(232.dp)
                 )
                 IconButton(
                     onClick = { lyricsExpanded = true },
@@ -1664,7 +1662,7 @@ private fun NowPlayingScreen(
                     Modifier.fillMaxSize()
                         .background(
                             Brush.verticalGradient(
-                                listOf(accent.copy(alpha = 0.16f), Color(0xFF100E16), Color(0xFF08080B))
+                                listOf(Color(0xFF241C35), Color(0xFF100E16), Color(0xFF08080B))
                             )
                         )
                         .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
