@@ -254,11 +254,11 @@ class NewPipeMusicApi : MusicApi {
             // Supplement it with dedicated YouTube Music song-filter results,
             // retaining only tracks credited to this artist.
             val normalizedArtist = artist.name.lowercase()
-                .replace(Regex("""\\s*[-|]\\s*topic$"""), "").trim()
+                .replace(Regex("""\s*[-|]\s*topic$"""), "").trim()
             val expandedSongs = runCatching {
                 searchMusicSongs("${artist.name} songs", 30).filter { song ->
                     val credited = song.artist.lowercase()
-                        .replace(Regex("""\\s*[-|]\\s*topic$"""), "").trim()
+                        .replace(Regex("""\s*[-|]\s*topic$"""), "").trim()
                     credited == normalizedArtist ||
                         credited.contains(normalizedArtist) ||
                         normalizedArtist.contains(credited)
