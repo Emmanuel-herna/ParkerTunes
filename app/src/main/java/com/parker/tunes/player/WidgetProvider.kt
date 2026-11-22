@@ -54,7 +54,7 @@ class WidgetProvider : AppWidgetProvider() {
             val views = RemoteViews(context.packageName, com.parker.tunes.R.layout.widget_now_playing)
             val item = player?.currentMediaItem
             views.setTextViewText(com.parker.tunes.R.id.widget_title,
-                item?.mediaMetadata?.title?.toString() ?: "ParkerTunes")
+                item?.mediaMetadata?.title?.toString() ?: "Plyra")
             views.setTextViewText(com.parker.tunes.R.id.widget_artist,
                 item?.mediaMetadata?.artist?.toString() ?: "Nothing playing")
             views.setImageViewResource(com.parker.tunes.R.id.widget_art, android.R.drawable.ic_media_play)
