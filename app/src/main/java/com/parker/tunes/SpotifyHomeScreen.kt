@@ -165,7 +165,7 @@ fun SpotifyHomeScreen(
                                 .background(if (index % 2 == 0) SpotifyAccent else Color.White))
                         }
                     }
-                    Text("ParkerTunes", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text("Plyra", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
                 Box(Modifier.size(40.dp).clip(CircleShape).background(Color(0xFF292333)).padding(2.dp)
                     .clip(CircleShape).background(SpotifyAccent).clickable(onClick = onSettings),
