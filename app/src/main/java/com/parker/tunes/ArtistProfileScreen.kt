@@ -48,7 +48,7 @@ fun ArtistProfileScreen(
     artist: Artist,
     api: MusicApi,
     onBack: () -> Unit,
-    onPlay: (Song) -> Unit,
+    onPlayFromQueue: (Song, List<Song>) -> Unit,
     onAlbum: (Album) -> Unit,
     onArtist: (Artist) -> Unit
 ) {
@@ -137,7 +137,7 @@ fun ArtistProfileScreen(
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
-                        onClick = { loaded.topSongs.firstOrNull()?.let(onPlay) },
+                        onClick = { loaded.topSongs.firstOrNull()?.let { onPlayFromQueue(it, loaded.topSongs) } },
                         enabled = loaded.topSongs.isNotEmpty(),
                         colors = ButtonDefaults.buttonColors(containerColor = ArtistAccent, contentColor = Color.Black)
                     ) {
@@ -146,7 +146,9 @@ fun ArtistProfileScreen(
                         Text("Play")
                     }
                     OutlinedButton(
-                        onClick = { loaded.topSongs.randomOrNull()?.let(onPlay) },
+                        onClick = { loaded.topSongs.randomOrNull()?.let { selected ->
+                            onPlayFromQueue(selected, listOf(selected) + loaded.topSongs.filterNot { it.id == selected.id })
+                        } },
                         enabled = loaded.topSongs.isNotEmpty(),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
                     ) {
@@ -164,7 +166,7 @@ fun ArtistProfileScreen(
                     LazyRow(contentPadding = PaddingValues(horizontal = 20.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         items(loaded.topSongs.take(15), key = { it.id }) { song ->
-                            Column(Modifier.width(142.dp).clickable { onPlay(song) }) {
+                            Column(Modifier.width(142.dp).clickable { onPlayFromQueue(song, loaded.topSongs) }) {
                                 ArtistCover(song.coverUrl, song.title, Modifier.size(142.dp))
                                 Text(song.title, color = Color.White, fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold, maxLines = 2,
@@ -341,7 +343,7 @@ private fun ArtistCover(url: String?, description: String, modifier: Modifier) {
 }
 
 @Composable
-fun AlbumScreen(album: Album, api: MusicApi, onBack: () -> Unit, onPlay: (Song) -> Unit) {
+fun AlbumScreen(album: Album, api: MusicApi, onBack: () -> Unit, onPlayFromQueue: (Song, List<Song>) -> Unit) {
     var tracks by remember(album.id) { mutableStateOf<List<Song>>(emptyList()) }
     var loading by remember(album.id) { mutableStateOf(true) }
     var error by remember(album.id) { mutableStateOf<String?>(null) }
@@ -413,7 +415,7 @@ fun AlbumScreen(album: Album, api: MusicApi, onBack: () -> Unit, onPlay: (Song) 
                 }
             }
             items(tracks, key = { it.id }) { song ->
-                Row(Modifier.fillMaxWidth().clickable { onPlay(song) }
+                Row(Modifier.fillMaxWidth().clickable { onPlayFromQueue(song, tracks) }
                     .padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(song.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
