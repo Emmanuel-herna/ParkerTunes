@@ -8,6 +8,8 @@ import com.parker.tunes.model.SearchResult
 import com.parker.tunes.model.Song
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.Page
@@ -78,6 +80,10 @@ class NewPipeMusicApi : MusicApi {
     private val relatedCache = object : LinkedHashMap<String, List<Song>>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
             size > 12
+    }
+    private val artistProfileCache = object : LinkedHashMap<String, ArtistProfile>(24, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ArtistProfile>?): Boolean =
+            size > 32
     }
     private val streamCache = object : LinkedHashMap<String, String>(48, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > 48
@@ -207,63 +213,72 @@ class NewPipeMusicApi : MusicApi {
 
     override suspend fun getArtistProfile(artist: Artist): ArtistProfile = withContext(Dispatchers.IO) {
         val browseId = ArtistBrowseParser.browseId(artist.id)
-        val response = try {
-            val body = JSONObject().apply {
-                put("context", JSONObject().put("client", JSONObject()
-                    .put("clientName", "WEB_REMIX")
-                    .put("clientVersion", "1.20250101.01.00")))
-                put("browseId", browseId)
-            }.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
-            val request = Request.Builder()
-                .url("https://music.youtube.com/youtubei/v1/browse?prettyPrint=false")
-                .post(body)
-                .header("Origin", "https://music.youtube.com")
-                .header("Referer", "https://music.youtube.com/")
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36")
-                .header("Content-Type", "application/json")
-                .build()
-            lyricsClient.newCall(request).execute().use { result ->
-                if (result.isSuccessful) JSONObject(result.body?.string().orEmpty()) else null
-            }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            null
-        }
+        val cacheKey = browseId.ifBlank { artist.id }
+        synchronized(cacheLock) { artistProfileCache[cacheKey] }?.let { return@withContext it }
 
-        val nativeProfile = response?.let {
-            try {
-                ArtistBrowseParser.parse(artist, it)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                null
+        // The artist browse response and expanded top-song search are independent.
+        // Fetch them together so the page does not wait for two network round trips in sequence.
+        val normalizedArtist = artist.name.lowercase()
+            .replace(Regex("""\s*[-|]\s*topic$"""), "").trim()
+        val (nativeProfile, expandedSongs) = coroutineScope {
+            val profileTask = async(Dispatchers.IO) {
+                val response = try {
+                    val body = JSONObject().apply {
+                        put("context", JSONObject().put("client", JSONObject()
+                            .put("clientName", "WEB_REMIX")
+                            .put("clientVersion", "1.20250101.01.00")))
+                        put("browseId", browseId)
+                    }.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+                    val request = Request.Builder()
+                        .url("https://music.youtube.com/youtubei/v1/browse?prettyPrint=false")
+                        .post(body)
+                        .header("Origin", "https://music.youtube.com")
+                        .header("Referer", "https://music.youtube.com/")
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36")
+                        .header("Content-Type", "application/json")
+                        .build()
+                    lyricsClient.newCall(request).execute().use { result ->
+                        if (result.isSuccessful) JSONObject(result.body?.string().orEmpty()) else null
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                }
+
+                response?.let {
+                    try {
+                        ArtistBrowseParser.parse(artist, it)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
             }
+            val songsTask = async(Dispatchers.IO) {
+                runCatching {
+                    searchMusicSongs("${artist.name} songs", 30).filter { song ->
+                        val credited = song.artist.lowercase()
+                            .replace(Regex("""\s*[-|]\s*topic$"""), "").trim()
+                        credited == normalizedArtist ||
+                            credited.contains(normalizedArtist) ||
+                            normalizedArtist.contains(credited)
+                    }
+                }.getOrDefault(emptyList())
+            }
+            profileTask.await() to songsTask.await()
         }
 
         // Prefer the artist's own YouTube Music browse page. Keep the existing
         // NewPipe/search fallback for channels whose browse page is unavailable
         // or whose response contains no usable artist sections.
-        if (nativeProfile != null && (
+        val result = if (nativeProfile != null && (
             nativeProfile.topSongs.isNotEmpty() ||
             nativeProfile.albums.isNotEmpty() ||
             nativeProfile.singles.isNotEmpty() ||
             nativeProfile.relatedArtists.isNotEmpty()
         )) {
-            // The native artist page may expose only a short preview shelf.
-            // Supplement it with dedicated YouTube Music song-filter results,
-            // retaining only tracks credited to this artist.
-            val normalizedArtist = artist.name.lowercase()
-                .replace(Regex("""\s*[-|]\s*topic$"""), "").trim()
-            val expandedSongs = runCatching {
-                searchMusicSongs("${artist.name} songs", 30).filter { song ->
-                    val credited = song.artist.lowercase()
-                        .replace(Regex("""\s*[-|]\s*topic$"""), "").trim()
-                    credited == normalizedArtist ||
-                        credited.contains(normalizedArtist) ||
-                        normalizedArtist.contains(credited)
-                }
-            }.getOrDefault(emptyList())
             nativeProfile.copy(
                 topSongs = (nativeProfile.topSongs + expandedSongs)
                     .distinctBy { it.id }.take(20)
@@ -271,6 +286,15 @@ class NewPipeMusicApi : MusicApi {
         } else {
             getArtistProfileFallback(artist)
         }
+
+        // Keep recently visited artist pages available instantly without retaining
+        // an unbounded number of profiles in memory.
+        if (result.topSongs.isNotEmpty() || result.albums.isNotEmpty() ||
+            result.singles.isNotEmpty() || result.relatedArtists.isNotEmpty()
+        ) {
+            synchronized(cacheLock) { artistProfileCache[cacheKey] = result }
+        }
+        result
     }
 
     private suspend fun getArtistProfileFallback(artist: Artist): ArtistProfile = withContext(Dispatchers.IO) {
