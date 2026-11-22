@@ -138,6 +138,7 @@ fun SearchScreen(
     dao: LibraryDao,
     settingsRepository: SettingsRepository,
     onPlay: (Song) -> Unit,
+    onPlayFromSearchQueue: (Song, List<Song>) -> Unit,
     onQueue: (Song, Boolean) -> Unit,
     onSettings: () -> Unit,
     onArtist: (Artist) -> Unit,
@@ -513,7 +514,7 @@ fun SearchScreen(
                                 hazeState = hazeState,
                                 onAction = { action ->
                                     when (action) {
-                                        SongAction.Play -> onPlay(song)
+                                        SongAction.Play -> onPlayFromSearchQueue(song, results.songs)
                                         SongAction.PlayNext -> onQueue(song, true)
                                         SongAction.AddToQueue -> onQueue(song, false)
                                         SongAction.Download -> when (songDownload?.status) {
@@ -565,7 +566,7 @@ fun SearchScreen(
                                 },
                                 onClick = {
                                     recentVm.recordFirstResult(query, song)
-                                    onPlay(song)
+                                    onPlayFromSearchQueue(song, results.songs)
                                 }
                             )
                         }
