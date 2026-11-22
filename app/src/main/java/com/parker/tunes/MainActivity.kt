@@ -1457,6 +1457,11 @@ private fun NowPlayingScreen(
     val progressValue = if (seeking) seekValue
         else position.toFloat().coerceIn(0f, duration.toFloat().coerceAtLeast(1f))
     var lyricsExpanded by remember { mutableStateOf(false) }
+    val currentLyricsTrackId = player?.currentMediaItem?.mediaId.orEmpty()
+    var nativeLyricsLines by remember(currentLyricsTrackId) {
+        mutableStateOf<List<KaraokeLyricsLine>>(emptyList())
+    }
+    var nativeLyricsLoading by remember(currentLyricsTrackId) { mutableStateOf(true) }
 
     Column(
         modifier = Modifier
@@ -1523,6 +1528,23 @@ private fun NowPlayingScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(22.dp)
     ) {
+        // Keep one provider engine alive for this player screen. The WebView
+        // only fetches lyrics; the visible compact/full reader is native Compose.
+        AmLyricsDataSource(
+            trackId = currentLyricsTrackId,
+            title = title,
+            artist = artist,
+            durationMs = duration,
+            currentTimeMs = position,
+            isPlaying = playing,
+            onSeek = { timestamp -> player?.seekTo(timestamp) },
+            onLyricsSnapshot = { snapshot ->
+                if (snapshot.trackId.isBlank() || snapshot.trackId == currentLyricsTrackId) {
+                    nativeLyricsLines = snapshot.lines
+                    nativeLyricsLoading = snapshot.loading
+                }
+            }
+        )
         Row(
             modifier = Modifier.fillMaxWidth().height(48.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -1750,15 +1772,13 @@ private fun NowPlayingScreen(
                     )
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
-                AmLyricsWebView(
-                    trackId = player?.currentMediaItem?.mediaId.orEmpty(),
-                    title = title,
-                    artist = artist,
-                    durationMs = duration,
+                NativeLyricsList(
+                    lines = nativeLyricsLines,
                     currentTimeMs = position,
                     isPlaying = playing,
-                    onSeek = { timestamp -> player?.seekTo(timestamp) },
-                    modifier = Modifier.fillMaxWidth().height(232.dp)
+                    loading = nativeLyricsLoading,
+                    modifier = Modifier.fillMaxWidth().height(232.dp),
+                    onSeek = { timestamp -> player?.seekTo(timestamp) }
                 )
                 IconButton(
                     onClick = { lyricsExpanded = true },
@@ -1816,16 +1836,14 @@ private fun NowPlayingScreen(
                             )
                         }
                     }
-                    AmLyricsWebView(
-                        trackId = player?.currentMediaItem?.mediaId.orEmpty(),
-                        title = title,
-                        artist = artist,
-                        durationMs = duration,
+                    NativeLyricsList(
+                        lines = nativeLyricsLines,
                         currentTimeMs = position,
                         isPlaying = playing,
-                        onSeek = { timestamp -> player?.seekTo(timestamp) },
+                        loading = nativeLyricsLoading,
                         modifier = Modifier.fillMaxWidth().weight(1f),
-                        readerMode = true
+                        readerMode = true,
+                        onSeek = { timestamp -> player?.seekTo(timestamp) }
                     )
                 }
             }
