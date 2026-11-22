@@ -83,7 +83,7 @@ private object MoodSongCache {
 }
 
 @Composable
-fun MoodResultsScreen(mood: String, api: MusicApi, onBack: () -> Unit, onPlay: (Song) -> Unit) {
+fun MoodResultsScreen(mood: String, api: MusicApi, onBack: () -> Unit, onPlayFromQueue: (Song, List<Song>) -> Unit) {
     var songs by remember(mood) { mutableStateOf(MoodSongCache.get(mood).orEmpty()) }
     var loading by remember(mood) { mutableStateOf(songs.isEmpty()) }
     var error by remember(mood) { mutableStateOf<String?>(null) }
@@ -121,7 +121,7 @@ fun MoodResultsScreen(mood: String, api: MusicApi, onBack: () -> Unit, onPlay: (
                     modifier = Modifier.padding(bottom = 8.dp)) }
                 lazyItems(songs, key = { it.id }) { song ->
                     Row(Modifier.fillMaxWidth().height(68.dp).clip(RoundedCornerShape(12.dp))
-                        .clickable { onPlay(song) }, verticalAlignment = Alignment.CenterVertically) {
+                        .clickable { onPlayFromQueue(song, songs) }, verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(54.dp).clip(RoundedCornerShape(9.dp)).background(Color(0xFF202020)),
                             contentAlignment = Alignment.Center) {
                             if (song.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = Color.Gray)
