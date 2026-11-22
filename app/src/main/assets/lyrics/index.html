@@ -8,7 +8,7 @@
     html, body {
       width: 100%;
       height: 100%;
-      min-height: 100vh;
+      min-height: 280px;
       margin: 0;
       padding: 0;
       overflow: hidden;
@@ -20,8 +20,8 @@
       position: relative;
       display: flex;
       flex-direction: column;
-      height: 100vh;
-      min-height: 100vh;
+      height: 100%;
+      min-height: 280px;
     }
 
     #lyrics-status {
@@ -48,10 +48,10 @@
       display: block;
       position: relative;
       inset: auto;
-      flex: 0 0 100vh;
+      flex: 0 0 auto;
       width: 100%;
-      height: 100vh;
-      min-height: 100vh;
+      height: 100%;
+      min-height: 280px;
       box-sizing: border-box;
       color: #fff;
       --am-lyrics-highlight-color: #C7B2FF;
@@ -135,12 +135,10 @@
         element.style.setProperty('inset', 'auto', 'important');
         element.style.setProperty('display', 'block', 'important');
         element.style.setProperty('width', '100%', 'important');
-        // The WebView's percentage-height chain resolves to zero on some
-        // Android devices even though the shadow DOM has lyric data. Anchor
-        // the host to the actual WebView viewport so its 44+ lyric rows can
-        // occupy the visible panel in compact and reader modes.
-        element.style.setProperty('height', '100vh', 'important');
-        element.style.setProperty('min-height', '100vh', 'important');
+        // A pixel fallback prevents a zero-height host before Android sends
+        // its measured WebView viewport through setParkerViewportHeight().
+        element.style.setProperty('height', '100%', 'important');
+        element.style.setProperty('min-height', '280px', 'important');
         element.style.setProperty('box-sizing', 'border-box', 'important');
         document.body.appendChild(element);
 
@@ -236,6 +234,21 @@
       }
 
       window.setParkerTrack = applyTrack;
+
+      // Android WebView's CSS viewport height can be zero during first layout.
+      // Use the real measured height supplied by the native WebView instead
+      // of relying on 100vh or percentage-height propagation.
+      window.setParkerViewportHeight = height => {
+        const value = Math.max(1, Math.round(Number(height) || 0));
+        const px = value + 'px';
+        document.documentElement.style.setProperty('height', px);
+        document.body.style.setProperty('height', px);
+        document.body.style.setProperty('min-height', px);
+        if (lyrics) {
+          lyrics.style.setProperty('height', px, 'important');
+          lyrics.style.setProperty('min-height', px, 'important');
+        }
+      };
 
       window.addEventListener('error', event => {
         const detail = event.message ? String(event.message).slice(0, 140) : 'Unknown JavaScript error';
