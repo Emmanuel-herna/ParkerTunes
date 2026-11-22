@@ -58,6 +58,7 @@ class PlaybackService : MediaSessionService() {
             val playerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS
                 .buildUpon()
                 .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                .add(Player.COMMAND_SEEK_TO_PREVIOUS)
                 .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
                 .add(Player.COMMAND_SET_REPEAT_MODE)
                 .add(Player.COMMAND_SET_SHUFFLE_MODE)
@@ -125,7 +126,7 @@ class PlaybackService : MediaSessionService() {
         val favoriteButton = CommandButton.Builder(CommandButton.ICON_HEART_UNFILLED)
             .setDisplayName("Save to favourites")
             .setSessionCommand(favoriteCommand)
-            .setSlots(CommandButton.SLOT_OVERFLOW)
+            .setSlots(CommandButton.SLOT_FORWARD_SECONDARY, CommandButton.SLOT_OVERFLOW)
             .build()
         val session = MediaSession.Builder(this, active)
             .setCallback(sessionCallback)
