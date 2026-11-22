@@ -33,6 +33,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
@@ -68,6 +69,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.geometry.Offset
@@ -1396,63 +1398,76 @@ private fun NativeLyricsRow(
     readerMode: Boolean,
     onSeek: (Long) -> Unit
 ) {
-    val upcoming = distance > 0
+    // Match the original AmLyrics focus motion without bringing its WebView
+    // renderer back: 700 ms line fades and a gentle 500 ms active-line scale.
+    val targetAlpha = when {
+        readerMode || active -> 1f
+        distance == 1 || distance == -1 -> 0.80f
+        distance == 2 || distance == -2 -> 0.70f
+        distance == 3 || distance == -3 -> 0.58f
+        else -> 0.46f
+    }
     val alpha by animateFloatAsState(
-        targetValue = when {
-            active -> 1f
-            upcoming && distance == 1 -> 0.78f
-            upcoming && distance == 2 -> 0.48f
-            upcoming -> 0.28f
-            else -> if (readerMode) 0.72f else 0.42f
-        },
-        animationSpec = tween(420, easing = FastOutSlowInEasing),
+        targetValue = targetAlpha,
+        animationSpec = tween(
+            durationMillis = 700,
+            easing = CubicBezierEasing(0.25f, 0.10f, 0.25f, 1f)
+        ),
         label = "lyricsFade"
     )
     val scale by animateFloatAsState(
-        targetValue = if (active) 1f else if (readerMode) 0.985f else 0.97f,
-        animationSpec = spring(dampingRatio = 0.82f, stiffness = 260f),
+        targetValue = if (readerMode || active) 1f else 0.98f,
+        animationSpec = tween(
+            durationMillis = if (active) 500 else 700,
+            easing = CubicBezierEasing(0.25f, 0.10f, 0.25f, 1f)
+        ),
         label = "lyricsScale"
     )
-    // The player reports its playhead every 200 ms. Interpolate the syllable
-    // sweep between those samples so the text still moves smoothly at 60 Hz.
-    val revealedChars by animateFloatAsState(
-        targetValue = revealTarget,
-        animationSpec = tween(180, easing = LinearEasing),
+
+    // Interpolate the timed lyric sweep at 60 Hz, but keep the text itself
+    // stable. A brush wipe avoids rebuilding an AnnotatedString every frame.
+    val targetRevealFraction = if (active && text.isNotEmpty()) {
+        (revealTarget / text.length.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val revealFraction by animateFloatAsState(
+        targetValue = targetRevealFraction,
+        animationSpec = tween(200, easing = LinearEasing),
         label = "lyricsSyllableReveal"
     )
-    val animatedText = remember(text, active, revealedChars) {
-        buildAnnotatedString {
-            val split = revealedChars.toInt().coerceIn(0, text.length)
-            val partial = (revealedChars - split).coerceIn(0f, 1f)
-            if (split > 0) {
-                pushStyle(SpanStyle(color = Color.White))
-                append(text.substring(0, split))
-                pop()
-            }
-            if (partial > 0f && split < text.length) {
-                pushStyle(SpanStyle(color = Color.White.copy(alpha = partial)))
-                append(text.substring(split, split + 1))
-                pop()
-            }
-            val remainderStart = split + if (partial > 0f) 1 else 0
-            if (remainderStart < text.length) {
-                pushStyle(
-                    SpanStyle(
-                        color = Color.White.copy(alpha = if (active) 0.32f else 0.78f)
-                    )
-                )
-                append(text.substring(remainderStart))
-                pop()
+    val wipeBrush = remember(revealFraction, opposite) {
+        val highlighted = Color.White
+        val waiting = Color.White.copy(alpha = 0.32f)
+        when {
+            revealFraction <= 0f ->
+                Brush.horizontalGradient(listOf(waiting, waiting))
+            revealFraction >= 1f ->
+                Brush.horizontalGradient(listOf(highlighted, highlighted))
+            else -> {
+                // A soft 3.6%-wide edge keeps the karaoke sweep continuous,
+                // instead of making individual letters/words appear in steps.
+                val feather = 0.018f
+                val fadeStart = (revealFraction - feather).coerceAtLeast(0f)
+                val fadeEnd = (revealFraction + feather).coerceAtMost(1f)
+                val stops = mutableListOf<Pair<Float, Color>>()
+                if (opposite) {
+                    val dimEnd = 1f - fadeEnd
+                    val brightStart = 1f - fadeStart
+                    stops += 0f to waiting
+                    if (dimEnd > 0f) stops += dimEnd to waiting
+                    if (brightStart > dimEnd) stops += brightStart to highlighted
+                    if (brightStart < 1f) stops += 1f to highlighted
+                } else {
+                    stops += 0f to highlighted
+                    if (fadeStart > 0f) stops += fadeStart to highlighted
+                    if (fadeEnd > fadeStart) stops += fadeEnd to waiting
+                    if (fadeEnd < 1f) stops += 1f to waiting
+                }
+                Brush.horizontalGradient(colorStops = stops.toTypedArray())
             }
         }
     }
-
-    // Keep a tiny, static focus blur on only the next line. Animating several
-    // large blur effects at once was the main source of dropped frames.
-    val focusBlur = if (upcoming && distance == 1) {
-        if (readerMode) 1.2f else 1.6f
-    } else 0f
-    val focusModifier = if (focusBlur > 0f) Modifier.blur(focusBlur.dp) else Modifier
 
     Column(
         modifier = Modifier
@@ -1461,7 +1476,6 @@ private fun NativeLyricsRow(
                 scaleX = scale
                 scaleY = scale
             }
-            .then(focusModifier)
             .clip(RoundedCornerShape(if (readerMode) 14.dp else 12.dp))
             .clickable { onSeek(timeMs) }
             .padding(
@@ -1471,8 +1485,9 @@ private fun NativeLyricsRow(
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
-            text = animatedText,
-            color = Color.White.copy(alpha = alpha),
+            text = text,
+            color = if (active) Color.Unspecified else Color.White.copy(alpha = alpha),
+            style = if (active) TextStyle(brush = wipeBrush) else TextStyle.Default,
             fontSize = when {
                 readerMode && active -> 25.sp
                 readerMode -> 20.sp
@@ -1503,7 +1518,6 @@ private fun NativeLyricsRow(
         }
     }
 }
-
 @Composable
 private fun rememberPlayerArtworkColors(imageUrl: String?): PlayerArtworkColors {
     val context = LocalContext.current
