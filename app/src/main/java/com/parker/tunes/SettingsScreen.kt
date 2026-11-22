@@ -67,6 +67,7 @@ fun SettingsScreen(
     val backup = remember(dao, context) { BackupManager(context, dao, settingsPrefs) }
     var sheet by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf<String?>(null) }
+    val updaterStatus by ParkerTunesUpdateEvents.status.collectAsState()
     var confirmClear by remember { mutableStateOf(false) }
     var confirmClearActivity by remember { mutableStateOf(false) }
     var showActivity by remember { mutableStateOf(false) }
@@ -216,14 +217,14 @@ fun SettingsScreen(
         item { SettingRow(Icons.Default.Backup, "Backup library", "Export playlists, favorites and history as JSON", "Export", { export.launch("ParkerTunes-backup.json") }, reduceMotion = reduceMotion) }
         item { SettingRow(Icons.Default.Restore, "Restore library", "Merge a JSON backup", "Import", { import.launch(arrayOf("application/json", "text/*")) }, reduceMotion = reduceMotion) }
         item { SettingsSection("ABOUT") }
-        item { SettingRow(Icons.Default.SystemUpdate, "Software update", "Check GitHub releases for a newer build", "Check", { status = "Update checking is not connected yet." }, reduceMotion = reduceMotion) }
-        item { SettingRow(Icons.Default.Info, "Version", "ParkerTunes release", "1.0.1 (build 12)", {}, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.SystemUpdate, "Software update", "Automatically checks on launch, or check now", "Check", { ParkerTunesUpdateEvents.requestCheck() }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Info, "Version", "ParkerTunes release", "${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})", {}, reduceMotion = reduceMotion) }
         item { SettingRow(Icons.Default.Code, "GitHub", "View source code", "Open", { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Emmanuel-herna/ParkerTunes"))) } }, reduceMotion = reduceMotion) }
         item { SettingRow(Icons.Default.Description, "License", "GPL-3.0", "View", { sheet = "license" }, reduceMotion = reduceMotion) }
         item { SettingRow(Icons.Default.Share, "Rate & share", "Share ParkerTunes", "Share", { runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "ParkerTunes — https://github.com/Emmanuel-herna/ParkerTunes"), "Share ParkerTunes")) } }, reduceMotion = reduceMotion) }
         item { Text("Search metadata & artwork © Spotify. Spotify is a trademark of Spotify AB. ParkerTunes is not affiliated with Spotify.", color = SettingsMuted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 10.dp)) }
         item { SettingRow(Icons.Default.Favorite, "Made by", "ParkerTunes · Built with BitChord as reference", "", {}, reduceMotion = reduceMotion) }
-        item { status?.let { Text(it, color = SettingsMuted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp)) } }
+        item { (status ?: updaterStatus)?.let { Text(it, color = SettingsMuted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp)) } }
     }
 
     if (confirmClearActivity) AlertDialog(
@@ -425,7 +426,7 @@ private fun SettingRow(
         if (toggle != null) Switch(checked = toggle, onCheckedChange = { onClick() })
         else {
             Text(value, color = SettingsMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (value.isNotBlank() && value !in listOf("1.0.1 (build 12)")) Icon(Icons.Default.ChevronRight, null, tint = SettingsMuted)
+            if (value.isNotBlank() && title != "Version") Icon(Icons.Default.ChevronRight, null, tint = SettingsMuted)
         }
     }
 }
