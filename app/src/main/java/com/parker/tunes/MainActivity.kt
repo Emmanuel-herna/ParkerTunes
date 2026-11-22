@@ -1931,7 +1931,7 @@ private fun NowPlayingScreen(
                     isPlaying = playing,
                     loading = nativeLyricsLoading,
                     modifier = Modifier.fillMaxWidth().height(232.dp),
-                    onSeek = { timestamp -> player?.seekTo(timestamp) }
+                    onSeek = seekLyrics
                 )
                 IconButton(
                     onClick = { lyricsExpanded = true },
@@ -1996,7 +1996,7 @@ private fun NowPlayingScreen(
                         loading = nativeLyricsLoading,
                         modifier = Modifier.fillMaxWidth().weight(1f),
                         readerMode = true,
-                        onSeek = { timestamp -> player?.seekTo(timestamp) }
+                        onSeek = seekLyrics
                     )
                 }
             }
