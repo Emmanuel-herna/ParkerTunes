@@ -925,7 +925,10 @@ export class AmLyrics extends LitElement {
       'change',
       this.handleMotionPreference,
     );
-    this.fetchLyrics();
+    // Do not start a provider request here. The first Lit update below sees
+    // the complete set of host-supplied track properties and starts exactly
+    // one lookup. Starting here as well races that update and aborts the
+    // initial request while the component is still rendering.
   }
 
   disconnectedCallback() {
