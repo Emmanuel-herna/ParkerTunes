@@ -333,7 +333,7 @@ fun SearchScreen(
                             .background(if (index % 2 == 0) SearchAccent else Color.White))
                     }
                 }
-                Text("ParkerTunes", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Plyra", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
             Box(Modifier.size(40.dp).clip(CircleShape).background(Color(0xFF292333))
                 .clickable(onClick = onSettings), contentAlignment = Alignment.Center) {
