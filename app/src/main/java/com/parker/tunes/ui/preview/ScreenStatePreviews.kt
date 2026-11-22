@@ -76,7 +76,7 @@ fun ParkerTunesPreviewScreen(screen: String, state: PreviewState) {
                     Icon(previewScreens[screen] ?: Icons.Default.MusicNote, null,
                         tint = scheme.primary, modifier = Modifier.size(28.dp))
                     Column {
-                        Text("PARKERTUNES", color = scheme.primary, fontSize = 10.sp,
+                        Text("PLYRA", color = scheme.primary, fontSize = 10.sp,
                             fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                         Text(screen, color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
                     }
@@ -133,14 +133,14 @@ private fun PreviewTrackRow(title: String, artist: String, scheme: androidx.comp
     }
 }
 
-@Preview(name = "ParkerTunes loading", showBackground = true, backgroundColor = 0xFF080808)
+@Preview(name = "Plyra loading", showBackground = true, backgroundColor = 0xFF080808)
 @Composable
 fun ParkerTunesLoadingPreview() { ParkerTunesPreviewScreen("Home", PreviewState.Loading) }
 
-@Preview(name = "ParkerTunes empty", showBackground = true, backgroundColor = 0xFF080808)
+@Preview(name = "Plyra empty", showBackground = true, backgroundColor = 0xFF080808)
 @Composable
 fun ParkerTunesEmptyPreview() { ParkerTunesPreviewScreen("Library", PreviewState.Empty) }
 
-@Preview(name = "ParkerTunes loaded", showBackground = true, backgroundColor = 0xFF080808)
+@Preview(name = "Plyra loaded", showBackground = true, backgroundColor = 0xFF080808)
 @Composable
 fun ParkerTunesLoadedPreview() { ParkerTunesPreviewScreen("Explore", PreviewState.Loaded) }
