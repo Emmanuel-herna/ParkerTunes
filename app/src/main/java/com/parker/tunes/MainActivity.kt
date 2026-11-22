@@ -534,7 +534,8 @@ fun ParkerTunesRoot() {
                 ) {
                 composable("home") {
                     HomeScreen(
-                        dao = dao, api = api, player = controller, onPlay = playSong,
+                        dao = dao, api = api, player = controller,
+                        onPlayFromQueue = { song, queue -> playSongWithQueue(song, queue) },
                         onQueue = { song, playNext -> queueSong(song, playNext) },
                         onSettings = { nav.navigate("settings") },
                         onSearch = { nav.navigate("search") { launchSingleTop = true } },
