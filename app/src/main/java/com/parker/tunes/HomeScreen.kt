@@ -217,7 +217,7 @@ fun HomeScreen(
     ) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().background(Color.Black).haze(state = hazeState),
+            modifier = Modifier.fillMaxSize().background(Color.Black),
             contentPadding = PaddingValues(top = 8.dp, bottom = 132.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
