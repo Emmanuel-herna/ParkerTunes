@@ -18,6 +18,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.SilenceSkippingAudioProcessor
 import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.util.EventLogger
 import com.parker.tunes.data.SettingsRepository
 import kotlinx.coroutines.flow.collect
 import androidx.media3.session.MediaSession
@@ -186,6 +187,7 @@ class PlaybackService : MediaSessionService() {
             .setAudioAttributes(audioAttributes, handleAudioFocus)
             .setHandleAudioBecomingNoisy(true)
             .build()
+            .also { it.addAnalyticsListener(EventLogger("PlyraPlayback")) }
     }
 
     private fun observePlaybackSettings(active: ExoPlayer, spare: ExoPlayer) {
