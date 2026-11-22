@@ -135,7 +135,7 @@ fun GlassIntensityPreview(intensity: Int) {
                     .background(Color.White.copy(alpha = 0.22f))
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("ParkerTunes", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                Text("Plyra", color = Color.White, style = MaterialTheme.typography.labelLarge)
                 Text("Liquid glass preview", color = Color.White.copy(alpha = 0.76f), style = MaterialTheme.typography.labelSmall)
             }
             Text("▶", color = Color.White)
