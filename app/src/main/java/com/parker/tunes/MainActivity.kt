@@ -560,7 +560,8 @@ fun ParkerTunesRoot() {
                 }
                 composable("mood/{mood}") { entry ->
                     val mood = Uri.decode(entry.arguments?.getString("mood").orEmpty())
-                    MoodResultsScreen(mood = mood, api = api, onBack = { nav.popBackStack() }, onPlay = playSong)
+                    MoodResultsScreen(mood = mood, api = api, onBack = { nav.popBackStack() },
+                        onPlayFromQueue = { song, queue -> playSongWithQueue(song, queue) })
                 }
                 composable("search") {
                     SearchScreen(api = api, dao = dao, settingsRepository = settingsRepository, onPlayFromSearchQueue = { song, queue -> playSongWithQueue(song, queue) }, downloads = app.downloads, onLowStorage = { scope.launch { snackbarHostState.showSnackbar("Low storage · free up at least 200 MB first.") } }, onPlay = playSong, onQueue = queueSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist/${Uri.encode(it.id)}") }, onAlbum = { album -> selectedAlbum = album; nav.navigate("album") }, hazeState = hazeState)
@@ -569,14 +570,16 @@ fun ParkerTunesRoot() {
                     val browseId = Uri.decode(entry.arguments?.getString("browseId").orEmpty())
                     val artist = selectedArtist?.takeIf { it.id == browseId }
                     artist?.let {
-                        ArtistProfileScreen(artist = it, api = api, onBack = { nav.popBackStack() }, onPlay = playSong,
+                        ArtistProfileScreen(artist = it, api = api, onBack = { nav.popBackStack() },
+                            onPlayFromQueue = { song, queue -> playSongWithQueue(song, queue) },
                             onAlbum = { album -> selectedAlbum = album; nav.navigate("album") },
                             onArtist = { related -> selectedArtist = related; nav.navigate("artist/${Uri.encode(related.id)}") })
                     }
                 }
                 composable("album") {
                     selectedAlbum?.let { album ->
-                        AlbumScreen(album = album, api = api, onBack = { nav.popBackStack() }, onPlay = playSong)
+                        AlbumScreen(album = album, api = api, onBack = { nav.popBackStack() },
+                            onPlayFromQueue = { song, queue -> playSongWithQueue(song, queue) })
                     }
                 }
                 composable(
@@ -590,7 +593,8 @@ fun ParkerTunesRoot() {
                     )
                 ) {
                     selectedHomeShelf?.let { shelf ->
-                        HomePlaylistScreen(shelf = shelf, onBack = { nav.popBackStack() }, onPlay = playSong)
+                        HomePlaylistScreen(shelf = shelf, onBack = { nav.popBackStack() },
+                            onPlayFromQueue = { song, queue -> playSongWithQueue(song, queue) })
                     }
                 }
                 composable("library") { LibraryScreen(dao, app.downloads, playSong, onOpenAddons = { nav.navigate("addons") }) }
@@ -2424,7 +2428,16 @@ private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, ti
 
 
 @Composable
-private fun HomePlaylistScreen(shelf: HomeShelf, onBack: () -> Unit, onPlay: (Song) -> Unit) {
+private fun HomePlaylistScreen(
+    shelf: HomeShelf,
+    onBack: () -> Unit,
+    onPlayFromQueue: (Song, List<Song>) -> Unit
+) {
+    val trackQueue = remember(shelf) {
+        shelf.items.mapNotNull { item ->
+            item.videoId?.let { Song(it, item.title, item.subtitle.orEmpty(), item.thumbnailUrl) }
+        }
+    }
     Column(Modifier.fillMaxSize().background(Color.Black).padding(horizontal = 18.dp)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Color.White) }
@@ -2435,7 +2448,10 @@ private fun HomePlaylistScreen(shelf: HomeShelf, onBack: () -> Unit, onPlay: (So
             items(shelf.items, key = { it.browseId ?: it.videoId ?: it.title }) { item ->
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                     .clickable {
-                        item.videoId?.let { onPlay(Song(it, item.title, item.subtitle.orEmpty(), item.thumbnailUrl)) }
+                        item.videoId?.let { id ->
+                            val selected = Song(id, item.title, item.subtitle.orEmpty(), item.thumbnailUrl)
+                            onPlayFromQueue(selected, trackQueue)
+                        }
                     }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (!item.thumbnailUrl.isNullOrBlank()) {
                         AsyncImage(model = item.thumbnailUrl, contentDescription = item.title,
