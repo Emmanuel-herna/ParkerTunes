@@ -168,15 +168,39 @@ internal object ArtistBrowseParser {
 
     private fun thumbnail(root: JSONObject?): String {
         if (root == null) return ""
-        val candidates = findAll(root, "thumbnails")
-        for (array in candidates) {
-            val thumbs = array.optJSONArray("thumbnails") ?: continue
-            for (i in thumbs.length() - 1 downTo 0) {
-                val url = thumbs.optJSONObject(i)?.optString("url").orEmpty()
-                if (url.startsWith("http")) return url
+
+        // YouTube Music's thumbnail field is normally a JSON array, not an
+        // object containing another "thumbnails" array. Walk both objects and
+        // arrays so artist, album and song renderers all expose their artwork.
+        val urls = mutableListOf<String>()
+
+        fun collect(value: Any?) {
+            when (value) {
+                is JSONObject -> {
+                    val keys = value.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        val child = value.opt(key)
+                        if (key == "thumbnails" && child is JSONArray) {
+                            for (index in child.length() - 1 downTo 0) {
+                                val url = child.optJSONObject(index)?.optString("url").orEmpty()
+                                if (url.startsWith("https://") || url.startsWith("http://")) {
+                                    urls.add(url)
+                                }
+                            }
+                        }
+                        collect(child)
+                    }
+                }
+                is JSONArray -> {
+                    for (index in 0 until value.length()) collect(value.opt(index))
+                }
             }
         }
-        return ""
+
+        collect(root)
+        return urls.firstOrNull { it.startsWith("https://") }
+            ?: urls.firstOrNull().orEmpty()
     }
 
     private fun text(value: Any?): String {
