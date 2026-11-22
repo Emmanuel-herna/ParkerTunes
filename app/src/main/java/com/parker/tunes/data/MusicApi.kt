@@ -85,6 +85,10 @@ class NewPipeMusicApi : MusicApi {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ArtistProfile>?): Boolean =
             size > 32
     }
+    private val albumTracksCache = object : LinkedHashMap<String, List<Song>>(24, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
+            size > 32
+    }
     private val streamCache = object : LinkedHashMap<String, String>(48, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > 48
     }
@@ -102,51 +106,68 @@ class NewPipeMusicApi : MusicApi {
             NewPipeRuntime.ensureInitialized()
             val factory = YoutubeSearchQueryHandlerFactory.getInstance()
 
-            // Keep the song extractor as the paging session used by searchMore().
-            val songsHandler: SearchQueryHandler = factory.fromQuery(
-                cleanedQuery,
-                listOf(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS),
-                ""
-            )
-            val songsExtractor = YoutubeMusicSearchExtractor(ServiceList.YouTube, songsHandler)
-            songsExtractor.fetchPage()
-            val songsPage = songsExtractor.initialPage
-            val songs = songsPage.items.filterIsInstance<StreamInfoItem>().mapNotNull(::toSong)
+            // Song, artist and album filters use independent extractors. Running their
+            // requests together avoids making search wait for three serial network trips.
+            val (songData, artists, albums) = coroutineScope {
+                val songsTask = async(Dispatchers.IO) {
+                    val handler: SearchQueryHandler = factory.fromQuery(
+                        cleanedQuery,
+                        listOf(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS),
+                        ""
+                    )
+                    val extractor = YoutubeMusicSearchExtractor(ServiceList.YouTube, handler)
+                    extractor.fetchPage()
+                    val page = extractor.initialPage
+                    Triple(extractor, page, page.items.filterIsInstance<StreamInfoItem>().mapNotNull(::toSong))
+                }
 
-            // YouTube Music exposes artist/channel results through its MUSIC_ARTISTS filter.
-            val artistsHandler: SearchQueryHandler = factory.fromQuery(
-                cleanedQuery,
-                listOf(YoutubeSearchQueryHandlerFactory.MUSIC_ARTISTS),
-                ""
-            )
-            val artistsExtractor = YoutubeMusicSearchExtractor(ServiceList.YouTube, artistsHandler)
-            artistsExtractor.fetchPage()
-            val artists = artistsExtractor.initialPage.items
-                .filterIsInstance<ChannelInfoItem>()
-                .mapNotNull(::toArtist)
-                .distinctBy { it.id }
+                val artistsTask = async(Dispatchers.IO) {
+                    val handler: SearchQueryHandler = factory.fromQuery(
+                        cleanedQuery,
+                        listOf(YoutubeSearchQueryHandlerFactory.MUSIC_ARTISTS),
+                        ""
+                    )
+                    val extractor = YoutubeMusicSearchExtractor(ServiceList.YouTube, handler)
+                    extractor.fetchPage()
+                    extractor.initialPage.items
+                        .filterIsInstance<ChannelInfoItem>()
+                        .mapNotNull(::toArtist)
+                        .distinctBy { it.id }
+                }
 
-            val albums = runCatching {
-                val albumHandler = factory.fromQuery(
-                    cleanedQuery, listOf(YoutubeSearchQueryHandlerFactory.MUSIC_ALBUMS), ""
-                )
-                val albumExtractor = YoutubeMusicSearchExtractor(ServiceList.YouTube, albumHandler)
-                albumExtractor.fetchPage()
-                albumExtractor.initialPage.items.filterIsInstance<PlaylistInfoItem>()
-                    .mapNotNull { item ->
-                        val id = item.url?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                        Album(
-                            id = id,
-                            title = item.name.orEmpty(),
-                            coverUrl = item.thumbnails.firstOrNull()?.url,
-                            trackCount = item.streamCount.coerceAtLeast(0L),
-                            year = extractReleaseYear(
-                                item.name.orEmpty() + " " + item.description?.content.orEmpty()
-                            )
+                val albumsTask = async(Dispatchers.IO) {
+                    try {
+                        val handler = factory.fromQuery(
+                            cleanedQuery,
+                            listOf(YoutubeSearchQueryHandlerFactory.MUSIC_ALBUMS),
+                            ""
                         )
-                    }.distinctBy { it.id }.take(20)
-            }.getOrDefault(emptyList())
+                        val extractor = YoutubeMusicSearchExtractor(ServiceList.YouTube, handler)
+                        extractor.fetchPage()
+                        extractor.initialPage.items.filterIsInstance<PlaylistInfoItem>()
+                            .mapNotNull { item ->
+                                val id = item.url?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                                Album(
+                                    id = id,
+                                    title = item.name.orEmpty(),
+                                    coverUrl = item.thumbnails.firstOrNull()?.url,
+                                    trackCount = item.streamCount.coerceAtLeast(0L),
+                                    year = extractReleaseYear(
+                                        item.name.orEmpty() + " " + item.description?.content.orEmpty()
+                                    )
+                                )
+                            }.distinctBy { it.id }.take(20)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                }
 
+                Triple(songsTask.await(), artistsTask.await(), albumsTask.await())
+            }
+
+            val (songsExtractor, songsPage, songs) = songData
             SearchResult(songs = songs, artists = artists, albums = albums).also { combined ->
                 synchronized(cacheLock) {
                     resultCache[cleanedQuery] = combined
@@ -403,6 +424,7 @@ class NewPipeMusicApi : MusicApi {
     override suspend fun getAlbumTracks(albumId: String): List<Song> = withContext(Dispatchers.IO) {
         val rawId = albumId.trim()
         if (rawId.isBlank()) return@withContext emptyList()
+        synchronized(cacheLock) { albumTracksCache[rawId] }?.let { return@withContext it }
 
         val parsed = runCatching { Uri.parse(rawId) }.getOrNull()
         val listId = parsed?.getQueryParameter("list")
@@ -417,7 +439,10 @@ class NewPipeMusicApi : MusicApi {
         // playlist IDs. Resolve those through the Music browse endpoint first.
         if (!browseId.isNullOrBlank()) {
             val musicTracks = loadYouTubeMusicAlbumTracks(browseId)
-            if (musicTracks.isNotEmpty()) return@withContext musicTracks
+            if (musicTracks.isNotEmpty()) {
+                synchronized(cacheLock) { albumTracksCache[rawId] = musicTracks }
+                return@withContext musicTracks
+            }
         }
 
         // Search results and older saved albums may contain a playlist URL/list ID.
@@ -430,7 +455,7 @@ class NewPipeMusicApi : MusicApi {
             rawId.startsWith("http", ignoreCase = true) -> rawId
             else -> "https://music.youtube.com/browse/$rawId"
         }
-        try {
+        val tracks = try {
             NewPipeRuntime.ensureInitialized()
             val extractor = ServiceList.YouTube.getPlaylistExtractor(playlistUrl)
             val info = PlaylistInfo.getInfo(extractor)
@@ -439,9 +464,9 @@ class NewPipeMusicApi : MusicApi {
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (failure: Exception) {
-            throw failure
         }
+        if (tracks.isNotEmpty()) synchronized(cacheLock) { albumTracksCache[rawId] = tracks }
+        tracks
     }
 
     private fun loadYouTubeMusicAlbumTracks(browseId: String): List<Song> {
