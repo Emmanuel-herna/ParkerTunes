@@ -732,7 +732,7 @@ private fun ScreenTitle(kicker: String, title: String, subtitle: String? = null)
 }
 
 @Composable
-private fun HomeScreen(
+private fun LegacyLibraryHomeScreen(
     dao: com.parker.tunes.data.LibraryDao,
     onPlay: (Song) -> Unit
 ) {
