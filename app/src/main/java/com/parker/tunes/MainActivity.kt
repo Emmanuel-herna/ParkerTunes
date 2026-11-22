@@ -1731,7 +1731,7 @@ private fun NowPlayingScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("NOW PLAYING", color = Color.White, fontSize = 11.sp,
                     fontWeight = FontWeight.Bold, letterSpacing = 2.4.sp)
-                Text("PARKERTUNES", color = muted, fontSize = 9.sp,
+                Text("PLYRA", color = muted, fontSize = 9.sp,
                     letterSpacing = 2.sp)
             }
             Spacer(Modifier.weight(1f))
