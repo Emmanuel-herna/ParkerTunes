@@ -742,7 +742,7 @@ class NewPipeMusicApi : MusicApi {
             val url = Uri.parse("https://lrclib.net/api/search").buildUpon()
                 .appendQueryParameter("track_name", cleanTitle)
                 .appendQueryParameter("artist_name", cleanArtist).build().toString()
-            val request = Request.Builder().url(url).header("User-Agent", "ParkerTunes/1.0 (Android)").build()
+            val request = Request.Builder().url(url).header("User-Agent", "Plyra/1.0 (Android)").build()
             lyricsClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use null
                 val array = JSONArray(response.body?.string().orEmpty())
