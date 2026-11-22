@@ -79,7 +79,7 @@ internal object ArtistBrowseParser {
                 val title = text(carouselHeader?.opt("title")).trim()
                 val isRelated = title.contains("related", true) ||
                     (title.contains("artist", true) && !title.contains("album", true))
-                val isSingleOrEp = title.contains("single", true) || Regex("""\\bEPs?\\b""", RegexOption.IGNORE_CASE).containsMatchIn(title)
+                val isSingleOrEp = title.contains("single", true) || Regex("""\bEPs?\b""", RegexOption.IGNORE_CASE).containsMatchIn(title)
                 val isRecent = title.contains("recent", true) || title.contains("latest release", true)
                 val isAlbumShelf = title.equals("albums", true) ||
                     title.contains("full albums", true) ||
