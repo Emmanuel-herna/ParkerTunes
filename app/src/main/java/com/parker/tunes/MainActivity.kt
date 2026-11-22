@@ -1399,7 +1399,8 @@ private fun NativeLyricsList(
                         append(line.text.substring(split, split + 1))
                         pop()
                     }
-                    if (split + 1 < line.text.length) {
+                    val remainderStart = split + if (partial > 0f) 1 else 0
+                    if (remainderStart < line.text.length) {
                         pushStyle(
                             SpanStyle(
                                 color = Color.White.copy(
@@ -1407,11 +1408,7 @@ private fun NativeLyricsList(
                                 )
                             )
                         )
-                        append(line.text.substring(split + 1))
-                        pop()
-                    } else if (split == 0 && partial == 0f && line.text.isNotEmpty()) {
-                        pushStyle(SpanStyle(color = Color.White.copy(alpha = 0.78f)))
-                        append(line.text)
+                        append(line.text.substring(remainderStart))
                         pop()
                     }
                 }
