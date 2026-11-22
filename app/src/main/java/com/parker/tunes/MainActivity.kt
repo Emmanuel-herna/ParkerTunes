@@ -1063,7 +1063,7 @@ private fun AmLyricsWebView(
 
     Box(modifier = modifier) {
     AndroidView(
-        modifier = Modifier.matchParentSize(),
+        modifier = Modifier.fillMaxSize(),
         factory = { context ->
             val assetLoader = WebViewAssetLoader.Builder()
                 .addPathHandler(
@@ -1072,7 +1072,21 @@ private fun AmLyricsWebView(
                 )
                 .build()
 
-            WebView(context).apply {
+            object : WebView(context) {
+                override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+                    super.onSizeChanged(w, h, oldw, oldh)
+                    if (w > 0 && h > 0) {
+                        post {
+                            val cssHeight = (h / resources.displayMetrics.density)
+                                .toInt().coerceAtLeast(1)
+                            evaluateJavascript(
+                                "window.setParkerViewportHeight && window.setParkerViewportHeight($cssHeight)",
+                                null
+                            )
+                        }
+                    }
+                }
+            }.apply {
                 if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 isVerticalScrollBarEnabled = false
@@ -1147,6 +1161,12 @@ private fun AmLyricsWebView(
                         super.onPageFinished(view, url)
                         Log.d("ParkerLyricsWeb", "Page finished: $url")
                         nativeLyricsStatus = "Lyrics page loaded; checking JavaScript..."
+                        val cssHeight = (view.height / view.resources.displayMetrics.density)
+                            .toInt().coerceAtLeast(1)
+                        view.evaluateJavascript(
+                            "window.setParkerViewportHeight && window.setParkerViewportHeight($cssHeight)",
+                            null
+                        )
                         view.evaluateJavascript(
                             "({pageReady: !!document.readyState, trackHandler: typeof window.setParkerTrack, componentDefined: !!customElements.get('am-lyrics')})",
                         ) { result ->
@@ -1214,7 +1234,9 @@ private fun AmLyricsWebView(
                             ) { result ->
                                 Log.d("ParkerLyricsWeb", "Rendered DOM snapshot: $result")
                                 mainHandler.post {
-                                    nativeLyricsStatus = "Lyrics DOM: " + result.take(220)
+                                    nativeLyricsStatus =
+                                        "WebView " + view.width + "x" + view.height +
+                                        "px | Lyrics DOM: " + result.take(170)
                                 }
                             }
                         }, 1500)
