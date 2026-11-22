@@ -134,11 +134,12 @@ jobs:
           set -euo pipefail
           TAG="v$RELEASE_VERSION"
           APK="app/build/outputs/apk/release/app-release.apk"
+          cp "$APK" "ParkerTunes.apk"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK#ParkerTunes.apk" "latest.json#latest.json" --clobber
+            gh release upload "$TAG" "ParkerTunes.apk" "latest.json" --clobber
             gh release edit "$TAG" --title "ParkerTunes $RELEASE_VERSION" --notes "$RELEASE_NOTES"
           else
-            gh release create "$TAG" "$APK#ParkerTunes.apk" "latest.json#latest.json" \
+            gh release create "$TAG" "ParkerTunes.apk" "latest.json" \
               --title "ParkerTunes $RELEASE_VERSION" --notes "$RELEASE_NOTES"
           fi
           echo "### Published release" >> "$GITHUB_STEP_SUMMARY"
