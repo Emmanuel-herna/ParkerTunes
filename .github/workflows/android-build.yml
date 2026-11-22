@@ -98,12 +98,27 @@ jobs:
           fi
           echo "APK signing SHA-1: $sha1"
           echo "### Android debug APK signing SHA-1" >> "$GITHUB_STEP_SUMMARY"
-          echo "`$sha1`" >> "$GITHUB_STEP_SUMMARY"
+          printf '`%s`\n' "$sha1" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Roborazzi screenshot tests
         id: roborazzi
         if: ${{ always() && steps.build-apk.outcome == 'success' }}
-        run: gradle --no-daemon :app:recordRoborazziDebug
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            echo "Roborazzi attempt $attempt/3"
+            if gradle --no-daemon :app:recordRoborazziDebug; then
+              exit 0
+            fi
+            if [[ "$attempt" -lt 3 ]]; then
+              delay=$((attempt * 20))
+              echo "Gradle task failed; retrying in ${delay}s (this can happen when Maven Central rate-limits downloads)." >&2
+              sleep "$delay"
+            fi
+          done
+          echo "Roborazzi screenshot tests failed after 3 attempts." >&2
+          exit 1
 
       - name: Upload Roborazzi screenshots
         if: ${{ always() }}
