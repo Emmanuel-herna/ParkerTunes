@@ -1,6 +1,7 @@
 package com.parker.tunes
 
 import android.app.Application
+import android.content.Context
 import android.os.Process
 import java.io.File
 import java.io.PrintWriter
@@ -32,14 +33,14 @@ object CrashDiagnostics {
         }
     }
 
-    fun read(application: Application): String? =
+    fun read(context: Context): String? =
         runCatching {
-            File(application.filesDir, FILE_NAME)
+            File(context.applicationContext.filesDir, FILE_NAME)
                 .takeIf { it.isFile && it.length() > 0L }
                 ?.readText()
         }.getOrNull()
 
-    fun clear(application: Application) {
-        runCatching { File(application.filesDir, FILE_NAME).delete() }
+    fun clear(context: Context) {
+        runCatching { File(context.applicationContext.filesDir, FILE_NAME).delete() }
     }
 }
