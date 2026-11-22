@@ -165,7 +165,7 @@ fun SettingsScreen(
         item { SettingRow(Icons.Default.Speed, "Stats for nerds", "Codec, bitrate and sample-rate overlay · UI pending", if (nerds) "On" else "Off", { scope.launch { repository.setStatsForNerds(!nerds) } }, toggle = nerds, reduceMotion = reduceMotion) }
 
         item { SettingsSection("DISPLAY") }
-        item { SettingRow(Icons.Default.Speed, "Refresh rate", "Choose the display smoothness ParkerTunes requests", refreshRateLabel, { sheet = "refresh_rate" }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Speed, "Refresh rate", "Choose the display smoothness Plyra requests", refreshRateLabel, { sheet = "refresh_rate" }, reduceMotion = reduceMotion) }
         item {
             Column(
                 Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 10.dp),
@@ -195,7 +195,7 @@ fun SettingsScreen(
                 GlassIntensityPreview(glassIntensity)
             }
         }
-        item { SettingRow(Icons.Default.Palette, "Accent color", "Choose ParkerTunes highlight color", accent.replaceFirstChar { it.uppercase() }, { sheet = "theme" }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Palette, "Accent color", "Choose Plyra highlight color", accent.replaceFirstChar { it.uppercase() }, { sheet = "theme" }, reduceMotion = reduceMotion) }
         item { SettingRow(Icons.Default.DarkMode, "AMOLED black", "Use pure black surfaces", if (amoled) "On" else "Off", { scope.launch { repository.setAmoledBlack(!amoled) } }, toggle = amoled, reduceMotion = reduceMotion) }
         item { SettingRow(Icons.Default.Wallpaper, "Player background", null, playerBackground, { sheet = "background" }, reduceMotion = reduceMotion) }
         item { SettingRow(Icons.Default.FormatSize, "Interface size", "Adjust text and controls", "$size%", { sheet = "size" }, reduceMotion = reduceMotion) }
@@ -214,16 +214,16 @@ fun SettingsScreen(
         item { SettingsSection("LIBRARY & STORAGE") }
         item { SettingRow(Icons.Default.Download, "Downloads", "Manage offline library", "Open", onOpenDownloads, reduceMotion = reduceMotion) }
         item { SettingRow(Icons.Default.Delete, "Clear cache", "Image and temporary cache", "Clear", { confirmClear = true }, reduceMotion = reduceMotion) }
-        item { SettingRow(Icons.Default.Backup, "Backup library", "Export playlists, favorites and history as JSON", "Export", { export.launch("ParkerTunes-backup.json") }, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Backup, "Backup library", "Export playlists, favorites and history as JSON", "Export", { export.launch("Plyra-backup.json") }, reduceMotion = reduceMotion) }
         item { SettingRow(Icons.Default.Restore, "Restore library", "Merge a JSON backup", "Import", { import.launch(arrayOf("application/json", "text/*")) }, reduceMotion = reduceMotion) }
         item { SettingsSection("ABOUT") }
         item { SettingRow(Icons.Default.SystemUpdate, "Software update", "Automatically checks on launch, or check now", "Check", { ParkerTunesUpdateEvents.requestCheck() }, reduceMotion = reduceMotion) }
-        item { SettingRow(Icons.Default.Info, "Version", "ParkerTunes release", "${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})", {}, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Info, "Version", "Plyra release", "${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})", {}, reduceMotion = reduceMotion) }
         item { SettingRow(Icons.Default.Code, "GitHub", "View source code", "Open", { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Emmanuel-herna/ParkerTunes"))) } }, reduceMotion = reduceMotion) }
         item { SettingRow(Icons.Default.Description, "License", "GPL-3.0", "View", { sheet = "license" }, reduceMotion = reduceMotion) }
-        item { SettingRow(Icons.Default.Share, "Rate & share", "Share ParkerTunes", "Share", { runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "ParkerTunes — https://github.com/Emmanuel-herna/ParkerTunes"), "Share ParkerTunes")) } }, reduceMotion = reduceMotion) }
-        item { Text("Search metadata & artwork © Spotify. Spotify is a trademark of Spotify AB. ParkerTunes is not affiliated with Spotify.", color = SettingsMuted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 10.dp)) }
-        item { SettingRow(Icons.Default.Favorite, "Made by", "ParkerTunes · Built with BitChord as reference", "", {}, reduceMotion = reduceMotion) }
+        item { SettingRow(Icons.Default.Share, "Rate & share", "Share Plyra", "Share", { runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "Plyra — https://github.com/Emmanuel-herna/ParkerTunes"), "Share Plyra")) } }, reduceMotion = reduceMotion) }
+        item { Text("Search metadata & artwork © Spotify. Spotify is a trademark of Spotify AB. Plyra is not affiliated with Spotify.", color = SettingsMuted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 10.dp)) }
+        item { SettingRow(Icons.Default.Favorite, "Made by", "Plyra · Built with BitChord as reference", "", {}, reduceMotion = reduceMotion) }
         item { (status ?: updaterStatus)?.let { Text(it, color = SettingsMuted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp)) } }
     }
 
@@ -393,7 +393,7 @@ fun SettingsScreen(
             }
             "license" -> {
                 Text("GPL-3.0", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(22.dp))
-                Text("ParkerTunes is distributed under the GNU General Public License version 3. See the repository for the complete license text.", color = SettingsMuted, modifier = Modifier.padding(horizontal = 22.dp))
+                Text("Plyra is distributed under the GNU General Public License version 3. See the repository for the complete license text.", color = SettingsMuted, modifier = Modifier.padding(horizontal = 22.dp))
                 TextButton(onClick = { sheet = null }, modifier = Modifier.padding(16.dp)) { Text("Close") }
             }
         }
