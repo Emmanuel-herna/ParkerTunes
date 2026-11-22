@@ -8,7 +8,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.IntSize
 import com.music.bitchord.data.canvas.CanvasArtwork
 import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsSource
@@ -21,7 +20,6 @@ import com.music.bitchord.data.settings.PlayerTheme
 import com.music.bitchord.data.settings.SmartAnalysis
 import com.music.bitchord.data.settings.TransitionWindow
 import com.music.bitchord.ui.player.AudioOutputDevice
-import com.music.bitchord.ui.player.AudioPipelineDialog
 import com.music.bitchord.ui.player.CanvasVideoSpec
 import com.music.bitchord.ui.player.LyricsRomanizationResult
 import com.music.bitchord.ui.player.LyricsTranslationResult
