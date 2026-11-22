@@ -198,7 +198,8 @@ fun ParkerTunesRoot() {
     val hazeState = remember { HazeState() }
     val glassIntensity by settingsRepository.glassIntensity.collectAsState(initial = 55)
     val glassFraction = glassIntensity.coerceIn(0, 100) / 100f
-    val glassBlurRadius = (4f + 36f * glassFraction).dp
+    // Keep the liquid-glass look while avoiding an expensive full-screen blur on mid-range GPUs.
+    val glassBlurRadius = (2f + 14f * glassFraction).dp
     val glassTintAlpha = 0.08f + 0.37f * glassFraction
     val selectedAccent by settingsRepository.accentColor.collectAsState(initial = "purple")
     val useAmoledBlack by settingsRepository.amoledBlack.collectAsState(initial = true)
