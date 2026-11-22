@@ -103,16 +103,13 @@
             text: readText(line.text),
             backgroundText: readText(line.backgroundText),
             oppositeTurn: line.oppositeTurn === true,
-            words: Array.isArray(line.words) ? line.words.map(word => ({
-              startMs: Number(word.startMs) || 0,
-              endMs: Number(word.endMs) || 0,
-              text: readText(word.text),
-              syllables: Array.isArray(word.syllables) ? word.syllables.map(syllable => ({
-                startMs: Number(syllable.startMs) || 0,
-                endMs: Number(syllable.endMs) || 0,
-                startChar: Number(syllable.startChar) || 0,
-                endChar: Number(syllable.endChar) || 0
-              })) : []
+            // am-lyrics exposes timed word/syllable chunks in line.text.
+            // Preserve those timings so Compose can sweep the words progressively.
+            words: Array.isArray(line.text) ? line.text.map(part => ({
+              startMs: Number(part.timestamp) || Number(line.timestamp) || 0,
+              endMs: Number(part.endtime) || 0,
+              text: readText(part.text),
+              syllables: []
             })) : []
           }))
         });
