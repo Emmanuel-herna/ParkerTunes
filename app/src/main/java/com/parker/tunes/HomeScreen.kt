@@ -164,19 +164,20 @@ fun HomeScreen(
 
     suspend fun loadHomeMusicSections() {
         coroutineScope {
-            val discoveryTask = async {
+            // Publish each shelf as soon as its own request finishes. Waiting for
+            // the slowest request before updating every shelf made Home feel stuck.
+            launch {
                 loadSectionOrNull { api.getMoodSongs("discover new music") }
+                    ?.let { discovery = it.distinctBy { song -> song.id }.take(5) }
             }
-            val releasesTask = async {
+            launch {
                 loadSectionOrNull { api.getMoodSongs("new music releases") }
+                    ?.let { newReleases = it.distinctBy { song -> song.id }.take(5) }
             }
-            val trendingTask = async {
+            launch {
                 loadSectionOrNull { api.getTrending() }
+                    ?.let { trending = it.distinctBy { song -> song.id }.take(5) }
             }
-
-            discoveryTask.await()?.let { discovery = it.distinctBy { song -> song.id }.take(5) }
-            releasesTask.await()?.let { newReleases = it.distinctBy { song -> song.id }.take(5) }
-            trendingTask.await()?.let { trending = it.distinctBy { song -> song.id }.take(5) }
         }
     }
 
