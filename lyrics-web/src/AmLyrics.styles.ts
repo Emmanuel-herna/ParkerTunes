@@ -2164,39 +2164,4 @@ export const lyricsStyles = css`
     filter: none !important;
     transition: none !important;
   }
-  /* Reader mode is a true song sheet: keep every lyric in normal document
-     flow so the expanded view never collapses to a single playback-focus row. */
-  :host([reader-mode]) .lyrics-container {
-    height: 100% !important;
-    min-height: 100% !important;
-    max-height: none !important;
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
-    padding: 64px var(--am-lyrics-inline-padding) 48px !important;
-    scroll-padding-block-start: 20px !important;
-  }
-
-  :host([reader-mode]) .lyrics-line:not(.lyrics-gap) {
-    display: block !important;
-    position: relative !important;
-    opacity: 1 !important;
-    filter: none !important;
-    transform: none !important;
-    translate: none !important;
-    font-size: clamp(24px, 6vw, 30px) !important;
-    line-height: 1.42 !important;
-    margin-block-end: 24px !important;
-  }
-
-  :host([reader-mode]) .lyrics-line-container,
-  :host([reader-mode]) .main-vocal-container {
-    transform: none !important;
-    translate: none !important;
-  }
-
-  :host([reader-mode]) .lyrics-container.user-scrolling .lyrics-line {
-    opacity: 1 !important;
-    filter: none !important;
-  }
-
 `;
