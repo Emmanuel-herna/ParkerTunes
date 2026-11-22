@@ -4,15 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       version_name:
-        description: "Release version (for example 1.0.1)"
+        description: "Release version"
         required: true
         type: string
-        default: "1.0.1"
+        default: "1.0.3"
       release_notes:
         description: "What changed in this release"
         required: true
         type: string
-        default: "Performance improvements, fixes and refinements."
+        default: "Improved playback queue handling, more reliable Next and Previous controls, and general fixes."
 
 permissions:
   contents: write
@@ -118,7 +118,7 @@ jobs:
           manifest = {
               "versionCode": version_code,
               "versionName": os.environ["RELEASE_VERSION"],
-              "apkUrl": "https://github.com/Emmanuel-herna/ParkerTunes/releases/latest/download/ParkerTunes.apk",
+              "apkUrl": "https://github.com/ParkerJnr/ParkerTunes/releases/latest/download/ParkerTunes.apk",
               "sha256": os.environ["APK_SHA256"],
               "releaseNotes": os.environ["RELEASE_NOTES"],
           }
@@ -145,4 +145,4 @@ jobs:
           fi
           echo "### Published release" >> "$GITHUB_STEP_SUMMARY"
           echo "Version: $RELEASE_VERSION" >> "$GITHUB_STEP_SUMMARY"
-          echo "https://github.com/Emmanuel-herna/ParkerTunes/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://github.com/ParkerJnr/ParkerTunes/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
