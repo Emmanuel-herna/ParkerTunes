@@ -228,7 +228,7 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("ParkerTunes", color = Color(0xFFD6C2B9), fontSize = 17.sp,
+                    Text("Plyra", color = Color(0xFFD6C2B9), fontSize = 17.sp,
                         fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.4).sp)
                     Box(
                         modifier = Modifier.offset(y = 8.dp).size(34.dp).clip(CircleShape)
