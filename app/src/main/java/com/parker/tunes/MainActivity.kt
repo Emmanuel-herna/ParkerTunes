@@ -1028,7 +1028,7 @@ private fun AmLyricsWebView(
 ) {
     val latestOnSeek by rememberUpdatedState(onSeek)
     val latestDuration by rememberUpdatedState(durationMs)
-    val trackJson = remember(trackId, title, artist, durationMs, currentTimeMs, isPlaying) {
+    val trackJson = remember(trackId, title, artist, durationMs, currentTimeMs, isPlaying, readerMode) {
         JSONObject()
             .put("id", trackId)
             .put("title", title)
@@ -1061,9 +1061,8 @@ private fun AmLyricsWebView(
         }
     }
 
-    Column(modifier = modifier) {
     AndroidView(
-        modifier = Modifier.fillMaxWidth().weight(1f),
+        modifier = modifier,
         factory = { context ->
             val assetLoader = WebViewAssetLoader.Builder()
                 .addPathHandler(
@@ -1230,7 +1229,6 @@ private fun AmLyricsWebView(
             ) { result -> Log.d("ParkerLyricsWeb", "Updated track delivery: $result") }
         }
     )
-    }
 }
 
 @Composable
@@ -1620,7 +1618,7 @@ private fun NowPlayingScreen(
                 tint = muted)
         }
 
-        if (title.isNotBlank()) {
+        if (title.isNotBlank() && !lyricsExpanded) {
             Box(
                 Modifier.fillMaxWidth()
                     .clip(RoundedCornerShape(22.dp))
@@ -1639,7 +1637,7 @@ private fun NowPlayingScreen(
                     currentTimeMs = position,
                     isPlaying = playing,
                     onSeek = { timestamp -> player?.seekTo(timestamp) },
-                    modifier = Modifier.fillMaxWidth().height(320.dp)
+                    modifier = Modifier.fillMaxWidth().height(232.dp)
                 )
                 IconButton(
                     onClick = { lyricsExpanded = true },
