@@ -160,9 +160,54 @@ class MainActivity : ComponentActivity() {
         PlayerPlatform.install(PlyraBitChordPlayerHost(applicationContext))
         setContent {
             ParkerTunesTheme {
+                var pendingCrashReport by remember {
+                    mutableStateOf(CrashDiagnostics.read(this@MainActivity))
+                }
                 Box(Modifier.fillMaxSize()) {
                     ParkerTunesRoot()
                     ParkerTunesUpdateController()
+                    if (!pendingCrashReport.isNullOrBlank()) {
+                        AlertDialog(
+                            onDismissRequest = { },
+                            title = { Text("Plyra crash report") },
+                            text = {
+                                Column {
+                                    Text(
+                                        "Plyra saved the error from its previous crash. Copy this report and send it here so the playback crash can be identified.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(
+                                        pendingCrashReport.orEmpty(),
+                                        modifier = Modifier
+                                            .heightIn(max = 260.dp)
+                                            .verticalScroll(rememberScrollState()),
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    clipboard.setPrimaryClip(
+                                        android.content.ClipData.newPlainText(
+                                            "Plyra crash report",
+                                            pendingCrashReport.orEmpty(),
+                                        )
+                                    )
+                                    CrashDiagnostics.clear(this@MainActivity)
+                                    pendingCrashReport = null
+                                    Toast.makeText(this@MainActivity, "Crash report copied", Toast.LENGTH_SHORT).show()
+                                }) { Text("Copy report") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = {
+                                    CrashDiagnostics.clear(this@MainActivity)
+                                    pendingCrashReport = null
+                                }) { Text("Dismiss") }
+                            },
+                        )
+                    }
                 }
             }
         }
