@@ -393,7 +393,7 @@ private fun SongShelfSection(
                 color = Color(0xFF888888), fontSize = 12.sp)
         } else LazyRow(contentPadding = PaddingValues(horizontal = 18.dp),
             horizontalArrangement = Arrangement.spacedBy(13.dp)) {
-            items(songs.take(5), key = { title + "_" + it.id }) { song ->
+            itemsIndexed(songs.take(5), key = { index, song -> title + "_" + song.id + "_" + index }) { _, song ->
                 ActionSongCard(song, currentSongId == song.id, onPlay, onQueue, onDownload,
                     favorite = isFavorite(song), onFavorite = { onFavorite(song) })
             }
