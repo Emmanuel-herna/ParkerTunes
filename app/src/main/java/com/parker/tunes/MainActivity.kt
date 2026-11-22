@@ -122,6 +122,18 @@ import com.parker.tunes.model.Album
 import com.parker.tunes.model.Song
 import com.parker.tunes.data.home.HomeShelf
 import com.parker.tunes.player.PlaybackService
+import com.music.bitchord.data.model.Song as BitChordSong
+import com.music.bitchord.data.model.LikeStatus as BitChordLikeStatus
+import com.music.bitchord.data.lyrics.LyricAlignment
+import com.music.bitchord.data.lyrics.LyricLine as BitChordLyricLine
+import com.music.bitchord.data.lyrics.LyricWord as BitChordLyricWord
+import com.music.bitchord.data.lyrics.LyricSyllable as BitChordLyricSyllable
+import com.music.bitchord.data.lyrics.LyricsSource as BitChordLyricsSource
+import com.music.bitchord.playback.PlaybackPosition
+import com.music.bitchord.ui.LyricsProviderState as BitChordLyricsProviderState
+import com.music.bitchord.ui.player.NowPlayingScreen as BitChordNowPlayingScreen
+import com.music.bitchord.ui.player.PlayerPlatform
+import com.parker.tunes.player.PlyraBitChordPlayerHost
 import com.parker.tunes.player.PlayerUiState
 import com.parker.tunes.player.PlayerUiStateObserver
 import com.parker.tunes.player.EqualizerManager
@@ -145,6 +157,7 @@ import java.io.File
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        PlayerPlatform.install(PlyraBitChordPlayerHost(applicationContext))
         setContent {
             ParkerTunesTheme {
                 Box(Modifier.fillMaxSize()) {
@@ -625,12 +638,16 @@ fun ParkerTunesRoot() {
                             slideOutVertically(animationSpec = tween(220)) { it / 10 }
                     }
                 ) {
-                    NowPlayingScreen(
-                        controller, playerObserver, playerState, api, dao,
+                    BitChordNowPlayingRoute(
+                        player = controller,
+                        playerObserver = playerObserver,
+                        playerState = playerState,
+                        dao = dao,
                         isResolving = resolvingSongId != null &&
                             resolvingSongId == controller?.currentMediaItem?.mediaId,
                         loadError = playbackLoadError,
                         onOpenEqualizer = { nav.navigate("equalizer") },
+                        onOpenTogether = { nav.navigate("together") },
                         onBack = { nav.popBackStack() }
                     )
                 }
@@ -2647,4 +2664,280 @@ private fun HomePlaylistScreen(
             }
         }
     }
+}
+
+
+/**
+ * The real BitChord Now Playing composable, hosted on Plyra's Media3 session.
+ * Plyra's existing AM Lyrics component remains the provider/fetch engine; its
+ * timed lines are converted to BitChord's shared lyric model for rendering.
+ */
+@Composable
+private fun BitChordNowPlayingRoute(
+    player: MediaController?,
+    playerObserver: PlayerUiStateObserver?,
+    playerState: PlayerUiState,
+    dao: com.parker.tunes.data.LibraryDao,
+    isResolving: Boolean,
+    loadError: String?,
+    onOpenEqualizer: () -> Unit,
+    onOpenTogether: () -> Unit,
+    onBack: () -> Unit,
+) {
+    val progressFlow = remember(playerObserver) {
+        playerObserver?.progress
+            ?: kotlinx.coroutines.flow.MutableStateFlow(com.parker.tunes.player.PlayerProgress())
+    }
+    val progress by progressFlow.collectAsState()
+    val playhead = remember { PlaybackPosition() }
+    LaunchedEffect(progress.positionMs, playerState.isPlaying) {
+        playhead.report(
+            positionMs = progress.positionMs.coerceAtLeast(0L),
+            isPlaying = playerState.isPlaying,
+        )
+    }
+
+    var timelineRevision by remember(player) { mutableIntStateOf(0) }
+    DisposableEffect(player) {
+        val active = player
+        if (active == null) {
+            onDispose { }
+        } else {
+            val listener = object : Player.Listener {
+                override fun onTimelineChanged(
+                    timeline: androidx.media3.common.Timeline,
+                    reason: Int,
+                ) {
+                    timelineRevision++
+                }
+
+                override fun onMediaItemTransition(
+                    mediaItem: MediaItem?,
+                    reason: Int,
+                ) {
+                    timelineRevision++
+                }
+            }
+            active.addListener(listener)
+            onDispose { active.removeListener(listener) }
+        }
+    }
+
+    val queue = remember(player, timelineRevision) {
+        val active = player
+        if (active == null) emptyList()
+        else (0 until active.mediaItemCount).map { index ->
+            active.getMediaItemAt(index).toBitChordSong()
+        }
+    }
+    val queueIndex = player?.currentMediaItemIndex ?: -1
+    val currentSong = player?.currentMediaItem?.toBitChordSong()
+    val currentTrackId = player?.currentMediaItem?.mediaId.orEmpty()
+    var lyricLines by remember(currentTrackId) {
+        mutableStateOf<List<KaraokeLyricsLine>>(emptyList())
+    }
+    var lyricsLoading by remember(currentTrackId) { mutableStateOf(true) }
+
+    if (player == null || currentSong == null) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text("Nothing playing", color = MaterialTheme.colorScheme.onBackground)
+            Spacer(Modifier.height(12.dp))
+            TextButton(onClick = onBack) { Text("Close player") }
+        }
+    } else {
+        var isLiked by remember(currentTrackId) { mutableStateOf(false) }
+        LaunchedEffect(currentTrackId, dao) {
+            isLiked = withContext(Dispatchers.IO) {
+                runCatching { dao.isFavorite(currentTrackId) }.getOrDefault(false)
+            }
+        }
+        LaunchedEffect(loadError) {
+            if (!loadError.isNullOrBlank()) PlayerPlatform.host.showMessage(loadError)
+        }
+
+        // Keep Plyra's existing AM Lyrics provider alive and feed its structured
+        // output into the imported player's native synced-lyrics panel.
+        AmLyricsDataSource(
+            trackId = currentTrackId,
+            title = currentSong.title,
+            artist = currentSong.artist,
+            durationMs = progress.durationMs.coerceAtLeast(0L),
+            currentTimeMs = progress.positionMs.coerceAtLeast(0L),
+            isPlaying = playerState.isPlaying,
+            onSeek = { target -> player.seekTo(target.coerceAtLeast(0L)) },
+            onLyricsSnapshot = { snapshot ->
+                if (snapshot.trackId.isBlank() || snapshot.trackId == currentTrackId) {
+                    lyricLines = snapshot.lines
+                    lyricsLoading = snapshot.loading
+                }
+            },
+        )
+
+        val sharedLyrics = remember(lyricLines) {
+            lyricLines.map { it.toBitChordLyricLine() }
+        }
+        val providerStates = remember(lyricsLoading, sharedLyrics.isNotEmpty()) {
+            BitChordLyricsSource.offered.associateWith {
+                when {
+                    lyricsLoading -> BitChordLyricsProviderState.FETCHING
+                    sharedLyrics.isNotEmpty() -> BitChordLyricsProviderState.FOUND
+                    else -> BitChordLyricsProviderState.NOT_FOUND
+                }
+            }
+        }
+        val latestSong by rememberUpdatedState(currentSong)
+        val durationMs = progress.durationMs.coerceAtLeast(0L)
+        val currentPosition = progress.positionMs.coerceAtLeast(0L)
+        val canPrevious = currentPosition > 3_000L || player.hasPreviousMediaItem()
+        val canNext = player.hasNextMediaItem()
+
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            BitChordNowPlayingScreen(
+                song = currentSong,
+                isPlaying = playerState.isPlaying,
+                isLoading = isResolving || playerState.playbackState == Player.STATE_BUFFERING,
+                position = playhead,
+                durationMs = durationMs,
+                audioVersionSwitching = false,
+                qualityUpgraded = false,
+                queue = queue,
+                queueIndex = queueIndex,
+                hasPrevious = canPrevious,
+                hasNext = canNext,
+                repeatMode = player.repeatMode,
+                shuffleEnabled = player.shuffleModeEnabled,
+                autoplayEnabled = false,
+                // This flag enables the shared screen's like affordance; the
+                // handler below maps it to Plyra's local Favorites command.
+                signedIn = true,
+                accountName = null,
+                likeStatus = if (isLiked) BitChordLikeStatus.LIKE else BitChordLikeStatus.INDIFFERENT,
+                onToggleLike = {
+                    isLiked = !isLiked
+                    player.sendCustomCommand(
+                        SessionCommand("com.parker.tunes.action.FAVORITE", Bundle.EMPTY),
+                        Bundle.EMPTY,
+                    )
+                },
+                onPlayPause = {
+                    if (player.isPlaying) player.pause() else player.play()
+                },
+                onNext = {
+                    player.sendCustomCommand(
+                        SessionCommand("com.parker.tunes.action.SKIP_NEXT", Bundle.EMPTY),
+                        Bundle.EMPTY,
+                    )
+                },
+                onPrevious = {
+                    if (player.currentPosition > 3_000L) player.seekTo(0L)
+                    else if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem()
+                },
+                previousRestarts = { player.currentPosition > 3_000L },
+                currentPlaybackSong = { latestSong },
+                onBlockedControl = {
+                    PlayerPlatform.host.showMessage("That playback action is unavailable right now.")
+                },
+                onSeek = { target -> player.seekTo(target.coerceAtLeast(0L)) },
+                onSeekFraction = { fraction ->
+                    if (durationMs > 0L) {
+                        player.seekTo((durationMs * fraction.coerceIn(0f, 1f)).toLong())
+                    }
+                },
+                onToggleShuffle = { player.shuffleModeEnabled = !player.shuffleModeEnabled },
+                onCycleRepeat = {
+                    player.repeatMode = when (player.repeatMode) {
+                        Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                        Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                        else -> Player.REPEAT_MODE_OFF
+                    }
+                },
+                onToggleAutoplay = {
+                    PlayerPlatform.host.showMessage("Autoplay controls are not available in Plyra yet.")
+                },
+                onJumpTo = { index ->
+                    if (index in 0 until player.mediaItemCount) {
+                        player.seekTo(index, 0L)
+                        player.play()
+                    }
+                },
+                onRemoveFromQueue = { index ->
+                    if (index in 0 until player.mediaItemCount) player.removeMediaItem(index)
+                },
+                onMoveInQueue = { from, to ->
+                    if (from in 0 until player.mediaItemCount && to in 0 until player.mediaItemCount) {
+                        player.moveMediaItem(from, to)
+                    }
+                },
+                onClearQueue = { player.clearMediaItems() },
+                onOpenMenu = onOpenEqualizer,
+                onOpenAlbum = {
+                    PlayerPlatform.host.showMessage("Album pages are not linked to the current queue item yet.")
+                },
+                onOpenArtist = { _, _ ->
+                    PlayerPlatform.host.showMessage("Artist pages are not linked to the current queue item yet.")
+                },
+                onOpenPlaybackSource = onBack,
+                onListenTogether = onOpenTogether,
+                lyrics = sharedLyrics,
+                lyricsSource = null,
+                lyricsProviderStates = providerStates,
+                onSelectLyricsProvider = {
+                    PlayerPlatform.host.showMessage("Choose lyrics sources from Plyra's lyrics settings.")
+                },
+                lyricsUnavailable = sharedLyrics.isEmpty() && !lyricsLoading,
+                lyricsOffsetOpen = false,
+                onDismissLyricsOffset = {},
+                windowWidth = maxWidth,
+                windowHeight = maxHeight,
+            )
+        }
+    }
+}
+
+private fun MediaItem.toBitChordSong(): BitChordSong {
+    val metadata = mediaMetadata
+    return BitChordSong(
+        videoId = mediaId,
+        title = metadata.title?.toString().orEmpty(),
+        artist = metadata.artist?.toString().orEmpty(),
+        thumbnailUrl = metadata.artworkUri?.toString(),
+        albumName = metadata.albumTitle?.toString(),
+        localUri = localConfiguration?.uri?.toString(),
+        trackNumber = metadata.trackNumber,
+    )
+}
+
+private fun KaraokeLyricsLine.toBitChordLyricLine(): BitChordLyricLine {
+    val source = this
+    val words = source.words.mapIndexed { index, word ->
+        val inferredEnd = word.endMs
+            ?: source.words.getOrNull(index + 1)?.startMs
+            ?: source.endMs
+            ?: (word.startMs + 500L)
+        BitChordLyricWord(
+            startMs = word.startMs,
+            endMs = inferredEnd.coerceAtLeast(word.startMs + 1L),
+            text = word.text,
+            syllables = word.syllables.map { syllable ->
+                BitChordLyricSyllable(
+                    startMs = syllable.startMs,
+                    endMs = syllable.endMs.coerceAtLeast(syllable.startMs + 1L),
+                    startChar = syllable.startChar,
+                    endChar = syllable.endChar,
+                )
+            },
+        )
+    }
+    return BitChordLyricLine(
+        timeMs = source.timeMs,
+        text = source.text,
+        words = words,
+        sungUntilMs = source.endMs,
+        background = source.background?.toBitChordLyricLine(),
+        alignment = if (source.opposite) LyricAlignment.End else LyricAlignment.Start,
+    )
 }
