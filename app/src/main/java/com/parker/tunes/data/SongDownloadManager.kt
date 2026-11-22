@@ -138,7 +138,12 @@ class SongDownloadManager(
         try {
             val streamUrl = api.getStreamUrl(song.id)
             require(streamUrl.startsWith("http", ignoreCase = true)) { "No playable stream URL was returned." }
-            val request = Request.Builder().url(streamUrl).get().build()
+            val request = Request.Builder()
+                .url(streamUrl)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "*/*")
+                .get()
+                .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) error("Download failed (HTTP ${response.code}).")
                 val body = response.body ?: error("The server returned an empty response.")
@@ -205,6 +210,10 @@ class SongDownloadManager(
         songId.replace(Regex("[^A-Za-z0-9._-]"), "_") + ".m4a"
 
     companion object {
+        private const val USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+
         const val MIN_FREE_BYTES = 200L * 1024L * 1024L
     }
 }
