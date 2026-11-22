@@ -223,7 +223,27 @@ fun SettingsScreen(
         item { SettingRow(Icons.Default.Description, "License", "GPL-3.0", "View", { sheet = "license" }, reduceMotion = reduceMotion) }
         item { SettingRow(Icons.Default.Share, "Rate & share", "Share Plyra", "Share", { runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "Plyra — https://github.com/Emmanuel-herna/ParkerTunes"), "Share Plyra")) } }, reduceMotion = reduceMotion) }
         item { Text("Search metadata & artwork © Spotify. Spotify is a trademark of Spotify AB. Plyra is not affiliated with Spotify.", color = SettingsMuted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 10.dp)) }
-        item { SettingRow(Icons.Default.Favorite, "Made by", "Plyra · Built with BitChord as reference", "", {}, reduceMotion = reduceMotion) }
+        item {
+            Column(
+                Modifier.fillMaxWidth()
+                    .padding(top = 18.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color(0xFF151515))
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Icon(Icons.Default.Favorite, contentDescription = null, tint = accentColor, modifier = Modifier.size(15.dp))
+                    Text("MADE WITH PASSION", color = SettingsMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                }
+                Text("Created by Parker.", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Built with curiosity, dedication, and a love for music. Plyra is shaped by the belief that listening should feel effortless, beautiful, and uniquely yours.",
+                    color = SettingsMuted, fontSize = 13.sp, lineHeight = 19.sp
+                )
+                Text("INDEPENDENT CREATOR OF PLYRA", color = SettingsMuted.copy(alpha = 0.75f), fontSize = 9.sp, fontWeight = FontWeight.Medium, letterSpacing = 1.1.sp)
+            }
+        }
         item { (status ?: updaterStatus)?.let { Text(it, color = SettingsMuted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp)) } }
     }
 
