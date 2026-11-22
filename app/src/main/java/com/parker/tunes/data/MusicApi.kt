@@ -250,7 +250,24 @@ class NewPipeMusicApi : MusicApi {
             nativeProfile.singles.isNotEmpty() ||
             nativeProfile.relatedArtists.isNotEmpty()
         )) {
-            nativeProfile
+            // The native artist page may expose only a short preview shelf.
+            // Supplement it with dedicated YouTube Music song-filter results,
+            // retaining only tracks credited to this artist.
+            val normalizedArtist = artist.name.lowercase()
+                .replace(Regex("""\\s*[-|]\\s*topic$"""), "").trim()
+            val expandedSongs = runCatching {
+                searchMusicSongs("${artist.name} songs", 30).filter { song ->
+                    val credited = song.artist.lowercase()
+                        .replace(Regex("""\\s*[-|]\\s*topic$"""), "").trim()
+                    credited == normalizedArtist ||
+                        credited.contains(normalizedArtist) ||
+                        normalizedArtist.contains(credited)
+                }
+            }.getOrDefault(emptyList())
+            nativeProfile.copy(
+                topSongs = (nativeProfile.topSongs + expandedSongs)
+                    .distinctBy { it.id }.take(20)
+            )
         } else {
             getArtistProfileFallback(artist)
         }
