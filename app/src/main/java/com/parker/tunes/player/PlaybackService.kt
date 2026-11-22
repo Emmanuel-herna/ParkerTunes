@@ -125,6 +125,7 @@ class PlaybackService : MediaSessionService() {
         val favoriteButton = CommandButton.Builder(CommandButton.ICON_HEART_UNFILLED)
             .setDisplayName("Save to favourites")
             .setSessionCommand(favoriteCommand)
+            .setSlots(intArrayOf(CommandButton.SLOT_OVERFLOW))
             .build()
         val session = MediaSession.Builder(this, active)
             .setCallback(sessionCallback)
