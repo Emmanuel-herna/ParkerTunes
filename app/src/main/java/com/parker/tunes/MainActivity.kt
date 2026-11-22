@@ -1914,7 +1914,7 @@ private fun NowPlayingScreen(
                 Icon(Icons.Default.Shuffle, contentDescription = "Shuffle",
                     tint = if (shuffle) accent else muted, modifier = Modifier.size(23.dp))
             }
-            IconButton(onClick = { player?.seekToPreviousMediaItem() }) {
+            IconButton(onClick = { player?.seekToPrevious() }) {
                 Icon(Icons.Default.SkipPrevious, contentDescription = "Previous track",
                     tint = Color.White, modifier = Modifier.size(34.dp))
             }
