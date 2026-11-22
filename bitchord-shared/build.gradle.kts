@@ -26,6 +26,15 @@ kotlin {
     sourceSets {
         val jvmSharedMain by creating {
             dependsOn(commonMain.get())
+            // Plyra reuses BitChord’s player UI and shared display models, not its stream resolver.
+            // Keep the upstream resolver sources vendored for provenance, but do not compile them
+            // into Plyra: they require InnerTubeX’s Android API 37 artifact and are unrelated to UI.
+            kotlin.exclude(
+                "**/InnerTubeXResolver.kt",
+                "**/PoTokenGenerator.kt",
+                "**/StreamResolver.kt",
+                "**/PlayerClient.kt",
+            )
             dependencies {
                 // Compile-only: the two applications supply the runtime artifact themselves.
                 compileOnly("com.microsoft.onnxruntime:onnxruntime:1.20.0")
@@ -43,7 +52,6 @@ kotlin {
                 // YouTube stream resolution, as the phone does it: InnerTubeX's
                 // client catalog and cipher tiers, NewPipe as the fallback. NewPipe
                 // is compile-only because the phone ships a trimmed jar of it.
-                api("com.github.MetrolistGroup.innertubex:innertubex:v0.7.0")
                 compileOnly("com.github.TeamNewPipe:NewPipeExtractor:v0.26.3")
             }
         }
