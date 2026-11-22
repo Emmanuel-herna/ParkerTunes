@@ -85,7 +85,7 @@ internal fun ParkerTunesUpdateController() {
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !context.packageManager.canRequestPackageInstalls()
         ) {
-            errorMessage = "Allow ParkerTunes to install apps in Android settings, then tap Install update again."
+            errorMessage = "Allow Plyra to install apps in Android settings, then tap Install update again."
         } else {
             runCatching { openAndroidInstaller(context, file) }
                 .onFailure { errorMessage = it.message ?: "Android couldn't open the installer." }
@@ -102,7 +102,7 @@ internal fun ParkerTunesUpdateController() {
                     Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
                 )
             }.onFailure {
-                errorMessage = "Enable permission to install apps from ParkerTunes in Android settings."
+                errorMessage = "Enable permission to install apps from Plyra in Android settings."
             }
         } else {
             runCatching { openAndroidInstaller(context, file) }
@@ -136,7 +136,7 @@ internal fun ParkerTunesUpdateController() {
                 statusMessage = "Version ${latest.versionName} is ready to install."
                 ParkerTunesUpdateEvents.setStatus("Update ${latest.versionName} is available.")
             } else if (manual) {
-                ParkerTunesUpdateEvents.setStatus("ParkerTunes is up to date.")
+                ParkerTunesUpdateEvents.setStatus("Plyra is up to date.")
             }
         }
 
@@ -148,7 +148,7 @@ internal fun ParkerTunesUpdateController() {
     if (showDialog && latest != null) {
         AlertDialog(
             onDismissRequest = { if (!downloading) showDialog = false },
-            title = { Text("ParkerTunes update available") },
+            title = { Text("Plyra update available") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Version ${latest.versionName} is ready.")
@@ -181,7 +181,7 @@ internal fun ParkerTunesUpdateController() {
                                 statusMessage = "Downloading update…"
                                 val destination = File(
                                     File(context.cacheDir, "updates").apply { mkdirs() },
-                                    "ParkerTunes-${latest.versionName}.apk"
+                                    "Plyra-${latest.versionName}.apk"
                                 )
                                 runCatching {
                                     downloadAndVerifyRelease(latest, destination) { bytes, size ->
@@ -230,7 +230,7 @@ private fun fetchLatestParkerTunesRelease(): ParkerTunesRelease {
         instanceFollowRedirects = true
         connectTimeout = 15_000
         readTimeout = 15_000
-        setRequestProperty("User-Agent", "ParkerTunes-Android")
+        setRequestProperty("User-Agent", "Plyra-Android")
         setRequestProperty("Accept", "application/json")
     }
     try {
@@ -263,7 +263,7 @@ private suspend fun downloadAndVerifyRelease(
         instanceFollowRedirects = true
         connectTimeout = 20_000
         readTimeout = 30_000
-        setRequestProperty("User-Agent", "ParkerTunes-Android")
+        setRequestProperty("User-Agent", "Plyra-Android")
         setRequestProperty("Accept", "application/vnd.android.package-archive")
     }
     try {
