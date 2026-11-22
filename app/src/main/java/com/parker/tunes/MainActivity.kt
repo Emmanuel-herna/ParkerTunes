@@ -34,6 +34,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -1280,9 +1281,22 @@ private fun NativeLyricsList(
     }
     val timedRows = remember(visibleLines) { VLine.of(visibleLines) }
     val rowByOrigin = remember(timedRows) { timedRows.filterNot { it.isGap }.associateBy { it.origin } }
+    // The lyrics are already sorted, so use a binary search instead of scanning
+    // the entire song every time the playback clock reports a new position.
     val activeIndex = remember(visibleLines, currentTimeMs) {
-        if (visibleLines.isEmpty()) -1
-        else visibleLines.indexOfLast { it.timeMs <= currentTimeMs }.coerceAtLeast(0)
+        var low = 0
+        var high = visibleLines.lastIndex
+        var result = -1
+        while (low <= high) {
+            val middle = (low + high) ushr 1
+            if (visibleLines[middle].timeMs <= currentTimeMs) {
+                result = middle
+                low = middle + 1
+            } else {
+                high = middle - 1
+            }
+        }
+        result.coerceAtLeast(0)
     }
     val initialIndex = if (readerMode) {
         (activeIndex - 3).coerceAtLeast(0)
@@ -1343,125 +1357,149 @@ private fun NativeLyricsList(
     ) {
         itemsIndexed(
             items = visibleLines,
-            key = { index, line -> "${line.timeMs}-$index" }
+            key = { index, line -> line.timeMs.toString() + "-" + index }
         ) { index, line ->
             val distance = if (activeIndex >= 0) index - activeIndex else 4
             val active = index == activeIndex
-            val upcoming = distance > 0
-            val targetBlur = when {
-                active -> 0f
-                upcoming && distance == 1 -> if (readerMode) 2.8f else 3.5f
-                upcoming && distance == 2 -> if (readerMode) 5.5f else 7f
-                upcoming -> if (readerMode) 7f else 9f
-                distance == -1 -> if (readerMode) 0.8f else 1.2f
-                else -> if (readerMode) 1.8f else 2.5f
-            }
-            val blurRadius by animateFloatAsState(
-                targetValue = targetBlur,
-                animationSpec = tween(520, easing = FastOutSlowInEasing),
-                label = "lyricsBlur"
-            )
-            val alpha by animateFloatAsState(
-                targetValue = when {
-                    active -> 1f
-                    upcoming && distance == 1 -> 0.78f
-                    upcoming && distance == 2 -> 0.48f
-                    upcoming -> 0.28f
-                    else -> if (readerMode) 0.72f else 0.42f
-                },
-                animationSpec = tween(480, easing = FastOutSlowInEasing),
-                label = "lyricsFade"
-            )
-            val scale by animateFloatAsState(
-                targetValue = if (active) 1f else if (readerMode) 0.985f else 0.97f,
-                animationSpec = spring(dampingRatio = 0.82f, stiffness = 260f),
-                label = "lyricsScale"
-            )
             val timedLine = rowByOrigin[index]
-            val revealedChars = if (active && timedLine != null) {
-                timedLine.revealedChars(currentTimeMs).coerceIn(0f, line.text.length.toFloat())
-            } else if (index < activeIndex) {
-                line.text.length.toFloat()
-            } else {
-                0f
-            }
-            val animatedText = remember(line.text, active, revealedChars) {
-                buildAnnotatedString {
-                    val split = revealedChars.toInt().coerceIn(0, line.text.length)
-                    val partial = revealedChars - split
-                    if (split > 0) {
-                        pushStyle(SpanStyle(color = Color.White))
-                        append(line.text.substring(0, split))
-                        pop()
-                    }
-                    if (partial > 0f && split < line.text.length) {
-                        pushStyle(SpanStyle(color = Color.White.copy(alpha = partial)))
-                        append(line.text.substring(split, split + 1))
-                        pop()
-                    }
-                    val remainderStart = split + if (partial > 0f) 1 else 0
-                    if (remainderStart < line.text.length) {
-                        pushStyle(
-                            SpanStyle(
-                                color = Color.White.copy(
-                                    alpha = if (active) 0.32f else 0.78f
-                                )
-                            )
-                        )
-                        append(line.text.substring(remainderStart))
-                        pop()
-                    }
-                }
+            val revealTarget = when {
+                active && timedLine != null ->
+                    timedLine.revealedChars(currentTimeMs).coerceIn(0f, line.text.length.toFloat())
+                index < activeIndex -> line.text.length.toFloat()
+                else -> 0f
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                    }
-                    .blur(blurRadius.dp)
-                    .clip(RoundedCornerShape(if (readerMode) 14.dp else 12.dp))
-                    .clickable { onSeek(line.timeMs) }
-                    .padding(
-                        horizontal = if (readerMode) 12.dp else 8.dp,
-                        vertical = if (readerMode) 8.dp else 5.dp
-                    ),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = animatedText,
-                    color = Color.White.copy(alpha = alpha),
-                    fontSize = when {
-                        readerMode && active -> 25.sp
-                        readerMode -> 20.sp
-                        active -> 19.sp
-                        else -> 16.sp
-                    },
-                    lineHeight = when {
-                        readerMode && active -> 33.sp
-                        readerMode -> 28.sp
-                        active -> 26.sp
-                        else -> 22.sp
-                    },
-                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                    textAlign = if (line.opposite) androidx.compose.ui.text.style.TextAlign.End
-                        else androidx.compose.ui.text.style.TextAlign.Start,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                line.background?.text?.takeIf { it.isNotBlank() }?.let { backgroundText ->
-                    Text(
-                        text = backgroundText,
-                        color = Color.White.copy(alpha = if (active) 0.62f else 0.34f),
-                        fontSize = if (readerMode) 16.sp else 13.sp,
-                        lineHeight = if (readerMode) 22.sp else 17.sp,
-                        textAlign = if (line.opposite) androidx.compose.ui.text.style.TextAlign.End
-                            else androidx.compose.ui.text.style.TextAlign.Start,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+            NativeLyricsRow(
+                text = line.text,
+                backgroundText = line.background?.text?.takeIf { it.isNotBlank() },
+                timeMs = line.timeMs,
+                opposite = line.opposite,
+                active = active,
+                distance = distance,
+                revealTarget = revealTarget,
+                readerMode = readerMode,
+                onSeek = onSeek
+            )
+        }
+    }
+}
+
+@Composable
+private fun NativeLyricsRow(
+    text: String,
+    backgroundText: String?,
+    timeMs: Long,
+    opposite: Boolean,
+    active: Boolean,
+    distance: Int,
+    revealTarget: Float,
+    readerMode: Boolean,
+    onSeek: (Long) -> Unit
+) {
+    val upcoming = distance > 0
+    val alpha by animateFloatAsState(
+        targetValue = when {
+            active -> 1f
+            upcoming && distance == 1 -> 0.78f
+            upcoming && distance == 2 -> 0.48f
+            upcoming -> 0.28f
+            else -> if (readerMode) 0.72f else 0.42f
+        },
+        animationSpec = tween(420, easing = FastOutSlowInEasing),
+        label = "lyricsFade"
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (active) 1f else if (readerMode) 0.985f else 0.97f,
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = 260f),
+        label = "lyricsScale"
+    )
+    // The player reports its playhead every 200 ms. Interpolate the syllable
+    // sweep between those samples so the text still moves smoothly at 60 Hz.
+    val revealedChars by animateFloatAsState(
+        targetValue = revealTarget,
+        animationSpec = tween(180, easing = LinearEasing),
+        label = "lyricsSyllableReveal"
+    )
+    val animatedText = remember(text, active, revealedChars) {
+        buildAnnotatedString {
+            val split = revealedChars.toInt().coerceIn(0, text.length)
+            val partial = (revealedChars - split).coerceIn(0f, 1f)
+            if (split > 0) {
+                pushStyle(SpanStyle(color = Color.White))
+                append(text.substring(0, split))
+                pop()
             }
+            if (partial > 0f && split < text.length) {
+                pushStyle(SpanStyle(color = Color.White.copy(alpha = partial)))
+                append(text.substring(split, split + 1))
+                pop()
+            }
+            val remainderStart = split + if (partial > 0f) 1 else 0
+            if (remainderStart < text.length) {
+                pushStyle(
+                    SpanStyle(
+                        color = Color.White.copy(alpha = if (active) 0.32f else 0.78f)
+                    )
+                )
+                append(text.substring(remainderStart))
+                pop()
+            }
+        }
+    }
+
+    // Keep a tiny, static focus blur on only the next line. Animating several
+    // large blur effects at once was the main source of dropped frames.
+    val focusBlur = if (upcoming && distance == 1) {
+        if (readerMode) 1.2f else 1.6f
+    } else 0f
+    val focusModifier = if (focusBlur > 0f) Modifier.blur(focusBlur.dp) else Modifier
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .then(focusModifier)
+            .clip(RoundedCornerShape(if (readerMode) 14.dp else 12.dp))
+            .clickable { onSeek(timeMs) }
+            .padding(
+                horizontal = if (readerMode) 12.dp else 8.dp,
+                vertical = if (readerMode) 8.dp else 5.dp
+            ),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = animatedText,
+            color = Color.White.copy(alpha = alpha),
+            fontSize = when {
+                readerMode && active -> 25.sp
+                readerMode -> 20.sp
+                active -> 19.sp
+                else -> 16.sp
+            },
+            lineHeight = when {
+                readerMode && active -> 33.sp
+                readerMode -> 28.sp
+                active -> 26.sp
+                else -> 22.sp
+            },
+            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+            textAlign = if (opposite) androidx.compose.ui.text.style.TextAlign.End
+                else androidx.compose.ui.text.style.TextAlign.Start,
+            modifier = Modifier.fillMaxWidth()
+        )
+        backgroundText?.let { background ->
+            Text(
+                text = background,
+                color = Color.White.copy(alpha = if (active) 0.62f else 0.34f),
+                fontSize = if (readerMode) 16.sp else 13.sp,
+                lineHeight = if (readerMode) 22.sp else 17.sp,
+                textAlign = if (opposite) androidx.compose.ui.text.style.TextAlign.End
+                    else androidx.compose.ui.text.style.TextAlign.Start,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
@@ -1572,6 +1610,7 @@ private fun NowPlayingScreen(
         else position.toFloat().coerceIn(0f, duration.toFloat().coerceAtLeast(1f))
     var lyricsExpanded by remember { mutableStateOf(false) }
     val currentLyricsTrackId = player?.currentMediaItem?.mediaId.orEmpty()
+    val seekLyrics: (Long) -> Unit = remember(player) { { timestamp -> player?.seekTo(timestamp) } }
     var nativeLyricsLines by remember(currentLyricsTrackId) {
         mutableStateOf<List<KaraokeLyricsLine>>(emptyList())
     }
@@ -1651,7 +1690,7 @@ private fun NowPlayingScreen(
             durationMs = duration,
             currentTimeMs = position,
             isPlaying = playing,
-            onSeek = { timestamp -> player?.seekTo(timestamp) },
+            onSeek = seekLyrics,
             onLyricsSnapshot = { snapshot ->
                 if (snapshot.trackId.isBlank() || snapshot.trackId == currentLyricsTrackId) {
                     nativeLyricsLines = snapshot.lines
