@@ -138,22 +138,12 @@ class CrossfadeController(
 
     /** Used by the app's skip control: eligible tracks overlap, all other cases hard-cut. */
     fun skipToNext() {
-        if (fading) {
-            cancelFade()
+        // A manual skip should move to the next item immediately. Crossfade remains
+        // active for automatic end-of-track transitions, not for an explicit tap.
+        if (fading) cancelFade()
+        if (active.hasNextMediaItem()) {
             active.seekToNextMediaItem()
-            return
         }
-        val fadeMs = configuredCrossfadeSeconds() * 1_000L
-        val currentDuration = active.duration.takeUnless { it == C.TIME_UNSET || it <= 0L }
-        val nextDuration = incoming.duration.takeUnless { it == C.TIME_UNSET || it <= 0L }
-        val currentSong = active.currentMediaItem?.mediaMetadata?.toRuleSong(currentDuration)
-        val nextSong = incoming.currentMediaItem?.mediaMetadata?.toRuleSong(nextDuration)
-        val canFade = active.isPlaying && incoming.playbackState == Player.STATE_READY &&
-            currentSong != null && CrossfadeRules.applies(
-                (fadeMs / 1_000L).toInt(), currentSong, nextSong,
-                active.repeatMode == Player.REPEAT_MODE_ONE
-            )
-        if (canFade) startFade() else active.seekToNextMediaItem()
     }
 
     private fun startFade() {
