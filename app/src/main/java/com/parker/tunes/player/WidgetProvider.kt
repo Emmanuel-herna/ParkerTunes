@@ -31,7 +31,13 @@ class WidgetProvider : AppWidgetProvider() {
                         val controller = future.get()
                         when (intent.action) {
                             ACTION_TOGGLE -> if (controller.isPlaying) controller.pause() else controller.play()
-                            ACTION_NEXT -> controller.seekToNextMediaItem()
+                            ACTION_NEXT -> if (controller.hasNextMediaItem()) {
+                                controller.seekToNextMediaItem()
+                                if (controller.playbackState == androidx.media3.common.Player.STATE_IDLE ||
+                                    controller.playbackState == androidx.media3.common.Player.STATE_ENDED
+                                ) controller.prepare()
+                                controller.play()
+                            }
                             ACTION_PREVIOUS -> controller.seekToPreviousMediaItem()
                         }
                         MediaController.releaseFuture(future)
