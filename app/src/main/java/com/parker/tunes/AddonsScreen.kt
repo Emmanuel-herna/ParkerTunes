@@ -61,7 +61,7 @@ fun AddonsScreen(registry: SourceRegistryDao, onBack: () -> Unit) {
         ) {
             item {
                 Text("Compatible music sources", color = Color.White, fontSize = 23.sp)
-                Text("Add a server you trust. ParkerTunes connects to its public addon API.", color = Color.LightGray, fontSize = 13.sp)
+                Text("Add a server you trust. Plyra connects to its public addon API.", color = Color.LightGray, fontSize = 13.sp)
             }
             if (sources.isEmpty()) item {
                 Column(Modifier.fillMaxWidth().padding(vertical = 34.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -151,7 +151,7 @@ fun AddonsScreen(registry: SourceRegistryDao, onBack: () -> Unit) {
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("Remove ${source.name}?") },
-            text = { Text("This removes the addon from ParkerTunes. It does not affect the server.") },
+            text = { Text("This removes the addon from Plyra. It does not affect the server.") },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch { registry.delete(source.id); pendingDelete = null }
