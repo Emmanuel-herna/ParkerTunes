@@ -151,10 +151,13 @@
           }
           requestAnimationFrame(() => {
             const root = element.shadowRoot;
+            // A wrapper alone is not proof that anything is visible.
+            // The previous check matched .lyrics-container even when it was
+            // empty, which hid the fallback status and left a black panel.
             const rendered = root && (
-              root.querySelector('.lyrics-container') ||
               root.querySelector('.skeleton-line') ||
-              root.querySelector('.no-lyrics')
+              root.querySelector('.no-lyrics') ||
+              root.querySelector('.lyrics-line')
             );
             if (rendered) {
               if (status) status.hidden = true;
