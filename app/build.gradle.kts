@@ -61,7 +61,7 @@ android {
             firebaseAppDistribution {
                 artifactType = "APK"
                 groups = "testers"
-                releaseNotes = "ParkerTunes automated debug build"
+                releaseNotes = "Plyra automated debug build"
             }
         }
     }
