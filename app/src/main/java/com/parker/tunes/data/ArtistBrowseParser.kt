@@ -9,7 +9,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Maps YouTube Music's native artist browse response into ParkerTunes models.
+ * Maps YouTube Music's native artist browse response into Plyra models.
  * Kept independent of the UI so changes in the page layout do not affect playback.
  */
 internal object ArtistBrowseParser {
