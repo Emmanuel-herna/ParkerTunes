@@ -82,6 +82,50 @@
       let componentReady = false;
       let diagnosticsTimer = null;
       let viewportHeightPx = 280;
+      let lyricsObserver = null;
+
+      // Export the provider's structured lyric lines to Android. The custom
+      // element still owns provider lookup; Compose owns the visible list.
+      function publishNativeLyrics(element) {
+        if (lyrics !== element || !window.ParkerLyricsBridge ||
+            typeof window.ParkerLyricsBridge.onLyricsChanged !== 'function') return;
+        const sourceLines = Array.isArray(element.lyrics) ? element.lyrics : [];
+        const readText = value => Array.isArray(value)
+          ? value.map(part => typeof part === 'string' ? part : String(part && part.text || '')).join('')
+          : (typeof value === 'string' ? value : '');
+        const payload = JSON.stringify({
+          trackId: element.dataset.parkerTrackId || '',
+          loading: element.isLoading === true,
+          source: element.lyricsSource || '',
+          lines: sourceLines.map(line => ({
+            timestamp: Number(line.timestamp) || 0,
+            endtime: Number(line.endtime) || 0,
+            text: readText(line.text),
+            backgroundText: readText(line.backgroundText),
+            oppositeTurn: line.oppositeTurn === true
+          }))
+        });
+        if (element.dataset.lastNativeLyricsPayload === payload) return;
+        element.dataset.lastNativeLyricsPayload = payload;
+        window.ParkerLyricsBridge.onLyricsChanged(payload);
+      }
+
+      function observeNativeLyrics(element) {
+        if (lyricsObserver) {
+          lyricsObserver.disconnect();
+          lyricsObserver = null;
+        }
+        const root = element.shadowRoot;
+        if (root) {
+          lyricsObserver = new MutationObserver(() => {
+            Promise.resolve(element.updateComplete).then(() => {
+              requestAnimationFrame(() => publishNativeLyrics(element));
+            });
+          });
+          lyricsObserver.observe(root, { childList: true, subtree: true, characterData: true });
+        }
+        Promise.resolve(element.updateComplete).then(() => publishNativeLyrics(element));
+      }
 
       const showStatus = message => {
         if (!status) return;
@@ -95,6 +139,7 @@
           query: track.query || ''
         });
         const element = document.createElement('am-lyrics');
+        element.dataset.parkerTrackId = String(track.id || '');
 
         // Set all search metadata before connecting the element. Its
         // connectedCallback starts the provider lookup immediately.
@@ -142,6 +187,7 @@
         element.style.setProperty('min-height', viewportHeightPx + 'px', 'important');
         element.style.setProperty('box-sizing', 'border-box', 'important');
         document.body.appendChild(element);
+        observeNativeLyrics(element);
 
         // Do not hide the fallback message merely because the custom element
         // was appended. Lit renders asynchronously; a failed/empty shadow DOM
@@ -223,6 +269,10 @@
 
         const key = [track.id, title, artist].join('\u0000');
         if (!lyrics || key !== activeTrackKey) {
+          if (lyricsObserver) {
+            lyricsObserver.disconnect();
+            lyricsObserver = null;
+          }
           if (lyrics) lyrics.remove();
           lyrics = null;
           activeTrackKey = null;
