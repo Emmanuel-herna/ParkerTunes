@@ -48,6 +48,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -1014,8 +1015,63 @@ private fun MiniPlayer(
     }
 }
 
+private data class NativeLyricsSnapshot(
+    val trackId: String,
+    val loading: Boolean,
+    val source: String,
+    val lines: List<KaraokeLyricsLine>
+)
+
+private fun decodeNativeLyricsSnapshot(raw: String): NativeLyricsSnapshot {
+    val root = JSONObject(raw)
+    val array = root.optJSONArray("lines")
+    val parsed = buildList {
+        if (array != null) {
+            for (index in 0 until array.length()) {
+                val item = array.optJSONObject(index) ?: continue
+                val timestamp = item.optDouble("timestamp", 0.0)
+                    .takeIf { it.isFinite() }?.toLong()?.coerceAtLeast(0L) ?: 0L
+                val endtime = item.optDouble("endtime", 0.0)
+                    .takeIf { it.isFinite() }?.toLong()?.coerceAtLeast(timestamp) ?: timestamp
+                val text = item.optString("text").trim()
+                if (text.isBlank()) continue
+                val backingText = item.optString("backgroundText").trim()
+                val backing = backingText.takeIf { it.isNotBlank() }?.let {
+                    KaraokeLyricsLine(
+                        timeMs = timestamp,
+                        text = it,
+                        endMs = endtime.takeIf { value -> value > timestamp }
+                    )
+                }
+                add(
+                    KaraokeLyricsLine(
+                        timeMs = timestamp,
+                        text = text,
+                        background = backing,
+                        opposite = item.optBoolean("oppositeTurn", false),
+                        endMs = endtime.takeIf { it > timestamp }
+                    )
+                )
+            }
+        }
+    }.sortedBy { it.timeMs }
+
+    return NativeLyricsSnapshot(
+        trackId = root.optString("trackId"),
+        loading = root.optBoolean("loading", false),
+        source = root.optString("source"),
+        lines = parsed
+    )
+}
+
+/**
+ * Keeps the existing am-lyrics providers as the lookup engine, but uses the
+ * native Compose list below for all visible lyrics. The WebView is deliberately
+ * reduced to a hidden one-pixel host: it fetches and publishes structured lines,
+ * while Compose owns layout, scrolling, highlighting and touch interaction.
+ */
 @Composable
-private fun AmLyricsWebView(
+private fun AmLyricsDataSource(
     trackId: String,
     title: String,
     artist: String,
@@ -1023,12 +1079,12 @@ private fun AmLyricsWebView(
     currentTimeMs: Long,
     isPlaying: Boolean,
     onSeek: (Long) -> Unit,
-    modifier: Modifier = Modifier,
-    readerMode: Boolean = false
+    onLyricsSnapshot: (NativeLyricsSnapshot) -> Unit
 ) {
     val latestOnSeek by rememberUpdatedState(onSeek)
+    val latestOnSnapshot by rememberUpdatedState(onLyricsSnapshot)
     val latestDuration by rememberUpdatedState(durationMs)
-    val trackJson = remember(trackId, title, artist, durationMs, currentTimeMs, isPlaying, readerMode) {
+    val trackJson = remember(trackId, title, artist, durationMs, currentTimeMs, isPlaying) {
         JSONObject()
             .put("id", trackId)
             .put("title", title)
@@ -1037,11 +1093,10 @@ private fun AmLyricsWebView(
             .put("durationMs", durationMs.coerceAtLeast(0L))
             .put("positionMs", currentTimeMs.coerceAtLeast(0L))
             .put("playing", isPlaying)
-            .put("readerMode", readerMode)
             .toString()
     }
     val latestTrackJson by rememberUpdatedState(trackJson)
-    var nativeLyricsStatus by remember { mutableStateOf("Starting lyrics WebView...") }
+    val latestTrackId by rememberUpdatedState(trackId)
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val bridge = remember {
         object {
@@ -1058,12 +1113,23 @@ private fun AmLyricsWebView(
                     latestOnSeek(safeTimestamp)
                 }
             }
+
+            @JavascriptInterface
+            fun onLyricsChanged(snapshotJson: String) {
+                val snapshot = runCatching {
+                    decodeNativeLyricsSnapshot(snapshotJson)
+                }.getOrNull() ?: return
+                mainHandler.post {
+                    if (snapshot.trackId.isBlank() || snapshot.trackId == latestTrackId) {
+                        latestOnSnapshot(snapshot)
+                    }
+                }
+            }
         }
     }
 
-    Box(modifier = modifier) {
     AndroidView(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.size(1.dp).graphicsLayer { alpha = 0f },
         factory = { context ->
             val assetLoader = WebViewAssetLoader.Builder()
                 .addPathHandler(
@@ -1101,7 +1167,10 @@ private fun AmLyricsWebView(
                 addJavascriptInterface(bridge, "ParkerLyricsBridge")
                 webChromeClient = object : WebChromeClient() {
                     override fun onConsoleMessage(message: android.webkit.ConsoleMessage): Boolean {
-                        Log.d("ParkerLyricsWeb", "JS ${message.messageLevel()}: ${message.message()} (${message.sourceId()}:${message.lineNumber()})")
+                        Log.d(
+                            "ParkerLyricsWeb",
+                            "JS ${message.messageLevel()}: ${message.message()} (${message.sourceId()}:${message.lineNumber()})"
+                        )
                         return true
                     }
                 }
@@ -1109,18 +1178,20 @@ private fun AmLyricsWebView(
                     override fun shouldInterceptRequest(
                         view: WebView,
                         request: WebResourceRequest
-                    ): WebResourceResponse? {
-                        val response = assetLoader.shouldInterceptRequest(request.url)
-                        if (request.url.toString().contains("/assets/lyrics/")) {
-                            Log.d("ParkerLyricsWeb", "Asset request: ${request.url} | ${if (response != null) "served by asset loader" else "not handled by asset loader"}")
-                        }
-                        return response
-                    }
+                    ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
 
-                    override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
-                        super.onPageStarted(view, url, favicon)
-                        nativeLyricsStatus = "Loading lyrics page..."
-                        Log.d("ParkerLyricsWeb", "Page started: $url")
+                    override fun onPageFinished(view: WebView, url: String?) {
+                        super.onPageFinished(view, url)
+                        val cssHeight = (view.height / view.resources.displayMetrics.density)
+                            .toInt().coerceAtLeast(1)
+                        view.evaluateJavascript(
+                            "window.setParkerViewportHeight && window.setParkerViewportHeight($cssHeight)",
+                            null
+                        )
+                        view.evaluateJavascript(
+                            "if (window.setParkerTrack) { window.setParkerTrack($latestTrackJson); 'track-delivered'; } else { 'track-handler-not-ready'; }",
+                            null
+                        )
                     }
 
                     override fun onReceivedError(
@@ -1130,21 +1201,7 @@ private fun AmLyricsWebView(
                     ) {
                         super.onReceivedError(view, request, error)
                         if (request.isForMainFrame) {
-                            val detail = error.description?.toString() ?: "Unknown WebView error"
-                            nativeLyricsStatus = "Lyrics page error: " + detail + " (" + error.errorCode + ")"
-                            Log.e("ParkerLyricsWeb", nativeLyricsStatus)
-                        }
-                    }
-
-                    override fun onReceivedHttpError(
-                        view: WebView,
-                        request: WebResourceRequest,
-                        response: WebResourceResponse
-                    ) {
-                        super.onReceivedHttpError(view, request, response)
-                        if (request.isForMainFrame) {
-                            nativeLyricsStatus = "Lyrics page HTTP error: " + response.statusCode
-                            Log.e("ParkerLyricsWeb", nativeLyricsStatus)
+                            Log.e("ParkerLyricsWeb", "Lyrics page error: ${error.description} (${error.errorCode})")
                         }
                     }
 
@@ -1152,96 +1209,9 @@ private fun AmLyricsWebView(
                         view: WebView,
                         detail: android.webkit.RenderProcessGoneDetail
                     ): Boolean {
-                        nativeLyricsStatus = "Lyrics WebView process stopped (crashed=" + detail.didCrash() + ")"
-                        Log.e("ParkerLyricsWeb", nativeLyricsStatus)
+                        Log.e("ParkerLyricsWeb", "Lyrics WebView process stopped; crashed=${detail.didCrash()}")
                         return true
                     }
-
-                    override fun onPageFinished(view: WebView, url: String?) {
-                        super.onPageFinished(view, url)
-                        Log.d("ParkerLyricsWeb", "Page finished: $url")
-                        nativeLyricsStatus = "Lyrics page loaded; checking JavaScript..."
-                        val cssHeight = (view.height / view.resources.displayMetrics.density)
-                            .toInt().coerceAtLeast(1)
-                        view.evaluateJavascript(
-                            "window.setParkerViewportHeight && window.setParkerViewportHeight($cssHeight)",
-                            null
-                        )
-                        view.evaluateJavascript(
-                            "({pageReady: !!document.readyState, trackHandler: typeof window.setParkerTrack, componentDefined: !!customElements.get('am-lyrics')})",
-                        ) { result ->
-                            Log.d("ParkerLyricsWeb", "Page state: $result")
-                            mainHandler.post {
-                                nativeLyricsStatus = "Web page ready: $result"
-                            }
-                        }
-                        view.evaluateJavascript(
-                            "if (window.setParkerTrack) { window.setParkerTrack($latestTrackJson); 'track-delivered'; } else { 'track-handler-missing'; }",
-                        ) { result ->
-                            Log.d("ParkerLyricsWeb", "Track delivery: $result")
-                            mainHandler.post { nativeLyricsStatus = "Track delivery: $result" }
-                        }
-
-                        // Inspect the real WebView layout and Lit shadow DOM after
-                        // the custom element has had time to finish its first render.
-                        view.postDelayed({
-                            if (!view.isAttachedToWindow) return@postDelayed
-                            Log.d(
-                                "ParkerLyricsWeb",
-                                "Native WebView size: ${view.width}x${view.height}, measured: ${view.measuredWidth}x${view.measuredHeight}"
-                            )
-                            view.evaluateJavascript(
-                                """(() => {
-                                  try {
-                                    const host = document.querySelector('am-lyrics');
-                                    const root = host && host.shadowRoot;
-                                    const content = root && root.querySelector('.lyrics-container');
-                                    const status = document.getElementById('lyrics-status');
-                                    const rect = el => {
-                                      if (!el) return null;
-                                      const r = el.getBoundingClientRect();
-                                      const style = getComputedStyle(el);
-                                      return {
-                                        width: Math.round(r.width), height: Math.round(r.height),
-                                        display: style.display, visibility: style.visibility,
-                                        color: style.color, background: style.backgroundColor,
-                                        scrollHeight: el.scrollHeight
-                                      };
-                                    };
-                                    const compactRect = el => {
-                                      if (!el) return 'missing';
-                                      const r = el.getBoundingClientRect();
-                                      const s = getComputedStyle(el);
-                                      return Math.round(r.width) + 'x' + Math.round(r.height) +
-                                        '/' + s.display + '/' + s.visibility;
-                                    };
-                                    const lyricText = root
-                                      ? (root.querySelector('.lyrics-container')?.textContent || '').trim()
-                                      : '';
-                                    return JSON.stringify({
-                                      host: compactRect(host),
-                                      inner: compactRect(content),
-                                      body: compactRect(document.body),
-                                      loading: host ? String(host.isLoading) : 'no-host',
-                                      count: host && Array.isArray(host.lyrics) ? host.lyrics.length : -1,
-                                      status: status ? status.textContent.slice(0, 65) : 'none',
-                                      text: lyricText.slice(0, 45)
-                                    });
-                                  } catch (error) {
-                                    return JSON.stringify({ inspectionError: String(error), stack: error && error.stack });
-                                  }
-                                })()""".trimIndent(),
-                            ) { result ->
-                                Log.d("ParkerLyricsWeb", "Rendered DOM snapshot: $result")
-                                mainHandler.post {
-                                    nativeLyricsStatus =
-                                        "WebView " + view.width + "x" + view.height +
-                                        "px | Lyrics DOM: " + result.take(170)
-                                }
-                            }
-                        }, 1500)
-                    }
-
                 }
                 loadUrl("https://appassets.androidplatform.net/assets/lyrics/index.html")
             }
@@ -1249,24 +1219,136 @@ private fun AmLyricsWebView(
         update = { webView ->
             webView.evaluateJavascript(
                 "if (window.setParkerTrack) { window.setParkerTrack($trackJson); 'track-delivered'; } else { 'track-handler-not-ready'; }",
-            ) { result -> Log.d("ParkerLyricsWeb", "Updated track delivery: $result") }
+                null
+            )
         }
     )
-    // Temporary on-screen diagnostics: the previous status was only written
-    // to Logcat, which the phone-only workflow cannot inspect.
-    Text(
-        text = nativeLyricsStatus,
-        color = Color.White,
-        fontSize = 9.sp,
-        lineHeight = 11.sp,
-        maxLines = 3,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .fillMaxWidth()
-            .background(Color(0xCC17131F))
-            .padding(horizontal = 6.dp, vertical = 4.dp)
-    )
+}
+
+@Composable
+private fun NativeLyricsList(
+    lines: List<KaraokeLyricsLine>,
+    currentTimeMs: Long,
+    isPlaying: Boolean,
+    loading: Boolean,
+    modifier: Modifier = Modifier,
+    readerMode: Boolean = false,
+    onSeek: (Long) -> Unit
+) {
+    val visibleLines = remember(lines) {
+        lines.filter { it.text.isNotBlank() }.sortedBy { it.timeMs }
+    }
+    val unsynced = remember(visibleLines) {
+        visibleLines.isNotEmpty() && visibleLines.all { it.timeMs <= 0L }
+    }
+    val activeIndex = remember(visibleLines, currentTimeMs, unsynced) {
+        when {
+            visibleLines.isEmpty() -> -1
+            unsynced -> 0
+            else -> visibleLines.indexOfLast { it.timeMs <= currentTimeMs }.coerceAtLeast(0)
+        }
+    }
+    val initialIndex = if (readerMode) {
+        (activeIndex - 3).coerceAtLeast(0)
+    } else {
+        (activeIndex - 2).coerceAtLeast(0)
+    }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+    val density = androidx.compose.ui.platform.LocalDensity.current
+
+    LaunchedEffect(activeIndex, isPlaying, readerMode, visibleLines) {
+        // The compact strip follows the playing line; the expanded reader opens
+        // near the current line but remains under the listener's manual control.
+        if (!readerMode && isPlaying && activeIndex >= 0) {
+            listState.animateScrollToItem(
+                index = activeIndex,
+                scrollOffset = -with(density) { 50.dp.roundToPx() }
+            )
+        }
+    }
+
+    if (visibleLines.isEmpty()) {
+        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                text = if (loading) "Finding lyrics…" else "Lyrics aren't available for this track.",
+                color = Color.White.copy(alpha = 0.56f),
+                fontSize = if (readerMode) 15.sp else 12.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+        }
+        return
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            horizontal = if (readerMode) 12.dp else 8.dp,
+            vertical = if (readerMode) 28.dp else 38.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(if (readerMode) 12.dp else 5.dp)
+    ) {
+        itemsIndexed(
+            items = visibleLines,
+            key = { index, line -> "${line.timeMs}-$index" }
+        ) { index, line ->
+            val distance = if (activeIndex >= 0) kotlin.math.abs(index - activeIndex) else 3
+            val active = index == activeIndex
+            val alpha = if (readerMode) {
+                if (active) 1f else 0.78f
+            } else {
+                when (distance) {
+                    0 -> 1f
+                    1 -> 0.72f
+                    2 -> 0.48f
+                    else -> 0.28f
+                }
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(if (readerMode) 14.dp else 12.dp))
+                    .clickable { onSeek(line.timeMs) }
+                    .padding(
+                        horizontal = if (readerMode) 12.dp else 8.dp,
+                        vertical = if (readerMode) 8.dp else 5.dp
+                    ),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = line.text,
+                    color = if (active) Color.White else Color.White.copy(alpha = alpha),
+                    fontSize = when {
+                        readerMode && active -> 25.sp
+                        readerMode -> 20.sp
+                        active -> 19.sp
+                        else -> 16.sp
+                    },
+                    lineHeight = when {
+                        readerMode && active -> 33.sp
+                        readerMode -> 28.sp
+                        active -> 26.sp
+                        else -> 22.sp
+                    },
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                    textAlign = if (line.opposite) androidx.compose.ui.text.style.TextAlign.End
+                        else androidx.compose.ui.text.style.TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                line.background?.text?.takeIf { it.isNotBlank() }?.let { backgroundText ->
+                    Text(
+                        text = backgroundText,
+                        color = Color.White.copy(alpha = if (active) 0.62f else 0.34f),
+                        fontSize = if (readerMode) 16.sp else 13.sp,
+                        lineHeight = if (readerMode) 22.sp else 17.sp,
+                        textAlign = if (line.opposite) androidx.compose.ui.text.style.TextAlign.End
+                            else androidx.compose.ui.text.style.TextAlign.Start,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
     }
 }
 
