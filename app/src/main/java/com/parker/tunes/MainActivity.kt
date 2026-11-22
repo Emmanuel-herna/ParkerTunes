@@ -41,6 +41,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -1255,14 +1256,35 @@ private fun NativeLyricsList(
     }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val density = androidx.compose.ui.platform.LocalDensity.current
+    var browsingByDrag by remember { mutableStateOf(false) }
 
-    LaunchedEffect(activeIndex, isPlaying, readerMode, visibleLines) {
-        // The compact strip follows the playing line; the expanded reader opens
-        // near the current line but remains under the listener's manual control.
-        if (!readerMode && isPlaying && activeIndex >= 0) {
+    LaunchedEffect(listState) {
+        listState.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) browsingByDrag = true
+        }
+    }
+
+    LaunchedEffect(browsingByDrag, listState.isScrollInProgress, isPlaying) {
+        // Like BitChord, pause automatic following while the listener browses,
+        // then resume five seconds after their finger leaves the list.
+        if (isPlaying && browsingByDrag && !listState.isScrollInProgress) {
+            delay(5_000)
+            browsingByDrag = false
+        }
+    }
+
+    LaunchedEffect(activeIndex, isPlaying, readerMode, visibleLines, browsingByDrag) {
+        if (isPlaying && activeIndex >= 0 && !browsingByDrag) {
+            val scrollOffset = if (readerMode) {
+                val viewport = listState.layoutInfo.viewportSize.height
+                    .takeIf { it > 0 } ?: with(density) { 320.dp.roundToPx() }
+                -(viewport / 2)
+            } else {
+                -with(density) { 50.dp.roundToPx() }
+            }
             listState.animateScrollToItem(
                 index = activeIndex,
-                scrollOffset = -with(density) { 50.dp.roundToPx() }
+                scrollOffset = scrollOffset
             )
         }
     }
