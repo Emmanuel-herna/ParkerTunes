@@ -109,7 +109,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ParkerTunes-roborazzi-screenshots
+          name: Plyra-roborazzi-screenshots
           path: app/build/outputs/roborazzi
           if-no-files-found: warn
           retention-days: 30
@@ -174,7 +174,7 @@ jobs:
           publicKey: ${{ steps.appetize-key.outputs.public_key }}
           appFile: app/build/outputs/apk/debug/app-debug.apk
           platform: android
-          note: ParkerTunes GitHub Actions build ${{ github.run_number }}
+          note: Plyra GitHub Actions build ${{ github.run_number }}
 
       - name: Save Appetize key for future builds
         if: ${{ steps.appetize.outputs.publicKey != '' && github.ref == 'refs/heads/main' }}
@@ -196,7 +196,7 @@ jobs:
         env:
           PUBLIC_KEY: ${{ steps.appetize.outputs.publicKey }}
         run: |
-          echo "### ParkerTunes live preview" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Plyra live preview" >> "$GITHUB_STEP_SUMMARY"
           echo "https://appetize.io/app/$PUBLIC_KEY" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Note skipped Appetize upload
@@ -213,7 +213,7 @@ jobs:
         if: ${{ always() && steps.build-apk.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ParkerTunes-debug
+          name: Plyra-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
