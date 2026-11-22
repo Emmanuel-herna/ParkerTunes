@@ -43,7 +43,6 @@ kotlin {
                 // YouTube stream resolution, as the phone does it: InnerTubeX's
                 // client catalog and cipher tiers, NewPipe as the fallback. NewPipe
                 // is compile-only because the phone ships a trimmed jar of it.
-                api("com.github.MetrolistGroup.innertubex:innertubex:v0.7.0")
                 compileOnly("com.github.TeamNewPipe:NewPipeExtractor:v0.26.3")
             }
         }
