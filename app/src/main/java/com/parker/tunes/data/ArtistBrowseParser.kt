@@ -29,7 +29,7 @@ internal object ArtistBrowseParser {
         val headerRenderer = findFirst(header, "musicImmersiveHeaderRenderer")
             ?: findFirst(header, "musicVisualHeaderRenderer")
         val name = text(headerRenderer?.opt("title")).ifBlank { artist.name }
-        val avatar = thumbnail(headerRenderer).ifBlank { artist.avatarUrl.orEmpty() }.ifBlank { null }
+        val avatar = thumbnail(headerRenderer).takeIf { it.isNotBlank() } ?: artist.avatarUrl
         val description = text(headerRenderer?.opt("description"))
             .ifBlank { text(findFirst(headerRenderer, "description")) }
             .ifBlank { artist.description }
@@ -148,7 +148,7 @@ internal object ArtistBrowseParser {
         val duration = Regex("""(\d{1,2}:\d{2}(?::\d{2})?)""").find(durationText)?.value
             ?.split(":")?.mapNotNull(String::toLongOrNull)
             ?.fold(0L) { total, part -> total * 60L + part } ?: 0L
-        return Song(videoId, title, creditedArtist, thumbnail(renderer).ifBlank { null }, duration)
+        return Song(videoId, title, creditedArtist, thumbnail(renderer).takeIf { it.isNotBlank() }, duration)
     }
 
     private fun parseAlbum(renderer: JSONObject): Album? {
