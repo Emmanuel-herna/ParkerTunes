@@ -163,7 +163,7 @@ fun ArtistProfileScreen(
                 item {
                     LazyRow(contentPadding = PaddingValues(horizontal = 20.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        items(loaded.topSongs.take(10), key = { it.id }) { song ->
+                        items(loaded.topSongs.take(15), key = { it.id }) { song ->
                             Column(Modifier.width(142.dp).clickable { onPlay(song) }) {
                                 ArtistCover(song.coverUrl, song.title, Modifier.size(142.dp))
                                 Text(song.title, color = Color.White, fontSize = 13.sp,
