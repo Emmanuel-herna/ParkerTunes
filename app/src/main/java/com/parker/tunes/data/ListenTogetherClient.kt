@@ -51,7 +51,7 @@ class ListenTogetherClient(context:Context) {
     suspend fun signInWithGoogle(idToken:String,name:String,email:String,avatar:String?) {
         val result=auth.signInWithCredential(GoogleAuthProvider.getCredential(idToken,null)).await()
         val user=result.user ?: error("Firebase sign-in did not return a user.")
-        val safe=name.ifBlank { user.displayName ?: email.substringBefore("@").ifBlank { "ParkerTunes listener" } }.take(40)
+        val safe=name.ifBlank { user.displayName ?: email.substringBefore("@").ifBlank { "Plyra listener" } }.take(40)
         prefs.edit().putString("google_name",safe).putString("google_email",email).putString("google_avatar",avatar).putString("display_name",safe).apply()
         _state.value=_state.value.copy(userUid=user.uid,googleName=safe,googleEmail=email,googleAvatarUrl=avatar,displayName=safe,error=null)
     }
@@ -76,7 +76,7 @@ class ListenTogetherClient(context:Context) {
         try {
             var code:String
             do { code=generateCode() } while(db.child("rooms").child(code).get().await().exists())
-            val name=_state.value.displayName.ifBlank { user.displayName ?: "ParkerTunes listener" }.take(40)
+            val name=_state.value.displayName.ifBlank { user.displayName ?: "Plyra listener" }.take(40)
             val now=System.currentTimeMillis()
             val updates=mapOf<String,Any?>(
                 "rooms/"+code to mapOf("hostUid" to user.uid,"createdAt" to now,"hostOnlyControl" to false),
@@ -97,7 +97,7 @@ class ListenTogetherClient(context:Context) {
         try {
             val room=db.child("rooms").child(code).get().await()
             if(!room.exists()) error("That party code wasn't found.")
-            val name=_state.value.displayName.ifBlank { user.displayName ?: "ParkerTunes listener" }.take(40)
+            val name=_state.value.displayName.ifBlank { user.displayName ?: "Plyra listener" }.take(40)
             val ok=reserve(db.child("members").child(code),user.uid,name)
             if(!ok) error("This party is full (maximum 5 devices).")
             saveDisplayName(name)
