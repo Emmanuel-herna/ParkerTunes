@@ -1529,6 +1529,26 @@ private fun NativeLyricsRow(
         }
     }
 
+    Box(Modifier.fillMaxSize()) {
+        if (!coverUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = coverUrl,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().blur(42.dp).graphicsLayer { alpha = 0.42f },
+                contentScale = ContentScale.Crop
+            )
+        }
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    listOf(
+                        artworkColors.background.copy(alpha = 0.64f),
+                        Color(0xCC09080D),
+                        Color(0xFF08080B)
+                    )
+                )
+            )
+        )
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1683,7 +1703,21 @@ private fun NowPlayingScreen(
     val progressValue = if (seeking) seekValue
         else position.toFloat().coerceIn(0f, duration.toFloat().coerceAtLeast(1f))
     var lyricsExpanded by remember { mutableStateOf(false) }
+    var queueExpanded by remember { mutableStateOf(false) }
     val currentLyricsTrackId = player?.currentMediaItem?.mediaId.orEmpty()
+    val queuedMediaItems = remember(queueExpanded, player, currentLyricsTrackId) {
+        if (!queueExpanded || player == null) emptyList()
+        else (0 until player.mediaItemCount).map { index -> player.getMediaItemAt(index) }
+    }
+    val currentQueueIndex = player?.currentMediaItemIndex ?: -1
+    val artworkScale by animateFloatAsState(
+        targetValue = if (playing) 1f else 0.92f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "playerArtworkScale"
+    )
     val seekLyrics: (Long) -> Unit = remember(player) { { timestamp -> player?.seekTo(timestamp) } }
     var nativeLyricsLines by remember(currentLyricsTrackId) {
         mutableStateOf<List<KaraokeLyricsLine>>(emptyList())
@@ -1700,7 +1734,7 @@ private fun NowPlayingScreen(
                 scaleX = 1f - progress * 0.035f
                 scaleY = scaleX
             }
-            .background(Brush.verticalGradient(listOf(artworkColors.background, Color(0xFF08080B))))
+            .background(Color.Transparent)
             .pointerInput(onBack, scrollState, density) {
                 val dismissThreshold = with(density) { 120.dp.toPx() }
                 val exitDistance = size.height.toFloat().coerceAtLeast(dismissThreshold * 2)
@@ -1773,7 +1807,13 @@ private fun NowPlayingScreen(
             }
         )
         Row(
-            modifier = Modifier.fillMaxWidth().height(48.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.055f))
+                .border(1.dp, Color.White.copy(alpha = 0.10f), CircleShape)
+                .padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
@@ -1799,8 +1839,13 @@ private fun NowPlayingScreen(
                 .fillMaxWidth()
                 .widthIn(max = 360.dp)
                 .aspectRatio(1f)
-                .shadow(28.dp, RoundedCornerShape(30.dp), clip = false)
+                .graphicsLayer {
+                    scaleX = artworkScale
+                    scaleY = artworkScale
+                }
+                .shadow(30.dp, RoundedCornerShape(30.dp), clip = false)
                 .clip(RoundedCornerShape(30.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(30.dp))
                 .background(
                     androidx.compose.ui.graphics.Brush.linearGradient(
                         listOf(artworkColors.background.copy(alpha = 0.92f), Color(0xFF17151F), Color(0xFF282238))
@@ -1906,7 +1951,13 @@ private fun NowPlayingScreen(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp)
+                .clip(RoundedCornerShape(34.dp))
+                .background(Color.White.copy(alpha = 0.065f))
+                .border(1.dp, Color.White.copy(alpha = 0.095f), RoundedCornerShape(34.dp))
+                .padding(horizontal = 5.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1963,29 +2014,50 @@ private fun NowPlayingScreen(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(Color(0xFF15141A))
-                .clickable(onClick = onOpenEqualizer)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(28.dp))
+                .background(Color.White.copy(alpha = 0.065f))
+                .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(28.dp))
+                .padding(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
-                    .background(accent.copy(alpha = .14f)),
-                contentAlignment = Alignment.Center
+            Row(
+                Modifier.weight(1f).clip(CircleShape)
+                    .clickable { lyricsExpanded = true }
+                    .padding(horizontal = 9.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.GraphicEq, contentDescription = null,
-                    tint = accent, modifier = Modifier.size(21.dp))
+                Icon(Icons.Default.MusicNote, null, tint = Color.White.copy(alpha = 0.88f),
+                    modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(7.dp))
+                Text("Lyrics", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Audio settings", color = Color.White, fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold)
-                Text("Equalizer and sound controls", color = muted, fontSize = 11.sp)
+            Row(
+                Modifier.weight(1f).clip(CircleShape)
+                    .clickable { queueExpanded = true }
+                    .padding(horizontal = 9.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.QueueMusic, null, tint = Color.White.copy(alpha = 0.88f),
+                    modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(7.dp))
+                Text("Queue", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
-            Icon(Icons.Default.ChevronRight, contentDescription = "Open audio settings",
-                tint = muted)
+            Row(
+                Modifier.weight(1f).clip(CircleShape)
+                    .clickable(onClick = onOpenEqualizer)
+                    .padding(horizontal = 9.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.GraphicEq, null, tint = accent, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(7.dp))
+                Text("Sound", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
         }
 
         if (title.isNotBlank() && !lyricsExpanded) {
@@ -2017,6 +2089,113 @@ private fun NowPlayingScreen(
                         tint = Color.White,
                         modifier = Modifier.size(22.dp)
                     )
+                }
+            }
+        }
+
+        if (queueExpanded) {
+            Dialog(
+                onDismissRequest = { queueExpanded = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Column(
+                    Modifier.fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(accent.copy(alpha = 0.18f), Color(0xFF100E16), Color(0xFF08080B))
+                            )
+                        )
+                        .padding(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 14.dp)
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().height(52.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { queueExpanded = false }) {
+                            Icon(Icons.Default.KeyboardArrowDown, "Close queue", tint = Color.White)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("UP NEXT", color = Color.White, fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                            Text("${queuedMediaItems.size} tracks", color = muted, fontSize = 11.sp)
+                        }
+                        Icon(Icons.Default.QueueMusic, null, tint = accent, modifier = Modifier.size(23.dp))
+                    }
+                    if (queuedMediaItems.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.QueueMusic, null, tint = muted, modifier = Modifier.size(42.dp))
+                                Text("Your queue is empty", color = Color.White, fontWeight = FontWeight.SemiBold)
+                                Text("Add a few tracks and they will appear here.", color = muted, fontSize = 12.sp)
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(7.dp)
+                        ) {
+                            itemsIndexed(queuedMediaItems, key = { index, item -> "${item.mediaId}-$index" }) { index, item ->
+                                val selected = index == currentQueueIndex
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .background(if (selected) accent.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.045f))
+                                        .clickable {
+                                            player?.seekTo(index, 0L)
+                                            player?.play()
+                                            queueExpanded = false
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 9.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
+                                            .background(Color.White.copy(alpha = 0.07f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        val art = item.mediaMetadata.artworkUri
+                                        if (art != null) {
+                                            AsyncImage(
+                                                model = art,
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        } else {
+                                            Icon(Icons.Default.MusicNote, null, tint = muted)
+                                        }
+                                        if (selected) {
+                                            Icon(Icons.Default.GraphicEq, null, tint = Color.White,
+                                                modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp).size(15.dp))
+                                        }
+                                    }
+                                    Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text(
+                                            item.mediaMetadata.title?.toString().orEmpty().ifBlank { "Unknown track" },
+                                            color = if (selected) Color.White else Color.White.copy(alpha = 0.92f),
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            item.mediaMetadata.artist?.toString().orEmpty().ifBlank { "Unknown artist" },
+                                            color = muted, fontSize = 11.sp,
+                                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    if (selected) {
+                                        Text("PLAYING", color = accent, fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                                    } else {
+                                        Text("${index + 1}", color = muted, fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2075,6 +2254,7 @@ private fun NowPlayingScreen(
                 }
             }
         }
+    }
     }
 }
 
