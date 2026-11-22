@@ -58,8 +58,10 @@ internal object ArtistBrowseParser {
         sections.forEach { section ->
             val shelf = section.optJSONObject("musicShelfRenderer")
             if (shelf != null) {
+                // Only the explicitly labelled Top songs shelf is an artist's
+                // top-song list. Other shelves must never be used as a fallback.
                 val title = text(shelf.opt("title"))
-                if (title.contains("top song", true) || songs.isEmpty()) {
+                if (title.contains("top song", true)) {
                     val rows = shelf.optJSONArray("contents")
                     if (rows != null) for (i in 0 until rows.length()) {
                         val row = rows.optJSONObject(i) ?: continue
@@ -74,26 +76,36 @@ internal object ArtistBrowseParser {
             val carousel = section.optJSONObject("musicCarouselShelfRenderer")
             if (carousel != null) {
                 val carouselHeader = findFirst(carousel.optJSONObject("header"), "musicCarouselShelfBasicHeaderRenderer")
-                val title = text(carouselHeader?.opt("title"))
-                val contents = carousel.optJSONArray("contents") ?: JSONArray()
-                for (i in 0 until contents.length()) {
-                    val item = contents.optJSONObject(i) ?: continue
-                    val renderer = item.optJSONObject("musicTwoRowItemRenderer")
-                        ?: findFirst(item, "musicTwoRowItemRenderer")
-                        ?: continue
-                    val browse = firstBrowseId(renderer)
-                    if (title.contains("related", true) || title.contains("artist", true) && !title.contains("album", true)) {
-                        val id = browse?.takeIf { it.startsWith("UC") } ?: continue
-                        val artistName = text(renderer.opt("title"))
-                        if (artistName.isNotBlank() && id != browseId(artist.id)) {
-                            related.add(Artist(id, artistName, thumbnail(renderer)))
-                        }
-                    } else {
-                        val album = parseAlbum(renderer) ?: continue
-                        when {
-                            title.contains("single", true) || title.contains("ep", true) -> singles.add(album)
-                            title.contains("recent", true) || title.contains("release", true) -> recent.add(album)
-                            else -> albums.add(album)
+                val title = text(carouselHeader?.opt("title")).trim()
+                val isRelated = title.contains("related", true) ||
+                    (title.contains("artist", true) && !title.contains("album", true))
+                val isSingleOrEp = title.contains("single", true) || Regex("""\\bEPs?\\b""", RegexOption.IGNORE_CASE).containsMatchIn(title)
+                val isRecent = title.contains("recent", true) || title.contains("latest release", true)
+                val isAlbumShelf = title.equals("albums", true) ||
+                    title.contains("full albums", true) ||
+                    title.contains("album releases", true)
+                // Ignore unknown shelves (for example "All hits", playlists,
+                // mixes and recommendations) rather than mislabelling them Albums.
+                if (isRelated || isSingleOrEp || isRecent || isAlbumShelf) {
+                    val contents = carousel.optJSONArray("contents") ?: JSONArray()
+                    for (i in 0 until contents.length()) {
+                        val item = contents.optJSONObject(i) ?: continue
+                        val renderer = item.optJSONObject("musicTwoRowItemRenderer")
+                            ?: findFirst(item, "musicTwoRowItemRenderer")
+                            ?: continue
+                        if (isRelated) {
+                            val id = firstBrowseId(renderer)?.takeIf { it.startsWith("UC") } ?: continue
+                            val artistName = text(renderer.opt("title"))
+                            if (artistName.isNotBlank() && id != browseId(artist.id)) {
+                                related.add(Artist(id, artistName, thumbnail(renderer)))
+                            }
+                        } else {
+                            val album = parseAlbum(renderer) ?: continue
+                            when {
+                                isSingleOrEp -> singles.add(album)
+                                isRecent -> recent.add(album)
+                                isAlbumShelf -> albums.add(album)
+                            }
                         }
                     }
                 }
