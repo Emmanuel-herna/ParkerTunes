@@ -2,7 +2,9 @@ package com.parker.tunes.player
 
 import android.content.SharedPreferences
 import android.os.SystemClock
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -25,11 +27,13 @@ import kotlinx.coroutines.launch
  * TODO: STAGE 2 — SoundAlignment.offset(envelopeA, envelopeB), AudioMeter RMS
  * AudioProcessor and brief ±15% beat-drift correction. Not implemented in Stage 1.
  */
+@OptIn(UnstableApi::class)
 class CrossfadeController(
     initialActive: ExoPlayer,
     private val spare: ExoPlayer,
     private val session: MediaSession,
     private val preferences: SharedPreferences,
+    private val audioAttributes: AudioAttributes,
     private val onActivePlayerChanged: (ExoPlayer) -> Unit
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -76,6 +80,10 @@ class CrossfadeController(
 
     init {
         active.addListener(activeListener)
+        // The preloaded player is muted and must never compete with the active
+        // player for Android audio focus while an overlap is being prepared.
+        incoming.setAudioAttributes(audioAttributes, false)
+        active.setAudioAttributes(audioAttributes, true)
         incoming.volume = 0f
         scope.launch {
             while (isActive) {
@@ -143,6 +151,10 @@ class CrossfadeController(
         if (fading) cancelFade()
         if (active.hasNextMediaItem()) {
             active.seekToNextMediaItem()
+            if (active.playbackState == Player.STATE_IDLE ||
+                active.playbackState == Player.STATE_ENDED
+            ) active.prepare()
+            active.play()
         }
     }
 
@@ -160,12 +172,15 @@ class CrossfadeController(
         finishingFade = true
         val old = active
         val new = incoming
-        new.volume = 1f
-        new.playWhenReady = true
         old.volume = 0f
         old.pause()
+        old.setAudioAttributes(audioAttributes, false)
+        new.setAudioAttributes(audioAttributes, true)
+        new.volume = 1f
+        new.playWhenReady = true
 
         session.setPlayer(new)
+        new.play()
         old.removeListener(activeListener)
         active = new
         incoming = old
