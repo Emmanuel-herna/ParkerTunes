@@ -142,7 +142,7 @@
       };
 
       function createLyrics(track, key) {
-        console.info('ParkerTunes lyrics: creating am-lyrics', {
+        console.info('Plyra lyrics: creating am-lyrics', {
           title: track.title || '', artist: track.artist || '',
           query: track.query || ''
         });
@@ -204,7 +204,7 @@
           try {
             if (element.updateComplete) await element.updateComplete;
           } catch (error) {
-            console.error('ParkerTunes lyrics: component render failed', error);
+            console.error('Plyra lyrics: component render failed', error);
           }
           requestAnimationFrame(() => {
             const root = element.shadowRoot;
@@ -218,13 +218,13 @@
             );
             if (rendered) {
               if (status) status.hidden = true;
-              console.info('ParkerTunes lyrics: component rendered', {
+              console.info('Plyra lyrics: component rendered', {
                 shadowChildren: root.children.length,
                 loading: element.isLoading
               });
             } else {
               showStatus('Lyrics view could not render. The component started, but its content is missing.');
-              console.error('ParkerTunes lyrics: no rendered content in component shadow root', {
+              console.error('Plyra lyrics: no rendered content in component shadow root', {
                 hasShadowRoot: !!root,
                 shadowHtml: root ? root.innerHTML.slice(0, 500) : null,
                 width: element.getBoundingClientRect().width,
@@ -245,7 +245,7 @@
           showStatus(loading
             ? 'Still searching for lyrics for "' + title + '". Check your internet connection and wait a little longer.'
             : 'The lyrics component loaded, but no lyrics were returned for "' + title + '".');
-          console.warn('ParkerTunes lyrics diagnostic:', {
+          console.warn('Plyra lyrics diagnostic:', {
             title,
             artist: track.artist || '',
             isLoading: element.isLoading,
@@ -259,7 +259,7 @@
       }
 
       function applyTrack(track) {
-        console.info('ParkerTunes lyrics: setParkerTrack received', {
+        console.info('Plyra lyrics: setParkerTrack received', {
           id: track.id || '', title: track.title || '', artist: track.artist || '',
           durationMs: track.durationMs || 0
         });
@@ -313,18 +313,18 @@
       window.addEventListener('error', event => {
         const detail = event.message ? String(event.message).slice(0, 140) : 'Unknown JavaScript error';
         showStatus('Lyrics error: ' + detail);
-        console.error('ParkerTunes lyrics error:', event.message || event);
+        console.error('Plyra lyrics error:', event.message || event);
       });
       window.addEventListener('unhandledrejection', event => {
         const detail = event.reason && event.reason.message
           ? String(event.reason.message).slice(0, 140)
           : 'A lyrics request failed.';
         showStatus('Lyrics request error: ' + detail);
-        console.error('ParkerTunes lyrics rejected:', event.reason);
+        console.error('Plyra lyrics rejected:', event.reason);
       });
 
       customElements.whenDefined('am-lyrics').then(() => {
-        console.info('ParkerTunes lyrics: custom element am-lyrics is defined');
+        console.info('Plyra lyrics: custom element am-lyrics is defined');
         componentReady = true;
         if (pendingTrack) {
           const track = pendingTrack;
@@ -338,11 +338,11 @@
   </script>
 
   <script type="module" src="./am-lyrics.js"
-    onerror="console.error('ParkerTunes lyrics: failed to load am-lyrics.js'); document.getElementById('lyrics-status').textContent='Lyrics component failed to load. Please check your connection and reopen the player.'"></script>
+    onerror="console.error('Plyra lyrics: failed to load am-lyrics.js'); document.getElementById('lyrics-status').textContent='Lyrics component failed to load. Please check your connection and reopen the player.'"></script>
   <script>
     setTimeout(() => {
       if (!customElements.get('am-lyrics')) {
-        console.error('ParkerTunes lyrics: am-lyrics was not registered within 8 seconds');
+        console.error('Plyra lyrics: am-lyrics was not registered within 8 seconds');
         const status = document.getElementById('lyrics-status');
         if (status) {
           status.textContent = 'Lyrics component did not load. Please reopen the player.';
