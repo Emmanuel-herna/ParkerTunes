@@ -2750,6 +2750,7 @@ private fun BitChordNowPlayingRoute(
         }
     } else {
         var isLiked by remember(currentTrackId) { mutableStateOf(false) }
+        var showPlayerMenu by remember(currentTrackId) { mutableStateOf(false) }
         LaunchedEffect(currentTrackId, dao) {
             isLiked = withContext(Dispatchers.IO) {
                 runCatching { dao.isFavorite(currentTrackId) }.getOrDefault(false)
@@ -2867,7 +2868,7 @@ private fun BitChordNowPlayingRoute(
                     }
                 },
                 onClearQueue = { player.clearMediaItems() },
-                onOpenMenu = onOpenEqualizer,
+                onOpenMenu = { showPlayerMenu = true },
                 onOpenAlbum = {
                     PlayerPlatform.host.showMessage("Album pages are not linked to the current queue item yet.")
                 },
@@ -2887,6 +2888,35 @@ private fun BitChordNowPlayingRoute(
                 onDismissLyricsOffset = {},
                 windowWidth = maxWidth,
                 windowHeight = maxHeight,
+                menuOpen = { showPlayerMenu },
+            )
+        }
+
+        if (showPlayerMenu) {
+            AlertDialog(
+                onDismissRequest = { showPlayerMenu = false },
+                title = { Text("Player options") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(
+                            onClick = {
+                                showPlayerMenu = false
+                                onOpenEqualizer()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Open equalizer") }
+                        TextButton(
+                            onClick = {
+                                showPlayerMenu = false
+                                onOpenTogether()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Listen Together") }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showPlayerMenu = false }) { Text("Close") }
+                },
             )
         }
     }
