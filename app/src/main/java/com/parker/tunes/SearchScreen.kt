@@ -151,6 +151,8 @@ fun SearchScreen(
     val downloadProgress by downloads.progress.collectAsState()
     val playlists by remember(dao) { dao.playlists().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
     val favorites by remember(dao) { dao.favorites().flowOn(Dispatchers.IO) }.collectAsState(initial = emptyList())
+    val downloadsBySongId = remember(savedDownloads) { savedDownloads.associateBy { it.songId } }
+    val favoriteSongIds = remember(favorites) { favorites.mapTo(hashSetOf()) { it.songId } }
     val glassIntensity by settingsRepository.glassIntensity.collectAsState(initial = 55)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -458,13 +460,13 @@ fun SearchScreen(
                             )
                         }
                         items(results.songs, key = { it.id }) { song ->
-                            val songDownload = savedDownloads.firstOrNull { it.songId == song.id }
+                            val songDownload = downloadsBySongId[song.id]
                             SearchResultRow(
                                 song = song,
                                 download = songDownload,
                                 progress = downloadProgress[song.id],
                                 playlists = playlists,
-                                isFavorite = favorites.any { it.songId == song.id },
+                                isFavorite = song.id in favoriteSongIds,
                                 glassIntensity = glassIntensity,
                                 hazeState = hazeState,
                                 onAction = { action ->
