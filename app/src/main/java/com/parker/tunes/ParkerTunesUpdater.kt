@@ -98,7 +98,7 @@ internal fun ParkerTunesUpdateController() {
         ) {
             runCatching {
                 permissionLauncher.launch(
-                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:\${context.packageName}"))
+                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
                 )
             }.onFailure {
                 errorMessage = "Enable permission to install apps from ParkerTunes in Android settings."
@@ -132,8 +132,8 @@ internal fun ParkerTunesUpdateController() {
                 release = latest
                 showDialog = true
                 errorMessage = null
-                statusMessage = "Version \${latest.versionName} is ready to install."
-                ParkerTunesUpdateEvents.setStatus("Update \${latest.versionName} is available.")
+                statusMessage = "Version ${latest.versionName} is ready to install."
+                ParkerTunesUpdateEvents.setStatus("Update ${latest.versionName} is available.")
             } else if (manual) {
                 ParkerTunesUpdateEvents.setStatus("ParkerTunes is up to date.")
             }
@@ -150,13 +150,13 @@ internal fun ParkerTunesUpdateController() {
             title = { Text("ParkerTunes update available") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Version \${latest.versionName} is ready.")
+                    Text("Version ${latest.versionName} is ready.")
                     if (latest.releaseNotes.isNotBlank()) Text(latest.releaseNotes)
                     if (downloading) {
                         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                         val label = if (total > 0L) {
-                            "\${(progress * 100).toInt()}% · \${formatUpdateBytes(received)} of \${formatUpdateBytes(total)}"
-                        } else "\${formatUpdateBytes(received)} downloaded"
+                            "${(progress * 100).toInt()}% · ${formatUpdateBytes(received)} of ${formatUpdateBytes(total)}"
+                        } else "${formatUpdateBytes(received)} downloaded"
                         Text(label)
                     }
                     statusMessage?.let { Text(it) }
@@ -180,7 +180,7 @@ internal fun ParkerTunesUpdateController() {
                                 statusMessage = "Downloading update…"
                                 val destination = File(
                                     File(context.cacheDir, "updates").apply { mkdirs() },
-                                    "ParkerTunes-\${latest.versionName}.apk"
+                                    "ParkerTunes-${latest.versionName}.apk"
                                 )
                                 runCatching {
                                     downloadAndVerifyRelease(latest, destination) { bytes, size ->
@@ -234,7 +234,7 @@ private fun fetchLatestParkerTunesRelease(): ParkerTunesRelease {
     }
     try {
         if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-            throw IOException("GitHub Releases returned HTTP \${connection.responseCode}.")
+            throw IOException("GitHub Releases returned HTTP ${connection.responseCode}.")
         }
         val json = connection.inputStream.bufferedReader().use { JSONObject(it.readText()) }
         val code = json.optLong("versionCode", -1L)
@@ -267,7 +267,7 @@ private suspend fun downloadAndVerifyRelease(
     }
     try {
         if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-            throw IOException("APK download returned HTTP \${connection.responseCode}.")
+            throw IOException("APK download returned HTTP ${connection.responseCode}.")
         }
         val expected = connection.contentLengthLong.coerceAtLeast(0L)
         var received = 0L
@@ -309,7 +309,7 @@ private suspend fun downloadAndVerifyRelease(
 }
 
 private fun openAndroidInstaller(context: Context, apkFile: File) {
-    val uri = FileProvider.getUriForFile(context, "\${context.packageName}.fileprovider", apkFile)
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", apkFile)
     val intent = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(uri, "application/vnd.android.package-archive")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
