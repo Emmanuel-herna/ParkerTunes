@@ -218,8 +218,8 @@ fun HomeScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().background(Color.Black).haze(state = hazeState),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 196.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            contentPadding = PaddingValues(top = 8.dp, bottom = 132.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             item(key = "home_top_bar") {
                 Row(
@@ -241,20 +241,23 @@ fun HomeScreen(
                 }
             }
 
-            item(key = "quick_picks") {
-                QuickPicksSection(
-                    songs = recommendationState.songs.take(5),
-                    loading = recommendationState.loading,
-                    onPlay = onPlay, onQueue = onQueue, onDownload = downloads::enqueue,
-                    isFavorite = { it.id in favoriteIds }, onFavorite = toggleFavorite
+            item(key = "recently_played_feature") {
+                val featuredSong = recent.firstOrNull()?.let {
+                    Song(it.songId, it.title.ifBlank { it.songId }, it.artist, it.coverUrl)
+                }
+                FeaturedRecentCard(
+                    song = featuredSong,
+                    sectionLabel = "Recently played",
+                    onPlay = onPlay,
+                    onSearch = onSearch
                 )
             }
 
             item(key = "made_for_you") {
-                Column(Modifier.padding(top = 5.dp)) {
+                Column(Modifier.padding(top = 2.dp)) {
                     HomeSectionHeading("Made for you")
                     RecommendationShelf(
-                        songs = recommendationState.songs.drop(5).take(3),
+                        songs = recommendationState.songs.take(9),
                         loading = recommendationState.loading,
                         loadingMore = false,
                         listState = rememberLazyListState(),
@@ -263,7 +266,8 @@ fun HomeScreen(
                         onQueue = onQueue,
                         onDownload = downloads::enqueue,
                         isFavorite = { it.id in favoriteIds },
-                        onFavorite = toggleFavorite
+                        onFavorite = toggleFavorite,
+                        reduceMotion = reduceMotion
                     )
                 }
             }
@@ -297,9 +301,10 @@ fun HomeScreen(
             }
 
             item(key = "trending") {
-                SongShelfSection("Trending", trending, currentSongId, onPlay, onQueue,
+                SongShelfSection("All hits", trending, currentSongId, onPlay, onQueue,
                     downloads::enqueue, { it.id in favoriteIds }, toggleFavorite,
-                    emptyMessage = if (discoveryLoaded) "Trending tracks aren't available right now." else "Loading trending tracks…")
+                    emptyMessage = if (discoveryLoaded) "Hit tracks aren't available right now." else "Loading the biggest hits…",
+                    subtitle = "THE BIGGEST HITS OF ALL TIMES!")
             }
 
             if (favorites.isNotEmpty()) {
@@ -377,10 +382,11 @@ private fun QuickPickRow(
 private fun SongShelfSection(
     title: String, songs: List<Song>, currentSongId: String?,
     onPlay: (Song) -> Unit, onQueue: (Song, Boolean) -> Unit, onDownload: (Song) -> Unit,
-    isFavorite: (Song) -> Boolean, onFavorite: (Song) -> Unit, emptyMessage: String? = null
+    isFavorite: (Song) -> Boolean, onFavorite: (Song) -> Unit, emptyMessage: String? = null,
+    subtitle: String? = null
 ) {
     Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp)) {
-        HomeSectionHeading(title)
+        HomeSectionHeading(title, subtitle)
         if (songs.isEmpty()) {
             if (emptyMessage != null) Text(emptyMessage, Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
                 color = Color(0xFF888888), fontSize = 12.sp)
@@ -672,16 +678,24 @@ private fun RecommendationGridTile(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.90f else 1f,
-        animationSpec = if (reduceMotion) tween(durationMillis = 80) else spring(dampingRatio = 0.08f, stiffness = 650f),
+        targetValue = if (pressed) 0.94f else 1f,
+        animationSpec = if (reduceMotion) tween(durationMillis = 80) else spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
         label = "recommendationTilePress"
     )
     var menu by remember(song.id) { mutableStateOf(false) }
-    Column(
-        Modifier.width(width).graphicsLayer { scaleX = scale; scaleY = scale }
-            .combinedClickable(interactionSource = interaction, indication = null, onClick = onClick, onLongClick = { menu = true }),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+    Box(
+        Modifier.width(width).aspectRatio(1f)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+                onLongClick = { menu = true }
+            ),
+        contentAlignment = Alignment.Center
     ) {
         Box(
             Modifier.fillMaxWidth(0.94f).aspectRatio(1f)
@@ -701,21 +715,9 @@ private fun RecommendationGridTile(
                 Icon(Icons.Default.MusicNote, contentDescription = null,
                     tint = Color(0xFFBDBDBD), modifier = Modifier.size(30.dp))
             }
-            SongActionMenu(menu, { menu = false }, song, { onClick() }, onQueue,
-                onDownload, favorite, onFavorite)
         }
-        Text(
-            song.title.ifBlank { "Unknown track" },
-            color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-            maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp)
-        )
-        Text(
-            song.artist.ifBlank { "Unknown artist" },
-            color = Color(0xFF8F8F8F), fontSize = 10.sp,
-            maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp)
-        )
+        SongActionMenu(menu, { menu = false }, song, { onClick() }, onQueue,
+            onDownload, favorite, onFavorite)
     }
 }
 
