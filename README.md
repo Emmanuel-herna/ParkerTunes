@@ -1,4 +1,4 @@
-# ParkerTunes
+# Plyra
 
 A native Android music player built with Kotlin, Jetpack Compose, Media3 ExoPlayer, and Room.
 
@@ -37,9 +37,9 @@ Only play audio you have permission to access. Do not bypass access controls.
 
 ## Spotify metadata (optional)
 
-ParkerTunes can use Spotify catalogue search metadata and artwork as an optional search fallback. Audio playback remains on the existing YouTube Music/NewPipe provider. Configure the Spotify Client ID and Client Secret in **Settings → Spotify metadata**. Credentials are stored locally in DataStore for this personal-use build; secrets embedded in an Android app can be extracted, so move this provider behind a backend before distributing the app publicly. Empty credentials silently disable the Spotify fallback.
+Plyra can use Spotify catalogue search metadata and artwork as an optional search fallback. Audio playback remains on the existing YouTube Music/NewPipe provider. Configure the Spotify Client ID and Client Secret in **Settings → Spotify metadata**. Credentials are stored locally in DataStore for this personal-use build; secrets embedded in an Android app can be extracted, so move this provider behind a backend before distributing the app publicly. Empty credentials silently disable the Spotify fallback.
 
-Spotify attribution: Search metadata and artwork © Spotify. Spotify is a trademark of Spotify AB. ParkerTunes is not affiliated with Spotify. Spotify-sourced search rows include a link back to the matching Spotify track. Use Spotify metadata and artwork in accordance with the [Spotify Developer Policy](https://developer.spotify.com/policy) and [Branding Guidelines](https://developer.spotify.com/documentation/design).
+Spotify attribution: Search metadata and artwork © Spotify. Spotify is a trademark of Spotify AB. Plyra is not affiliated with Spotify. Spotify-sourced search rows include a link back to the matching Spotify track. Use Spotify metadata and artwork in accordance with the [Spotify Developer Policy](https://developer.spotify.com/policy) and [Branding Guidelines](https://developer.spotify.com/documentation/design).
 
 ## Lyrics
 
@@ -55,7 +55,7 @@ The Go WebSocket service in [backend/](backend/) is a separate backend implement
 
 The GitHub Actions workflow at `.github/workflows/android-build.yml` builds a debug APK whenever code is pushed to `main`, and can also be started manually from the repository's Actions tab using **Android build** → **Run workflow**.
 
-When a run finishes successfully, open the workflow run, scroll to **Artifacts**, and download **ParkerTunes-debug**. Extract the ZIP on your Android phone and open `app-debug.apk` to install it. Android may ask you to allow your browser or file manager to install apps from that source. Only install APKs built from this repository that you trust.
+When a run finishes successfully, open the workflow run, scroll to **Artifacts**, and download **Plyra-debug**. Extract the ZIP on your Android phone and open `app-debug.apk` to install it. Android may ask you to allow your browser or file manager to install apps from that source. Only install APKs built from this repository that you trust.
 
 ### Latest verified build
 
