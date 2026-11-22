@@ -81,6 +81,7 @@
       let pendingTrack = null;
       let componentReady = false;
       let diagnosticsTimer = null;
+      let viewportHeightPx = 280;
 
       const showStatus = message => {
         if (!status) return;
@@ -137,8 +138,8 @@
         element.style.setProperty('width', '100%', 'important');
         // A pixel fallback prevents a zero-height host before Android sends
         // its measured WebView viewport through setParkerViewportHeight().
-        element.style.setProperty('height', '100%', 'important');
-        element.style.setProperty('min-height', '280px', 'important');
+        element.style.setProperty('height', viewportHeightPx + 'px', 'important');
+        element.style.setProperty('min-height', viewportHeightPx + 'px', 'important');
         element.style.setProperty('box-sizing', 'border-box', 'important');
         document.body.appendChild(element);
 
@@ -240,6 +241,7 @@
       // of relying on 100vh or percentage-height propagation.
       window.setParkerViewportHeight = height => {
         const value = Math.max(1, Math.round(Number(height) || 0));
+        viewportHeightPx = value;
         const px = value + 'px';
         document.documentElement.style.setProperty('height', px);
         document.body.style.setProperty('height', px);
