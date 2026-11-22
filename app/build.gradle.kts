@@ -12,6 +12,8 @@ plugins {
 
 val ciKeystorePath = System.getenv("PARKERTUNES_KEYSTORE_PATH")
 val ciKeystorePassword = System.getenv("PARKERTUNES_KEYSTORE_PASSWORD")
+val appVersionCode = System.getenv("PARKERTUNES_VERSION_CODE")?.toIntOrNull() ?: 1
+val appVersionName = System.getenv("PARKERTUNES_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.0.0"
 
 android {
     namespace = "com.parker.tunes"
@@ -21,8 +23,8 @@ android {
         applicationId = "com.parker.tunes"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
     }
     signingConfigs {
         if (!ciKeystorePath.isNullOrBlank()) {
@@ -46,6 +48,12 @@ android {
     kotlinOptions { jvmTarget = "17" }
     testOptions { unitTests.isIncludeAndroidResources = true }
     buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            if (!ciKeystorePath.isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("ciDebug")
+            }
+        }
         getByName("debug") {
             if (!ciKeystorePath.isNullOrBlank()) {
                 signingConfig = signingConfigs.getByName("ciDebug")
