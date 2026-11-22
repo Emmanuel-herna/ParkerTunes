@@ -2780,15 +2780,9 @@ private fun BitChordNowPlayingRoute(
         val sharedLyrics = remember(lyricLines) {
             lyricLines.map { it.toBitChordLyricLine() }
         }
-        val providerStates = remember(lyricsLoading, sharedLyrics.isNotEmpty()) {
-            BitChordLyricsSource.offered.associateWith {
-                when {
-                    lyricsLoading -> BitChordLyricsProviderState.FETCHING
-                    sharedLyrics.isNotEmpty() -> BitChordLyricsProviderState.FOUND
-                    else -> BitChordLyricsProviderState.NOT_FOUND
-                }
-            }
-        }
+        // AM Lyrics uses a different provider registry. Do not mark BitChord
+        // providers as found or fetching when Plyra has not queried those sources.
+        val providerStates = emptyMap<BitChordLyricsSource, BitChordLyricsProviderState>()
         val latestSong by rememberUpdatedState(currentSong)
         val durationMs = progress.durationMs.coerceAtLeast(0L)
         val currentPosition = progress.positionMs.coerceAtLeast(0L)
@@ -2886,7 +2880,7 @@ private fun BitChordNowPlayingRoute(
                 lyricsSource = null,
                 lyricsProviderStates = providerStates,
                 onSelectLyricsProvider = {
-                    PlayerPlatform.host.showMessage("Choose lyrics sources from Plyra's lyrics settings.")
+                    PlayerPlatform.host.showMessage("Manual provider selection is not connected to Plyra's lyrics service yet.")
                 },
                 lyricsUnavailable = sharedLyrics.isEmpty() && !lyricsLoading,
                 lyricsOffsetOpen = false,
