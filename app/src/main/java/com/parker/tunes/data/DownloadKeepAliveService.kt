@@ -15,7 +15,7 @@ class DownloadKeepAliveService : Service() {
         super.onCreate()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID, "ParkerTunes downloads", NotificationManager.IMPORTANCE_LOW
+                CHANNEL_ID, "Plyra downloads", NotificationManager.IMPORTANCE_LOW
             )
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
@@ -24,7 +24,7 @@ class DownloadKeepAliveService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("ParkerTunes")
+            .setContentTitle("Plyra")
             .setContentText("Downloading songs")
             .setOngoing(true)
             .setOnlyAlertOnce(true)
