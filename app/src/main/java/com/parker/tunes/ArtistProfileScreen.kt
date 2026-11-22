@@ -247,7 +247,7 @@ fun ArtistProfileScreen(
                         when (expandedSection) {
                             "songs" -> items(data.topSongs, key = { it.id }) { song ->
                                 Column(
-                                    Modifier.fillMaxWidth().clickable { onPlay(song) }
+                                    Modifier.fillMaxWidth().clickable { onPlayFromQueue(song, data.topSongs) }
                                         .clip(RoundedCornerShape(12.dp)).background(ArtistPanel).padding(10.dp)
                                 ) {
                                     ArtistCover(song.coverUrl, song.title,
