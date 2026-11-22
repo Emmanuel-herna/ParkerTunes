@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,8 +19,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.ExperimentalHazeApi
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.haze
 import dev.chrisbanes.haze.hazeChild
 
@@ -71,60 +70,57 @@ fun Modifier.liquidGlass(
         )
 }
 
-@OptIn(ExperimentalHazeApi::class)
 @Composable
 fun GlassIntensityPreview(intensity: Int) {
-    val hazeState = remember { HazeState() }
     val fraction = intensity.coerceIn(0, 100) / 100f
-    val blurRadius = (4f + 36f * fraction).dp
-    val tintAlpha = 0.08f + 0.37f * fraction
+    val safeAlpha = (0.08f + 0.37f * fraction).coerceIn(0.08f, 0.45f)
     val shape = RoundedCornerShape(18.dp)
 
+    // This is only a settings preview. Use a static frosted sample instead of
+    // running a second live backdrop-blur pipeline while the settings list scrolls.
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(92.dp)
             .clip(shape)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            Color(0xFF6B4C9A),
-                            Color(0xFF286D83),
-                            Color(0xFFB66B6B),
-                            Color(0xFF25213A)
-                        )
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        Color(0xFF6B4C9A),
+                        Color(0xFF286D83),
+                        Color(0xFFB66B6B),
+                        Color(0xFF25213A)
                     )
                 )
-                .haze(state = hazeState)
-        ) {
-            Box(
-                Modifier
-                    .size(56.dp)
-                    .align(Alignment.CenterStart)
-                    .offset(x = 22.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White.copy(alpha = 0.24f))
             )
-            Box(
-                Modifier
-                    .size(68.dp)
-                    .align(Alignment.CenterEnd)
-                    .offset(x = (-24).dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Color(0xFFFFC5A8).copy(alpha = 0.55f))
-            )
-        }
-
+    ) {
+        Box(
+            Modifier
+                .size(56.dp)
+                .align(Alignment.CenterStart)
+                .offset(x = 22.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White.copy(alpha = 0.24f))
+        )
+        Box(
+            Modifier
+                .size(68.dp)
+                .align(Alignment.CenterEnd)
+                .offset(x = (-24).dp)
+                .clip(CircleShape)
+                .background(Color(0xFFFFC5A8).copy(alpha = 0.55f))
+        )
         Row(
             modifier = Modifier
                 .align(Alignment.Center)
                 .fillMaxWidth(0.90f)
                 .height(54.dp)
-                .liquidGlass(hazeState, blurRadius, tintAlpha, RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color.White.copy(alpha = safeAlpha))
+                .border(
+                    BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                    RoundedCornerShape(18.dp)
+                )
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -136,8 +132,8 @@ fun GlassIntensityPreview(intensity: Int) {
                     .background(Color.White.copy(alpha = 0.22f))
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("ParkerTunes", color = Color.White, style = androidx.compose.material3.MaterialTheme.typography.labelLarge)
-                Text("Liquid glass preview", color = Color.White.copy(alpha = 0.76f), style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+                Text("ParkerTunes", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                Text("Liquid glass preview", color = Color.White.copy(alpha = 0.76f), style = MaterialTheme.typography.labelSmall)
             }
             Text("▶", color = Color.White)
         }
