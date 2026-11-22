@@ -1,4 +1,4 @@
-# ParkerTunes Listen Together Go service
+# Plyra Listen Together Go service
 
 This directory contains a standalone Go WebSocket/HTTP implementation for Listen Together. It authenticates Google ID tokens, keeps party membership/playback/queue state in process memory, and lets each client resolve its own audio stream.
 
