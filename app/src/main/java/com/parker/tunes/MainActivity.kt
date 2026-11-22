@@ -140,7 +140,14 @@ import java.io.File
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { ParkerTunesTheme { ParkerTunesRoot() } }
+        setContent {
+            ParkerTunesTheme {
+                Box(Modifier.fillMaxSize()) {
+                    ParkerTunesRoot()
+                    ParkerTunesUpdateController()
+                }
+            }
+        }
         // Wait until the decor view is attached so its supported display modes are available.
         window.decorView.post {
             val savedRate = getSharedPreferences("parker_tunes_settings", MODE_PRIVATE)
