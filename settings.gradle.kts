@@ -11,3 +11,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Plyra"
 include(":app")
+include(":bitchord-shared")
+include(":bitchord-shared-ui")
