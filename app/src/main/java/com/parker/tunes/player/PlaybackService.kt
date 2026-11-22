@@ -115,8 +115,8 @@ class PlaybackService : MediaSessionService() {
 
         // Both players share the main application looper, allowing the single
         // MediaSession to move safely between them after each completed fade.
-        val active = buildPlayer(audioAttributes)
-        val spare = buildPlayer(audioAttributes)
+        val active = buildPlayer(audioAttributes, handleAudioFocus = true)
+        val spare = buildPlayer(audioAttributes, handleAudioFocus = false)
 
         val effects = EqualizerManager(this)
         equalizerManager = effects
@@ -141,6 +141,7 @@ class PlaybackService : MediaSessionService() {
             spare = spare,
             session = session,
             preferences = settingsPrefs,
+            audioAttributes = audioAttributes,
             onActivePlayerChanged = { nowActive ->
                 effects.attach(nowActive.audioSessionId)
                 WidgetProvider.update(this, nowActive)
@@ -162,7 +163,10 @@ class PlaybackService : MediaSessionService() {
         WidgetProvider.update(this, active)
     }
 
-    private fun buildPlayer(audioAttributes: AudioAttributes): ExoPlayer {
+    private fun buildPlayer(
+        audioAttributes: AudioAttributes,
+        handleAudioFocus: Boolean
+    ): ExoPlayer {
         val silenceProcessor = SilenceSkippingAudioProcessor().apply {
             setEnabled(settingsPrefs.getBoolean("skip_silence", false))
         }
@@ -179,7 +183,7 @@ class PlaybackService : MediaSessionService() {
             }
         }
         return ExoPlayer.Builder(this, renderersFactory)
-            .setAudioAttributes(audioAttributes, true)
+            .setAudioAttributes(audioAttributes, handleAudioFocus)
             .setHandleAudioBecomingNoisy(true)
             .build()
     }
@@ -229,6 +233,14 @@ class PlaybackService : MediaSessionService() {
         player.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 if (mediaSession?.player === player) effects.attach(audioSessionId)
+            }
+
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (mediaSession?.player === player && !playWhenReady &&
+                    reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM
+                ) {
+                    handlePlaybackEnded(player)
+                }
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -350,14 +362,16 @@ class PlaybackService : MediaSessionService() {
         val nextIndex = activePlayer.currentMediaItemIndex + 1
         if (nextIndex in 0 until activePlayer.mediaItemCount) {
             activePlayer.seekToNextMediaItem()
-            activePlayer.prepare()
+            if (activePlayer.playbackState == Player.STATE_IDLE ||
+                activePlayer.playbackState == Player.STATE_ENDED
+            ) activePlayer.prepare()
             activePlayer.play()
         } else {
-            maybeAppendRelated(activePlayer)
+            maybeAppendRelated(activePlayer, resumeAfterAppend = true)
         }
     }
 
-    private fun maybeAppendRelated(player: ExoPlayer) {
+    private fun maybeAppendRelated(player: ExoPlayer, resumeAfterAppend: Boolean = false) {
         val prefs = settingsPrefs
         if (!prefs.getBoolean("autoplay_similar", true) || autoplayResolving ||
             player.repeatMode != Player.REPEAT_MODE_OFF ||
@@ -436,11 +450,17 @@ class PlaybackService : MediaSessionService() {
                         }.getOrNull()
                     }
                 }
-                if (mediaItems.isNotEmpty()) {
+                if (mediaItems.isNotEmpty() && mediaSession?.player === player &&
+                    player.currentMediaItem?.mediaId == songId
+                ) {
                     player.addMediaItems(mediaItems)
-                    if (player.playbackState == Player.STATE_ENDED) {
+                    if (resumeAfterAppend &&
+                        player.currentMediaItemIndex < player.mediaItemCount - 1
+                    ) {
                         player.seekToNextMediaItem()
-                        player.prepare()
+                        if (player.playbackState == Player.STATE_IDLE ||
+                            player.playbackState == Player.STATE_ENDED
+                        ) player.prepare()
                         player.play()
                     }
                 }
