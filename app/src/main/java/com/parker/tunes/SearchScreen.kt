@@ -75,6 +75,10 @@ import com.parker.tunes.model.SearchResult
 import com.parker.tunes.model.Song
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.flowOn
@@ -198,20 +202,38 @@ fun SearchScreen(
         try {
             val found = withContext(Dispatchers.IO) {
                 if (activeSource == "YouTube") {
-                    val youtubeResults = api.search(clean)
                     val clientId = spotifyClientId
                     val clientSecret = spotifyClientSecret
-                    if (!spotifyEnabled || clientId.isBlank() || clientSecret.isBlank()) {
+                    val (youtubeResults, spotifyTracks) = if (
+                        !spotifyEnabled || clientId.isBlank() || clientSecret.isBlank()
+                    ) {
+                        api.search(clean) to emptyList()
+                    } else {
+                        // Start YouTube and optional Spotify metadata searches together.
+                        coroutineScope {
+                            val youtubeTask = async(Dispatchers.IO) { api.search(clean) }
+                            val spotifyTask = async(Dispatchers.IO) {
+                                try {
+                                    spotifyProvider.searchTracks(
+                                        query = clean, limit = 10,
+                                        clientId = clientId, clientSecret = clientSecret
+                                    )
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    emptyList()
+                                }
+                            }
+                            youtubeTask.await() to spotifyTask.await()
+                        }
+                    }
+
+                    if (spotifyTracks.isEmpty()) {
                         youtubeResults
                     } else {
-                        // Spotify is an optional metadata fallback. Any failure leaves the
-                        // original YouTube Music response untouched.
-                        val spotifyTracks = spotifyProvider.searchTracks(
-                            query = clean, limit = 10, clientId = clientId, clientSecret = clientSecret
-                        )
                         val youtubeSongs = youtubeResults.songs.toMutableList()
-                        val spotifyOnly = mutableListOf<com.parker.tunes.model.Song>()
-                        spotifyTracks.forEach { track ->
+                        val unresolvedIndexes = mutableListOf<Int>()
+                        spotifyTracks.forEachIndexed { index, track ->
                             val artistText = track.artists.joinToString(", ")
                             val key = normalizeTrackMetadata(track.name, artistText)
                             val existingIndex = youtubeSongs.indexOfFirst { song ->
@@ -222,40 +244,60 @@ fun SearchScreen(
                                     coverUrl = track.artworkUrl ?: youtubeSongs[existingIndex].coverUrl,
                                     spotifyUrl = track.spotifyUrl
                                 )
-                            } else if (spotifyOnly.size < 5) {
-                                val resolved = try {
-                                    withTimeout(5_000L) {
-                                        val ytCandidates = api.search("${track.name} $artistText").songs
-                                        ytCandidates.firstOrNull { candidate ->
-                                            !isLikelyMix(candidate.title, candidate.durationSec) &&
-                                                normalizeTrackMetadata(candidate.title, candidate.artist) == key
-                                        } ?: ytCandidates.firstOrNull { candidate ->
-                                            !isLikelyMix(candidate.title, candidate.durationSec) &&
-                                                candidate.durationSec in 30L..720L
+                            } else if (unresolvedIndexes.size < 2) {
+                                unresolvedIndexes += index
+                            }
+                        }
+
+                        // Resolve at most two Spotify-only matches concurrently. The old
+                        // loop could wait up to five seconds for each of five tracks.
+                        val spotifyOnly = coroutineScope {
+                            unresolvedIndexes.map { index ->
+                                val track = spotifyTracks[index]
+                                val artistText = track.artists.joinToString(", ")
+                                val key = normalizeTrackMetadata(track.name, artistText)
+                                async(Dispatchers.IO) {
+                                    val resolved = try {
+                                        withTimeout(3_500L) {
+                                            val candidates = api.search("${track.name} $artistText").songs
+                                            candidates.firstOrNull { candidate ->
+                                                !isLikelyMix(candidate.title, candidate.durationSec) &&
+                                                    normalizeTrackMetadata(candidate.title, candidate.artist) == key
+                                            } ?: candidates.firstOrNull { candidate ->
+                                                !isLikelyMix(candidate.title, candidate.durationSec) &&
+                                                    candidate.durationSec in 30L..720L
+                                            }
                                         }
+                                    } catch (_: TimeoutCancellationException) {
+                                        null
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (_: Exception) {
+                                        null
                                     }
-                                } catch (cancelled: CancellationException) {
-                                    throw cancelled
-                                } catch (_: Exception) {
-                                    null
+                                    resolved?.let { track to it }
                                 }
-                                if (resolved != null && youtubeSongs.none { it.id == resolved.id } &&
-                                    spotifyOnly.none { it.id == resolved.id }
-                                ) {
-                                    spotifyOnly += resolved.copy(
-                                        title = track.name,
-                                        artist = artistText.ifBlank { resolved.artist },
-                                        coverUrl = track.artworkUrl ?: resolved.coverUrl,
-                                        durationSec = if (track.durationMs > 0L) track.durationMs / 1000L else resolved.durationSec,
-                                        album = track.albumName,
-                                        spotifyUrl = track.spotifyUrl
-                                    )
+                            }.awaitAll().mapNotNull { match ->
+                                match?.let { (track, song) ->
+                                    if (youtubeSongs.none { it.id == song.id }) {
+                                        val artistText = track.artists.joinToString(", ")
+                                        song.copy(
+                                            title = track.name,
+                                            artist = artistText.ifBlank { song.artist },
+                                            coverUrl = track.artworkUrl ?: song.coverUrl,
+                                            durationSec = if (track.durationMs > 0L) track.durationMs / 1000L else song.durationSec,
+                                            album = track.albumName,
+                                            spotifyUrl = track.spotifyUrl
+                                        )
+                                    } else null
                                 }
                             }
                         }
                         youtubeResults.copy(songs = (youtubeSongs + spotifyOnly).distinctBy { it.id })
                     }
-                } else SearchResult(songs = addonApi?.searchAddon(activeSource, clean).orEmpty())
+                } else {
+                    SearchResult(songs = addonApi?.searchAddon(activeSource, clean).orEmpty())
+                }
             }
             results = found
             if (found.songs.isNotEmpty() || found.artists.isNotEmpty()) recentVm.recordQuery(clean, if (found.songs.isNotEmpty()) "Song" else "Artist")
