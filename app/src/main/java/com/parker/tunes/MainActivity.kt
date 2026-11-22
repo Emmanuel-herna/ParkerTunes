@@ -2063,6 +2063,7 @@ fun LibraryScreen(
         .collectAsState(initial = emptyList())
     val downloads by remember(dao) { dao.downloads().flowOn(Dispatchers.IO) }
         .collectAsState(initial = emptyList())
+    val downloadProgress by downloadManager.progress.collectAsState()
     var showDeleteAllDownloads by remember { mutableStateOf(false) }
     val tracksFlow: kotlinx.coroutines.flow.Flow<List<com.parker.tunes.data.PlaylistTrackEntity>> = remember(selectedPlaylist?.id) {
         selectedPlaylist?.let { dao.playlistTracks(it.id) }
@@ -2180,28 +2181,37 @@ fun LibraryScreen(
                     }
                 }
                 else -> {
-                    val complete = downloads.filter { it.status == com.parker.tunes.data.DownloadEntity.STATUS_COMPLETE && File(it.filePath).isFile }
-                    val totalBytes = complete.sumOf { it.fileSizeBytes }
+                    val complete = downloads.filter { item ->
+                        val file = File(item.filePath)
+                        item.status == com.parker.tunes.data.DownloadEntity.STATUS_COMPLETE &&
+                            file.isFile && file.length() > 0L
+                    }
+                    val totalBytes = complete.sumOf { it.fileSizeBytes.takeIf { size -> size > 0L } ?: File(it.filePath).length() }
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("${complete.size} songs · ${formatFileSize(totalBytes)}",
+                                Text("${complete.size} downloaded · ${downloads.count { it.status == com.parker.tunes.data.DownloadEntity.STATUS_DOWNLOADING }} downloading · ${formatFileSize(totalBytes)}",
                                     color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
                                 Text("Saved on this device", color = Muted, fontSize = 12.sp)
                             }
-                            TextButton(onClick = { showDeleteAllDownloads = true }, enabled = complete.isNotEmpty()) {
+                            TextButton(onClick = { showDeleteAllDownloads = true }, enabled = downloads.isNotEmpty()) {
                                 Text("Delete all")
                             }
                         }
-                        if (complete.isEmpty()) {
+                        if (downloads.isEmpty()) {
                             EmptyState(Icons.Default.Download, "No downloads yet", "Songs you download will appear here.")
                         } else {
                             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(complete, key = { it.songId }) { item ->
+                                items(downloads.sortedByDescending { if (it.downloadedAt > 0L) it.downloadedAt else Long.MAX_VALUE }, key = { it.songId }) { item ->
+                                    val localFile = File(item.filePath)
+                                    val hasAudio = item.status == com.parker.tunes.data.DownloadEntity.STATUS_COMPLETE &&
+                                        localFile.isFile && localFile.length() > 0L
+                                    val isDownloading = item.status == com.parker.tunes.data.DownloadEntity.STATUS_DOWNLOADING
+                                    val percent = downloadProgress[item.songId]
                                     Row(
                                         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
                                             .background(MaterialTheme.colorScheme.surface)
-                                            .clickable {
+                                            .clickable(enabled = hasAudio) {
                                                 onPlay(Song(item.songId, item.title, item.artist, item.coverUrl, item.durationSec))
                                             }.padding(10.dp),
                                         verticalAlignment = Alignment.CenterVertically
@@ -2209,23 +2219,68 @@ fun LibraryScreen(
                                         Box(Modifier.size(52.dp).clip(RoundedCornerShape(9.dp))
                                             .background(Panel), contentAlignment = Alignment.Center) {
                                             if (item.coverUrl.isNullOrBlank()) Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.primary)
-                                            else AsyncImage(model = item.coverUrl, contentDescription = "Downloaded cover",
+                                            else AsyncImage(model = item.coverUrl, contentDescription = "Download cover",
                                                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                            if (isDownloading) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(25.dp),
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    strokeWidth = 2.5.dp
+                                                )
+                                            } else if (hasAudio) {
+                                                Icon(Icons.Default.CheckCircle, "Downloaded",
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.align(Alignment.BottomEnd).size(19.dp))
+                                            } else {
+                                                Icon(Icons.Default.ErrorOutline, "Download failed",
+                                                    tint = Color(0xFFFF8A80),
+                                                    modifier = Modifier.align(Alignment.BottomEnd).size(19.dp))
+                                            }
                                         }
-                                        Column(Modifier.weight(1f).padding(start = 11.dp)) {
-                                            Text(item.title, color = MaterialTheme.colorScheme.onSurface,
+                                        Column(Modifier.weight(1f).padding(start = 11.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            Text(item.title.ifBlank { item.songId }, color = MaterialTheme.colorScheme.onSurface,
                                                 fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                            Text("${item.artist} · ${formatFileSize(item.fileSizeBytes)}",
-                                                color = Muted, fontSize = 11.sp, maxLines = 1)
+                                            val detail = when {
+                                                hasAudio -> "${item.artist} · ${formatFileSize(item.fileSizeBytes)}"
+                                                isDownloading -> "${item.artist} · ${percent?.let { "$it%" } ?: "Preparing download…"}"
+                                                else -> item.errorMessage?.takeIf { it.isNotBlank() }
+                                                    ?: if (item.status == com.parker.tunes.data.DownloadEntity.STATUS_COMPLETE) "Downloaded file is missing. Retry." else "Download failed. Tap retry."
+                                            }
+                                            Text(detail, color = when {
+                                                hasAudio -> Muted
+                                                isDownloading -> MaterialTheme.colorScheme.primary
+                                                else -> Color(0xFFFF8A80)
+                                            }, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                         }
-                                        IconButton(onClick = { scope.launch(Dispatchers.IO) { downloadManager.remove(item.songId) } }) {
-                                            Icon(Icons.Default.Delete, "Remove download", tint = Muted)
+                                        when {
+                                            isDownloading -> IconButton(onClick = { downloadManager.cancel(item.songId) }) {
+                                                Icon(Icons.Default.Close, "Cancel download", tint = Muted)
+                                            }
+                                            hasAudio -> IconButton(onClick = { scope.launch(Dispatchers.IO) { downloadManager.remove(item.songId) } }) {
+                                                Icon(Icons.Default.Delete, "Remove download", tint = Muted)
+                                            }
+                                            else -> {
+                                                TextButton(onClick = {
+                                                    downloadManager.enqueue(Song(item.songId, item.title, item.artist, item.coverUrl, item.durationSec))
+                                                }) { Text("Retry") }
+                                                IconButton(onClick = { scope.launch(Dispatchers.IO) { downloadManager.remove(item.songId) } }) {
+                                                    Icon(Icons.Default.Delete, "Remove failed download", tint = Muted)
+                                                }
+                                            }
                                         }
+                                    }
+                                    if (isDownloading && percent != null) {
+                                        LinearProgressIndicator(
+                                            progress = { percent.coerceIn(0, 100) / 100f },
+                                            modifier = Modifier.fillMaxWidth().padding(start = 63.dp, end = 8.dp),
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
                                     }
                                 }
                             }
                         }
                     }
+                }
                 }
             }
         }
