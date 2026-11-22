@@ -122,7 +122,7 @@ internal fun ParkerTunesUpdateController() {
                 if (manual) ParkerTunesUpdateEvents.setStatus("Couldn't read the installed app version.")
                 return
             }
-            val latest = runCatching { fetchLatestParkerTunesRelease() }.getOrElse {
+            val latest = runCatching { withContext(Dispatchers.IO) { fetchLatestParkerTunesRelease() } }.getOrElse {
                 if (manual) ParkerTunesUpdateEvents.setStatus(
                     "Couldn't check GitHub Releases. Check your internet connection and try again."
                 )
