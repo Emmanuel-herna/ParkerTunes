@@ -1061,8 +1061,9 @@ private fun AmLyricsWebView(
         }
     }
 
+    Box(modifier = modifier) {
     AndroidView(
-        modifier = modifier,
+        modifier = Modifier.matchParentSize(),
         factory = { context ->
             val assetLoader = WebViewAssetLoader.Builder()
                 .addPathHandler(
@@ -1229,6 +1230,22 @@ private fun AmLyricsWebView(
             ) { result -> Log.d("ParkerLyricsWeb", "Updated track delivery: $result") }
         }
     )
+    // Temporary on-screen diagnostics: the previous status was only written
+    // to Logcat, which the phone-only workflow cannot inspect.
+    Text(
+        text = nativeLyricsStatus,
+        color = Color.White,
+        fontSize = 9.sp,
+        lineHeight = 11.sp,
+        maxLines = 3,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .background(Color(0xCC17131F))
+            .padding(horizontal = 6.dp, vertical = 4.dp)
+    )
+    }
 }
 
 @Composable
