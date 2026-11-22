@@ -158,6 +158,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         PlayerPlatform.install(PlyraBitChordPlayerHost(applicationContext))
+        com.music.bitchord.ui.AppUi.install(com.music.bitchord.ui.AndroidAppUiHost)
         setContent {
             ParkerTunesTheme {
                 var pendingCrashReport by remember {
