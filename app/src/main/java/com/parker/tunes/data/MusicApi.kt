@@ -206,6 +206,57 @@ class NewPipeMusicApi : MusicApi {
     }
 
     override suspend fun getArtistProfile(artist: Artist): ArtistProfile = withContext(Dispatchers.IO) {
+        val browseId = ArtistBrowseParser.browseId(artist.id)
+        val response = try {
+            val body = JSONObject().apply {
+                put("context", JSONObject().put("client", JSONObject()
+                    .put("clientName", "WEB_REMIX")
+                    .put("clientVersion", "1.20250101.01.00")))
+                put("browseId", browseId)
+            }.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+            val request = Request.Builder()
+                .url("https://music.youtube.com/youtubei/v1/browse?prettyPrint=false")
+                .post(body)
+                .header("Origin", "https://music.youtube.com")
+                .header("Referer", "https://music.youtube.com/")
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36")
+                .header("Content-Type", "application/json")
+                .build()
+            lyricsClient.newCall(request).execute().use { result ->
+                if (result.isSuccessful) JSONObject(result.body?.string().orEmpty()) else null
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+
+        val nativeProfile = response?.let {
+            try {
+                ArtistBrowseParser.parse(artist, it)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        // Prefer the artist's own YouTube Music browse page. Keep the existing
+        // NewPipe/search fallback for channels whose browse page is unavailable
+        // or whose response contains no usable artist sections.
+        if (nativeProfile != null && (
+            nativeProfile.topSongs.isNotEmpty() ||
+            nativeProfile.albums.isNotEmpty() ||
+            nativeProfile.singles.isNotEmpty() ||
+            nativeProfile.relatedArtists.isNotEmpty()
+        )) {
+            nativeProfile
+        } else {
+            getArtistProfileFallback(artist)
+        }
+    }
+
+    private suspend fun getArtistProfileFallback(artist: Artist): ArtistProfile = withContext(Dispatchers.IO) {
         NewPipeRuntime.ensureInitialized()
         val profileInfo = runCatching { ChannelInfo.getInfo(ServiceList.YouTube, artist.id) }.getOrNull()
         val resolvedArtist = artist.copy(
