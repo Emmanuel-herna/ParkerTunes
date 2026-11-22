@@ -501,7 +501,7 @@ fun ParkerTunesRoot() {
                                                 .setArtist(candidate.artist)
                                                 .setAlbumTitle(candidate.album)
                                                 .setTrackNumber(candidate.trackNumber ?: 0)
-                                                .setArtworkUri(candidate.coverUrl?.let(Uri::parse))
+                                                .setArtworkUri(resolveSongArtwork(api, candidate)?.let(Uri::parse))
                                                 .build()
                                             MediaItem.Builder()
                                                 .setMediaId(candidate.id)
@@ -555,7 +555,7 @@ fun ParkerTunesRoot() {
                     }
                     val metadata = MediaMetadata.Builder().setTitle(song.title).setArtist(song.artist)
                         .setAlbumTitle(song.album).setTrackNumber(song.trackNumber ?: 0)
-                        .setArtworkUri(song.coverUrl?.let(Uri::parse)).build()
+                        .setArtworkUri(resolveSongArtwork(api, song)?.let(Uri::parse)).build()
                     MediaItem.Builder().setMediaId(song.id).setUri(uri).apply { mimeType?.let(::setMimeType) }
                         .setMediaMetadata(metadata).build()
                 }.onSuccess { item ->
@@ -2965,6 +2965,21 @@ private fun BitChordNowPlayingRoute(
                 },
             )
         }
+    }
+}
+
+
+private suspend fun resolveSongArtwork(api: MusicApi, song: Song): String? {
+    val supplied = song.coverUrl?.takeIf { it.isNotBlank() }
+    val resolved = supplied ?: runCatching { api.getCoverArt(song.id) }.getOrNull()
+    val url = resolved?.takeIf { it.isNotBlank() }
+        ?: song.id.takeIf { it.matches(Regex("^[A-Za-z0-9_-]{11}$")) }
+            ?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" }
+    return url?.let { artwork ->
+        if ((artwork.contains("i.ytimg.com") || artwork.contains("img.youtube.com")) &&
+            artwork.contains("/maxresdefault.")) {
+            artwork.replace("/maxresdefault.", "/hqdefault.")
+        } else artwork
     }
 }
 
