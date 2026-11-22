@@ -129,6 +129,11 @@ import com.parker.tunes.player.EqualizerRegistry
 import com.parker.tunes.player.EqualizerState
 import com.parker.tunes.ui.theme.ParkerTunesTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.collect
@@ -230,6 +235,7 @@ fun ParkerTunesRoot() {
     var preferredRefreshRate by remember { mutableIntStateOf(settingsPrefs.getInt("preferred_refresh_rate", 120)) }
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var resolvingSongId by remember { mutableStateOf<String?>(null) }
+    var playbackRequestId by remember { mutableIntStateOf(0) }
     var playbackLoadError by remember { mutableStateOf<String?>(null) }
     var controllerFuture by remember { mutableStateOf<ListenableFuture<MediaController>?>(null) }
 
@@ -369,7 +375,7 @@ fun ParkerTunesRoot() {
             }
         }
 
-        val playSong: (Song) -> Unit = { song ->
+        val playSongWithQueue: (Song, List<Song>?) -> Unit = { song, requestedQueue ->
             val activeController = controller
             if (activeController != null) {
                 val metadata = MediaMetadata.Builder()
@@ -383,52 +389,94 @@ fun ParkerTunesRoot() {
                     .setMediaId(song.id)
                     .setMediaMetadata(metadata)
                     .build()
+                val requestId = ++playbackRequestId
                 activeController.setMediaItem(placeholder)
-                if (listenTogether.state.value.connected) listenTogether.control("setTrack", positionMs = 0L, track = JamTrack(song.id, song.title, song.artist, song.coverUrl, song.durationSec * 1000L), isPlaying = true)
+                if (listenTogether.state.value.connected) {
+                    listenTogether.control(
+                        "setTrack",
+                        positionMs = 0L,
+                        track = JamTrack(song.id, song.title, song.artist, song.coverUrl, song.durationSec * 1000L),
+                        isPlaying = true
+                    )
+                }
                 resolvingSongId = song.id
                 playbackLoadError = null
                 nav.navigate("nowplaying") { launchSingleTop = true }
 
                 scope.launch {
-                    val result = runCatching {
-                        val localFile = withContext(Dispatchers.IO) {
-                            dao.download(song.id)?.takeIf { item ->
-                                item.status == com.parker.tunes.data.DownloadEntity.STATUS_COMPLETE &&
-                                    File(item.filePath).isFile && File(item.filePath).length() > 0L
-                            }?.let { File(it.filePath) }
-                        }
-                        if (localFile != null) Uri.fromFile(localFile) to null
-                        else {
-                            val addonStream = if (api is AddonMusicApi) {
-                                withContext(Dispatchers.IO) { api.getAddonStream(song.id) }
-                            } else null
-                            if (addonStream != null) Uri.parse(addonStream.url) to addonStream.format.mimeType
-                            else Uri.parse(withContext(Dispatchers.IO) { api.getStreamUrl(song.id, settingsRepository.audioQuality.first()) }) to null
-                        }
-                    }
-                    if (resolvingSongId == song.id) {
-                        result.onSuccess { (playbackUri, mimeType) ->
-                            if (playbackUri == null || playbackUri.toString().isBlank()) {
-                                playbackLoadError = "Couldn't load this song. Tap the song again to retry."
-                            } else {
-                                val playableItem = MediaItem.Builder()
-                                    .setMediaId(song.id)
-                                    .setUri(playbackUri)
-                                    .apply { mimeType?.let(::setMimeType) }
-                                    .setMediaMetadata(metadata)
-                                    .build()
-                                activeController.setMediaItem(playableItem)
-                                activeController.prepare()
-                                activeController.play()
+                    val queue = (requestedQueue ?: listOf(song))
+                        .let { list -> if (list.none { it.id == song.id }) listOf(song) + list else list }
+                        .distinctBy { it.id }
+                    val semaphore = Semaphore(3)
+                    val resolved = coroutineScope {
+                        queue.map { candidate ->
+                            async {
+                                semaphore.withPermit {
+                                    try {
+                                        val localFile = withContext(Dispatchers.IO) {
+                                            dao.download(candidate.id)?.takeIf { item ->
+                                                item.status == com.parker.tunes.data.DownloadEntity.STATUS_COMPLETE &&
+                                                    File(item.filePath).isFile && File(item.filePath).length() > 0L
+                                            }?.let { File(it.filePath) }
+                                        }
+                                        val (playbackUri, mimeType) = if (localFile != null) {
+                                            Uri.fromFile(localFile) to null
+                                        } else {
+                                            val addonStream = if (api is AddonMusicApi) {
+                                                withContext(Dispatchers.IO) { api.getAddonStream(candidate.id) }
+                                            } else null
+                                            if (addonStream != null) {
+                                                Uri.parse(addonStream.url) to addonStream.format.mimeType
+                                            } else {
+                                                Uri.parse(
+                                                    withContext(Dispatchers.IO) {
+                                                        api.getStreamUrl(candidate.id, settingsRepository.audioQuality.first())
+                                                    }
+                                                ) to null
+                                            }
+                                        }
+                                        if (playbackUri.toString().isBlank()) null
+                                        else {
+                                            val itemMetadata = MediaMetadata.Builder()
+                                                .setTitle(candidate.title)
+                                                .setArtist(candidate.artist)
+                                                .setAlbumTitle(candidate.album)
+                                                .setTrackNumber(candidate.trackNumber ?: 0)
+                                                .setArtworkUri(candidate.coverUrl?.let(Uri::parse))
+                                                .build()
+                                            MediaItem.Builder()
+                                                .setMediaId(candidate.id)
+                                                .setUri(playbackUri)
+                                                .apply { mimeType?.let(::setMimeType) }
+                                                .setMediaMetadata(itemMetadata)
+                                                .build()
+                                        }
+                                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                        throw cancelled
+                                    } catch (_: Exception) {
+                                        null
+                                    }
+                                }
                             }
-                        }.onFailure {
-                            playbackLoadError = it.message ?: "Couldn't load this song. Tap the song again to retry."
+                        }.awaitAll()
+                    }
+
+                    if (requestId == playbackRequestId && resolvingSongId == song.id) {
+                        val playable = queue.zip(resolved).filter { it.second != null }
+                        val selectedIndex = playable.indexOfFirst { it.first.id == song.id }
+                        if (selectedIndex < 0) {
+                            playbackLoadError = "Couldn't load this song. Tap the song again to retry."
+                        } else {
+                            activeController.setMediaItems(playable.map { it.second!! }, selectedIndex, 0L)
+                            activeController.prepare()
+                            activeController.play()
                         }
                         resolvingSongId = null
                     }
                 }
             }
         }
+        val playSong: (Song) -> Unit = { song -> playSongWithQueue(song, null) }
 
         val queueSong: (Song, Boolean) -> Unit = { song, playNext ->
             val activeController = controller
@@ -514,7 +562,7 @@ fun ParkerTunesRoot() {
                     MoodResultsScreen(mood = mood, api = api, onBack = { nav.popBackStack() }, onPlay = playSong)
                 }
                 composable("search") {
-                    SearchScreen(api = api, dao = dao, settingsRepository = settingsRepository, downloads = app.downloads, onLowStorage = { scope.launch { snackbarHostState.showSnackbar("Low storage · free up at least 200 MB first.") } }, onPlay = playSong, onQueue = queueSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist/${Uri.encode(it.id)}") }, onAlbum = { album -> selectedAlbum = album; nav.navigate("album") }, hazeState = hazeState)
+                    SearchScreen(api = api, dao = dao, settingsRepository = settingsRepository, onPlayFromSearchQueue = { song, queue -> playSongWithQueue(song, queue) }, downloads = app.downloads, onLowStorage = { scope.launch { snackbarHostState.showSnackbar("Low storage · free up at least 200 MB first.") } }, onPlay = playSong, onQueue = queueSong, onSettings = { nav.navigate("settings") }, onArtist = { selectedArtist = it; nav.navigate("artist/${Uri.encode(it.id)}") }, onAlbum = { album -> selectedAlbum = album; nav.navigate("album") }, hazeState = hazeState)
                 }
                 composable("artist/{browseId}") { entry ->
                     val browseId = Uri.decode(entry.arguments?.getString("browseId").orEmpty())
