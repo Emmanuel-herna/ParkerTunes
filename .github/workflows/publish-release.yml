@@ -7,12 +7,12 @@ on:
         description: "Release version"
         required: true
         type: string
-        default: "1.0.3"
+        default: "1.2.2"
       release_notes:
         description: "What changed in this release"
         required: true
         type: string
-        default: "Improved playback queue handling, more reliable Next and Previous controls, and general fixes."
+        default: "Major player update, improved playback reliability, lyrics integration, and a compatible in-app update path for existing v1.0.3 users."
 
 permissions:
   contents: write
