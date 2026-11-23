@@ -1,4 +1,5 @@
 import com.google.firebase.appdistribution.gradle.firebaseAppDistribution
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
@@ -12,12 +13,12 @@ plugins {
 
 val ciKeystorePath = System.getenv("PARKERTUNES_KEYSTORE_PATH")
 val ciKeystorePassword = System.getenv("PARKERTUNES_KEYSTORE_PASSWORD")
-val appVersionCode = System.getenv("PARKERTUNES_VERSION_CODE")?.toIntOrNull() ?: 1
-val appVersionName = System.getenv("PARKERTUNES_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.0.0"
+val appVersionCode = System.getenv("PARKERTUNES_VERSION_CODE")?.toIntOrNull() ?: 2
+val appVersionName = System.getenv("PARKERTUNES_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2"
 
 android {
     namespace = "com.parker.tunes"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.parker.tunes"
@@ -45,7 +46,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
         isCoreLibraryDesugaringEnabled = true
     }
-    kotlinOptions { jvmTarget = "17" }
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
+    }
     testOptions { unitTests.isIncludeAndroidResources = true }
     buildTypes {
         getByName("release") {
@@ -68,6 +73,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":bitchord-shared-ui"))
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-database-ktx")
@@ -94,10 +100,10 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.media3:media3-session:1.5.1")
     implementation("androidx.media3:media3-ui:1.5.1")
-    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-runtime:2.8.5")
     implementation("androidx.room:room-ktx:2.6.1")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    ksp("androidx.room:room-compiler:2.8.5")
 
     // NewPipe Extractor and its HTTP downloader.
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.27.1")
@@ -106,7 +112,7 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlin:kotlin-test:2.0.21")
+    testImplementation("org.jetbrains.kotlin:kotlin-test:2.3.20")
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("io.github.takahirom.roborazzi:roborazzi:1.50.0")

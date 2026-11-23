@@ -772,7 +772,7 @@ class NewPipeMusicApi : MusicApi {
 
     override suspend fun getCoverArt(songId: String): String? = withContext(Dispatchers.IO) {
         val videoId = extractVideoId(songId) ?: return@withContext null
-        "https://i.ytimg.com/vi/$videoId/maxresdefault.jpg"
+        "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
     }
 
     private fun extractVideoId(value: String): String? {

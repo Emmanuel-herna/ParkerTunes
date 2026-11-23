@@ -118,7 +118,7 @@ jobs:
           manifest = {
               "versionCode": version_code,
               "versionName": os.environ["RELEASE_VERSION"],
-              "apkUrl": "https://github.com/Emmanuel-herna/ParkerTunes/releases/latest/download/ParkerTunes.apk",
+              "apkUrl": "https://github.com/ParkerJnr/ParkerTunes/releases/latest/download/ParkerTunes.apk",
               "sha256": os.environ["APK_SHA256"],
               "releaseNotes": os.environ["RELEASE_NOTES"],
           }

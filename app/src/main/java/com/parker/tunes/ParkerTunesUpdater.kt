@@ -37,8 +37,8 @@ import java.net.URL
 import java.security.MessageDigest
 import java.util.Locale
 
-private const val RELEASE_MANIFEST_URL = "https://github.com/Emmanuel-herna/ParkerTunes/releases/latest/download/latest.json"
-private const val TRUSTED_APK_URL = "https://github.com/Emmanuel-herna/ParkerTunes/releases/latest/download/ParkerTunes.apk"
+private const val RELEASE_MANIFEST_URL = "https://github.com/ParkerJnr/ParkerTunes/releases/latest/download/latest.json"
+private const val TRUSTED_APK_URL = "https://github.com/ParkerJnr/ParkerTunes/releases/latest/download/ParkerTunes.apk"
 
 private data class ParkerTunesRelease(
     val versionCode: Long,

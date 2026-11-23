@@ -47,7 +47,13 @@ class CrossfadeController(
     private val activeListener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             if (fading && !finishingFade) {
-                cancelFade()
+                // The outgoing player can naturally advance to the next queue item
+                // at the exact end of the overlap. Do not cancel the crossfade:
+                // the incoming player is already playing that same item at the
+                // correct in-progress position and will become active at handoff.
+                if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    cancelFade()
+                }
             } else if (!fading) {
                 preloadedForIndex = -1
                 preloadNext()

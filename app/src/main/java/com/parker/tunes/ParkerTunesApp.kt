@@ -20,6 +20,7 @@ class ParkerTunesApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashDiagnostics.install(this)
         Coil.setImageLoader(
             ImageLoader.Builder(this)
                 .crossfade(true)
