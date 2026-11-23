@@ -39,6 +39,7 @@ import java.util.Locale
 
 private const val RELEASE_MANIFEST_URL = "https://github.com/ParkerJnr/ParkerTunes/releases/latest/download/latest.json"
 private const val TRUSTED_APK_URL = "https://github.com/ParkerJnr/ParkerTunes/releases/latest/download/ParkerTunes.apk"
+private const val LEGACY_TRUSTED_APK_URL = "https://github.com/Emmanuel-herna/ParkerTunes/releases/latest/download/ParkerTunes.apk"
 
 private data class ParkerTunesRelease(
     val versionCode: Long,
@@ -244,7 +245,9 @@ private fun fetchLatestParkerTunesRelease(): ParkerTunesRelease {
         val checksum = json.optString("sha256").trim().lowercase(Locale.US)
         val notes = json.optString("releaseNotes").trim()
         if (code <= 0L || name.isBlank()) throw IOException("The latest release is missing version information.")
-        if (apk != TRUSTED_APK_URL) throw IOException("The latest release contains an untrusted APK address.")
+        if (apk != TRUSTED_APK_URL && apk != LEGACY_TRUSTED_APK_URL) {
+            throw IOException("The latest release contains an untrusted APK address.")
+        }
         if (!checksum.matches(Regex("^[a-f0-9]{64}$"))) throw IOException("The release has no valid SHA-256 checksum.")
         return ParkerTunesRelease(code, name, apk, checksum, notes)
     } finally {
