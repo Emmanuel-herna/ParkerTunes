@@ -13,8 +13,8 @@ plugins {
 
 val ciKeystorePath = System.getenv("PARKERTUNES_KEYSTORE_PATH")
 val ciKeystorePassword = System.getenv("PARKERTUNES_KEYSTORE_PASSWORD")
-val appVersionCode = System.getenv("PARKERTUNES_VERSION_CODE")?.toIntOrNull() ?: 1
-val appVersionName = System.getenv("PARKERTUNES_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.0.0"
+val appVersionCode = System.getenv("PARKERTUNES_VERSION_CODE")?.toIntOrNull() ?: 2
+val appVersionName = System.getenv("PARKERTUNES_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2"
 
 android {
     namespace = "com.parker.tunes"
